@@ -192,6 +192,7 @@ const TABS = [
   { group: 'More' },
   { id: 'packages', name: 'Packages', key: '◎' },
   { id: 'plugins', name: 'Plugins', key: '◈' },
+  { id: 'android', name: 'Android Lab', key: '▲' },
   { id: 'docs', name: 'Guides', key: '?' },
   { id: 'system', name: 'System', key: '⌘' },
 ];
@@ -332,6 +333,11 @@ function showAbout() {
 
 window.addEventListener('DOMContentLoaded', () => {
   wireShell();
+  // The console listens for engine output and the editor for its shortcuts.
+  // Both are wired once here rather than per draw: a screen that re-registers
+  // its listeners every time it is opened ends up writing every line twice.
+  conWireEvents();
+  edShortcuts();
   drawTabs();
   go('console');
   PyCmd.pump();

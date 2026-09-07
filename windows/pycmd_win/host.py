@@ -33,10 +33,10 @@ import threading
 import time
 import traceback
 
-from . import builtins, bundle, files, langs, runner, store, toolchains
-
-VERSION = "1.0.1"
-BUILD = 2
+from . import (android, builtins, bundle, copies, files, install, known,
+               langs, runner, setup_all, store, toolchains)
+VERSION = "2.0.0"
+BUILD = 3
 
 _engine_ready = False
 
@@ -713,6 +713,166 @@ def _h_drain(host, payload):
     return {"events": host.drain()}
 
 
+# ---------------------------------------------------------------------------
+# Installing things, and remembering what is already here
+# ---------------------------------------------------------------------------
+
+def _h_managers(host, payload):
+    return {"ok": True, "managers": install.available(),
+            "preference": list(install.PREFERENCE)}
+
+
+def _h_manager_install(host, payload):
+    which = str(payload.get("manager", ""))
+
+    def work():
+        host.onOutput("stdout", "", "install")
+        result = install.bootstrap(
+            which, lambda text: host.onOutput("stdout", text, "install"))
+        host.emit("manager-done", manager=which, ok=bool(result.get("ok")),
+                  error=result.get("error", ""))
+
+    threading.Thread(target=work, name="pycmd-manager", daemon=True).start()
+    return {"queued": True}
+
+
+def _h_install_plan(host, payload):
+    return install.plan(str(payload.get("toolchain", "")))
+
+
+def _h_install_one(host, payload):
+    which = str(payload.get("toolchain", ""))
+
+    def work():
+        result = install.install(
+            which, lambda text: host.onOutput("stdout", text, "install"))
+        host.emit("install-done", toolchain=which, ok=bool(result.get("ok")),
+                  error=result.get("error", ""))
+
+    threading.Thread(target=work, name="pycmd-install", daemon=True).start()
+    return {"queued": True, "toolchain": which}
+
+
+def _h_known(host, payload):
+    return {"ok": True, "memory": known.summary()}
+
+
+def _h_known_forget(host, payload):
+    toolchains.clear_cache(forget_machine=True)
+    return {"ok": True, "note": "PyCmd will look the machine over again."}
+
+
+def _h_setup_state(host, payload):
+    return {"ok": True, "setup": setup_all.state(), "lines": setup_all.lines()}
+
+
+def _h_setup_start(host, payload):
+    return setup_all.start(only_missing=bool(payload.get("onlyMissing", True)))
+
+
+def _h_setup_stop(host, payload):
+    return setup_all.stop()
+
+
+# ---------------------------------------------------------------------------
+# Other copies of PyCmd on this machine
+# ---------------------------------------------------------------------------
+
+def _h_copies_find(host, payload):
+    return copies.find_others(VERSION)
+
+
+def _h_copies_replace(host, payload):
+    rows = payload.get("others") or []
+    return copies.replace(rows, VERSION)
+
+
+def _h_copies_kept(host, payload):
+    return {"ok": True, "kept": copies.kept(), "keeping": copies.KEEP,
+            "running": copies.running_exe()}
+
+
+def _h_copies_rollback(host, payload):
+    return copies.go_back(str(payload.get("path", "")))
+
+
+def _h_copies_elevate(host, payload):
+    return copies.elevate_and_rerun(str(payload.get("argument", "--replace-older")))
+
+
+# ---------------------------------------------------------------------------
+# The birthday
+# ---------------------------------------------------------------------------
+
+# Typed into the console. Not hidden behind anything clever - the point of an
+# easter egg is that somebody who has been told the word can use it.
+SECRETS = {
+    "pycmd1monthbirthday": "one-month",
+}
+
+
+def _h_secret(host, payload):
+    """Whether a console line is one of the words, and what it unlocks."""
+    word = str(payload.get("text", "")).strip().lower().replace(" ", "")
+    which = SECRETS.get(word)
+    if not which:
+        return {"ok": False, "secret": False}
+
+    state = store.settings()
+    already = bool(state.get("secret." + which))
+    state["secret." + which] = True
+    store.save_settings(state)
+    return {
+        "ok": True, "secret": True, "which": which, "already": already,
+        "title": "Thank you for the first month",
+        "message": (
+            "One month of PyCmd. Thank you - genuinely.\n\n"
+            "Here is the present: PyCmd will set this machine up for every "
+            "language it knows, on its own. No hunting for installers, no "
+            "package manager to pick, no fifty downloads to babysit. It puts "
+            "Scoop in place if there is nothing here yet, works through all "
+            f"{len(toolchains.TOOLCHAINS)} toolchains smallest-first, and keeps "
+            "going when one of them will not play.\n\n"
+            "It is on the Toolchains screen from now on, as 'Set this machine "
+            "up'. Start it whenever - it can be stopped, and running it twice "
+            "is not running it twice."
+        ),
+        "unlocks": "setup-everything",
+    }
+
+
+def _h_secrets_known(host, payload):
+    """What has been unlocked, so screens can show what they should."""
+    state = store.settings()
+    return {"ok": True,
+            "unlocked": {which: bool(state.get("secret." + which))
+                         for which in SECRETS.values()}}
+
+
+# ---------------------------------------------------------------------------
+# Android Lab
+# ---------------------------------------------------------------------------
+
+def _h_android(host, payload):
+    return android.state()
+
+
+def _h_android_plan(host, payload):
+    return android.plan()
+
+
+def _h_android_start(host, payload):
+    return android.start(str(payload.get("apk", "")))
+
+
+def _h_android_job(host, payload):
+    return {"ok": True, "job": android.job_state(), "lines": android.job_lines()}
+
+
+def _h_android_stop(host, payload):
+    return android.shutdown()
+
+
 HANDLERS = {
     "hello": _h_hello,
     "console.run": _h_console_run,
@@ -720,6 +880,27 @@ HANDLERS = {
     "console.stop": _h_console_stop,
     "console.reset": _h_console_reset,
     "console.completions": _h_completions,
+    "console.secret": _h_secret,
+    "secrets": _h_secrets_known,
+    "managers": _h_managers,
+    "manager.install": _h_manager_install,
+    "install.plan": _h_install_plan,
+    "install.one": _h_install_one,
+    "known": _h_known,
+    "known.forget": _h_known_forget,
+    "setup.state": _h_setup_state,
+    "setup.start": _h_setup_start,
+    "setup.stop": _h_setup_stop,
+    "copies": _h_copies_find,
+    "copies.replace": _h_copies_replace,
+    "copies.kept": _h_copies_kept,
+    "copies.rollback": _h_copies_rollback,
+    "copies.elevate": _h_copies_elevate,
+    "android": _h_android,
+    "android.plan": _h_android_plan,
+    "android.start": _h_android_start,
+    "android.job": _h_android_job,
+    "android.stop": _h_android_stop,
     "run.file": _h_run_file,
     "run.stop": _h_run_stop,
     "run.active": _h_run_active,

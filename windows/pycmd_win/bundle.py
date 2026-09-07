@@ -25,7 +25,7 @@ import json
 import os
 import zipfile
 
-from . import store
+from . import mobile, store
 
 BUNDLED = ("cloud", "creator", "packages-pro", "scheduler", "server-pro")
 
@@ -194,6 +194,10 @@ def inspect_mobile(path: str) -> dict:
         if note:
             warnings.append({"about": f"permission: {permission}", "detail": note})
 
+    # What the compatibility layer covers, and what genuinely cannot work.
+    # This used to be a list of things that "might not work", which is an
+    # honest report and a useless one - the plugin either runs or it does not.
+    handled, unsupported = [], []
     for source in _walk_sources(folder):
         try:
             with open(source, "r", encoding="utf-8", errors="replace") as handle:
@@ -201,10 +205,14 @@ def inspect_mobile(path: str) -> dict:
         except OSError:
             continue
         relative = os.path.relpath(source, folder)
-        for needle, detail in MOBILE_HINTS:
-            if needle in text:
-                warnings.append({"about": relative, "detail": f"{relative} {detail}."})
-                break
+        found = mobile.report(text)
+        for row in found["handled"]:
+            handled.append({"about": relative, "uses": row["uses"], "detail": row["why"]})
+        for row in found["unsupported"]:
+            unsupported.append({"about": relative, "uses": row["uses"],
+                                "detail": row["why"]})
+            warnings.append({"about": relative,
+                             "detail": f"{relative} {row['why']}."})
 
     tab = manifest.get("tab") or {}
     return {
@@ -220,7 +228,16 @@ def inspect_mobile(path: str) -> dict:
         "commands": [c.get("name", "") for c in manifest.get("commands", []) or []],
         "permissions": list(manifest.get("permissions", []) or []),
         "warnings": warnings,
-        # The honest headline for the button. Most plugins have nothing here,
-        # and those are the ones that will simply work.
-        "likely": "fine" if not warnings else "mixed",
+        "handled": handled,
+        "unsupported": unsupported,
+        # A plugin whose Android bits are all covered by the shim is a full
+        # plugin here, and is told so rather than installed as a beta. Only
+        # something genuinely unsupported - an Android view, phone hardware -
+        # makes it partial.
+        "full": not unsupported,
+        "likely": "fine" if not unsupported else "mixed",
+        "verdict": (
+            "This runs here in full." if not unsupported else
+            f"This runs, except for {len(unsupported)} part(s) that need a phone."
+        ),
     }

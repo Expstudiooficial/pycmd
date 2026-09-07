@@ -403,3 +403,99 @@ pre.out {
 .row-item:last-child { border-bottom: 0; }
 .row-item:hover { background: var(--accent-bg); }
 .row-item .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+
+/* -- the Console ------------------------------------------------------- */
+
+.console-shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.console-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.console-bar input {
+  flex: 1;
+  margin: 0;
+  font-family: Consolas, ui-monospace, monospace;
+}
+.console-bar .prompt {
+  font-family: Consolas, ui-monospace, monospace;
+  font-weight: 700;
+  color: var(--good);
+  min-width: 26px;
+}
+.console-bar .prompt.waiting { color: var(--warn); }
+.console-bar button.bad { border-color: var(--bad); color: var(--bad); }
+.console-bar button.bad:hover { background: var(--bad); color: #fff; }
+
+.console-hint {
+  padding: 6px 12px;
+  background: var(--accent-bg);
+  border-top: 1px solid var(--line);
+  font-family: Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text);
+  max-height: 84px;
+  overflow-y: auto;
+}
+
+.row-item.mono { font-family: Consolas, ui-monospace, monospace; font-size: 12.5px; }
+textarea.plain {
+  width: 100%;
+  font-family: Consolas, ui-monospace, monospace;
+  font-size: 12.5px;
+}
+
+
+/* -- Android Lab and the setup run ------------------------------------- */
+
+.card.note { border-left: 3px solid var(--accent); }
+.card.gift { border-left: 3px solid var(--good); }
+
+.facts { display: grid; gap: 6px; margin: 10px 0; }
+.fact { display: flex; gap: 12px; align-items: baseline; }
+.fact .muted { min-width: 130px; }
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.step .n {
+  flex: 0 0 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  color: var(--bright);
+  font-size: 12px;
+}
+.step .grow { flex: 1; min-width: 0; }
+.step code { display: block; font-size: 12px; margin-top: 3px; }
+.small-text { font-size: 12.5px; }
+
+.progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+  margin: 10px 0 6px;
+}
+.progress .fill {
+  height: 100%;
+  width: 0;
+  background: var(--good);
+  transition: width 0.4s ease;
+}

@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.1 |
+| Version | 2.0.0 |
 | Works on | Windows 10 and newer, 64-bit |
 | Runtime | Edge WebView2, which Windows 10 and 11 already have |
 | Installer | none — it is one exe |
@@ -23,7 +23,7 @@ To make one:
 
 - **On your own machine:**
   `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`
-- **Or push a tag** `windows-v1.0.1` and let the workflow do it — it builds on
+- **Or push a tag** `windows-v2.0.0` and let the workflow do it — it builds on
   a Windows runner, proves the exe starts, writes this manifest with the real
   hash, and attaches the exe to a release.
 
@@ -36,6 +36,55 @@ release for the tag that built it, which is what `latest.json` points at.
 describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
+
+## What is new in 2.0
+
+**The Editor is an editor.** It was an iframe with nothing around it - the
+editor inside was the phone's good one, and every part of it was unreachable
+because nothing on Windows ever spoke to it. Now: tabs for several files with
+an unsaved marker, Open, Save, Save as, Save and run, undo, redo, indent,
+outdent, wrap, go to line, find and replace, a language picker, and a status
+line with the caret position and the counts. Ctrl+S, O, N, G, F and Ctrl+Enter.
+
+**The Console has the rest of itself.** Up and down walk your history, Tab
+completes, and `input()` is answered in the bar you are already typing in -
+with the output still on screen behind it, which is the whole reason a program
+asked. Stop appears while something is running. Copy and Save take the output
+away.
+
+**Detection remembers this machine.** It used to start from zero on every
+launch and every version: fifty-one version probes, several of them starting a
+JVM, before the Toolchains screen could draw. What PyCmd finds is now
+remembered beside your workspace rather than inside a version folder, so
+upgrading keeps it, and a toolchain is re-checked only when its file actually
+changes. Six hundred times faster on the second look.
+
+**"scoop is not recognised" is no longer the answer to "install Go".** PyCmd
+installs the package manager if there is none - Scoop, which needs no
+administrator - and falls back through every manager that carries a package
+instead of giving up on the first. Six toolchains had no install route at all
+and now have one.
+
+**Phone plugins run, rather than being warned about.** 1.0 imported one and
+called it a beta. What actually stopped them was narrow: a `java` module that
+does not exist here, Android paths, and three capabilities Windows does
+differently. All of that is provided now, so a plugin whose Android parts are
+covered is reported as running *in full*. Only something that genuinely needs
+a phone - hardware, sensors, an Android view - is still called partial, and it
+names the exact part.
+
+**One PyCmd, not a folder full of them.** It finds older copies in the places
+downloads actually land, checks each one really is PyCmd by asking its
+version, and takes their place - asking for administrator only if a copy is
+somewhere that needs it. The old build is filed away rather than deleted, so
+you can go back.
+
+**Android Lab.** A real Android 14 device on your PC with 4 GB of RAM and
+10 GB of storage, and PyCmd Android installed on it. PyCmd sets up and drives
+Google's emulator for you, which is the tedious part; it does not pretend to
+*be* one, and says so and says what it will download before anything starts.
+
+**And a word somewhere.**
 
 ## What is new in 1.0.1
 

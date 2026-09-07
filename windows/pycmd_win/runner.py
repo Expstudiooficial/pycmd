@@ -92,9 +92,12 @@ def _kill_tree(process) -> None:
     """
     try:
         if WINDOWS:
+            # Bounded, like every other call in this app. taskkill can itself
+            # block on a wedged process tree, and this one is on the path of
+            # the Stop button - a Stop that hangs is worse than no Stop.
             subprocess.run(
                 ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                capture_output=True,
+                capture_output=True, timeout=15,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         else:

@@ -24,119 +24,8 @@ function card(...children) {
   return el('div', { class: 'card' }, ...children);
 }
 
-// ---------------------------------------------------------------------------
-// Console
-// ---------------------------------------------------------------------------
-
-let consoleFrame = null;
-let consoleQueue = [];
-
-function consoleReady() {
-  return consoleFrame && consoleFrame.contentWindow && consoleFrame.contentWindow.PyConsole;
-}
-
-function consoleWrite(stream, text) {
-  if (!consoleReady()) {
-    consoleQueue.push([stream, text]);
-    if (consoleQueue.length > 4000) consoleQueue.splice(0, consoleQueue.length - 4000);
-    return;
-  }
-  consoleFrame.contentWindow.PyConsole.append(stream, text);
-}
-
-PyCmd.on('output', (event) => consoleWrite(event.stream, event.text));
-
-/**
- * A script called input().
- *
- * The interpreter thread is blocked waiting, so this asks and hands the answer
- * straight back. Cancelling sends an empty line rather than nothing at all,
- * because nothing at all leaves that thread waiting for ten minutes.
- */
-PyCmd.on('input-wanted', () => {
-  const box = el('input', { placeholder: 'Your program is waiting for a line…' });
-  const send = () => {
-    PyCmd.call('console.stdin', { text: box.value });
-    consoleWrite('stdin', box.value + '\n');
-    PyCmd.closeSheet();
-  };
-  box.addEventListener('keydown', (event) => { if (event.key === 'Enter') send(); });
-  PyCmd.sheet('Your program is asking for something', el('div', {},
-    el('p', { class: 'muted', text: 'Whatever you type goes to input().' }),
-    box,
-    el('div', { class: 'row', style: 'margin-top:12px' },
-      el('button', { class: 'small primary', text: 'Send', onclick: send }),
-      el('button', {
-        class: 'small', text: 'Send nothing',
-        onclick: () => { PyCmd.call('console.stdin', { text: '' }); PyCmd.closeSheet(); },
-      }))));
-  setTimeout(() => box.focus(), 60);
-});
-PyCmd.on('finished', (event) => {
-  if (event.status === 'error') consoleWrite('stderr', '');
-});
-
-function Console(screen) {
-  screen.classList.add('flush');
-  const wrap = el('div', {
-    style: 'display:grid;grid-template-rows:1fr auto;height:100%;min-height:0',
-  });
-
-  const frame = el('iframe', { class: 'frame', src: '/web/console.html' });
-  consoleFrame = frame;
-  frame.addEventListener('load', () => {
-    const pending = consoleQueue;
-    consoleQueue = [];
-    pending.forEach(([stream, text]) => consoleWrite(stream, text));
-  });
-
-  const input = el('input', {
-    placeholder: 'Python, or a command like  ls · run app.py · pip install flask',
-    spellcheck: 'false', autocomplete: 'off',
-  });
-
-  async function send() {
-    const text = input.value;
-    if (!text.trim()) return;
-    input.value = '';
-    consoleWrite('stdin', '>>> ' + text + '\n');
-    const reply = await PyCmd.call('console.run', { text });
-    if (!reply.ok) consoleWrite('stderr', (reply.error || 'that did not run') + '\n');
-  }
-
-  input.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(); }
-  });
-
-  const bar = el('div', {
-    class: 'row',
-    style: 'padding:10px 12px;border-top:1px solid var(--line);background:var(--surface)',
-  },
-    input,
-    el('button', { class: 'small primary', text: 'Run', onclick: send }),
-    el('button', {
-      class: 'small', text: 'Clear',
-      onclick: () => { if (consoleReady()) consoleFrame.contentWindow.PyConsole.clear(); },
-    }),
-    el('button', {
-      class: 'small', title: 'Throw away every variable you have defined',
-      text: 'Reset',
-      onclick: async () => {
-        await PyCmd.call('console.reset');
-        consoleWrite('system', '[PyCmd] variables cleared.\n');
-      },
-    }),
-  );
-
-  wrap.appendChild(frame);
-  wrap.appendChild(bar);
-  screen.appendChild(wrap);
-  setTimeout(() => input.focus(), 60);
-}
-
-// ---------------------------------------------------------------------------
-// Editor
-// ---------------------------------------------------------------------------
+/* Console lives in console-screen.js: history, completions, the input()
+   state and the birthday made it a screen rather than a text box. */
 
 /* Editor lives in editor-screen.js: it grew a toolbar, tabs and a status
    line, and putting a real screen in this file beside the small ones made
@@ -413,6 +302,10 @@ async function Run(screen) {
 // ---------------------------------------------------------------------------
 
 async function Toolchains(screen) {
+  // The birthday's present, if it has been found. Draws nothing otherwise,
+  // so the screen is unchanged for anybody who has not.
+  setupPanel(screen);
+
   screen.appendChild(head('Toolchains',
     'What is installed on this machine, and what each one lets PyCmd run. ' +
     'PyCmd does not bundle compilers — a build carrying MSVC and a JDK would be gigabytes — ' +
@@ -1231,6 +1124,7 @@ window.Screens = {
   packages: Packages,
   plugins: Plugins,
   docs: Docs,
+  android: Android,
   system: System,
   log: Log,
 };

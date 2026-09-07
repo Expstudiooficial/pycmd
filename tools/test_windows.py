@@ -50,8 +50,14 @@ def check(name, condition, detail=""):
 
 # ---------------------------------------------------------------------------
 
-from pycmd_win import (builtins, bundle, install, known, langs, runner,  # noqa: E402
-                       setup_all, store, toolchains)
+# `android` is imported under another name on purpose. The mobile shim
+# below puts a stub module called `android` into sys.modules, and
+# `import android.os` inside it rebinds this name to the stub - which
+# silently shadowed the module being tested and made every check after
+# it disappear.
+from pycmd_win import android as android_lab  # noqa: E402
+from pycmd_win import (builtins, bundle, copies, install, known,  # noqa: E402
+                       langs, mobile, runner, setup_all, store, toolchains)
 
 say("== where things live ==")
 made = store.prepare()
@@ -422,15 +428,41 @@ with open(os.path.join(fake, "plugin.json"), "w", encoding="utf-8") as handle:
 with open(os.path.join(fake, "main.py"), "w", encoding="utf-8") as handle:
     handle.write("from java import jclass\n\ndef setup(pycmd):\n    pass\n")
 found = bundle.inspect_mobile(fake)
-check("one that reaches for Android is read as mixed",
-      found["ok"] and found["likely"] == "mixed", found)
-check("and it says which parts", len(found["warnings"]) >= 2,
-      [w["about"] for w in found["warnings"]])
-check("naming the Android permissions",
+check("a phone plugin whose Android bits are all shimmed is full, not beta",
+      found["full"] and found["likely"] == "fine", found.get("unsupported"))
+check("and it says which parts were handled and how",
+      any(row["uses"] in ("from java", "import java") for row in found["handled"]),
+      found["handled"])
+
+_hard = os.path.join(_HOME, "phone-hardware")
+os.makedirs(_hard, exist_ok=True)
+with open(os.path.join(_hard, "plugin.json"), "w", encoding="utf-8") as handle:
+    json.dump({"id": "demo.hw", "name": "Sensors", "version": "1.0.0",
+               "entry": "main.py"}, handle)
+with open(os.path.join(_hard, "main.py"), "w", encoding="utf-8") as handle:
+    handle.write("import android.hardware\n\ndef setup(pycmd):\n    pass\n")
+_hardware = bundle.inspect_mobile(_hard)
+check("one that genuinely needs a phone is still called mixed",
+      not _hardware["full"] and _hardware["likely"] == "mixed", _hardware["verdict"])
+check("and names the part that cannot work",
+      _hardware["unsupported"][0]["uses"] == "android.hardware",
+      _hardware["unsupported"])
+
+# The permissions are a separate axis from the code: notifications and wake
+# locks are declared in plugin.json, are mapped rather than shimmed, and are
+# still worth saying out loud even for a plugin that runs in full.
+check("Android-only permissions are still called out",
       any("notifications" in w["about"] for w in found["warnings"]),
       found["warnings"])
-check("and the java import",
-      any("main.py" in w["about"] for w in found["warnings"]), found["warnings"])
+check("and the wake lock too",
+      any("wakelock" in w["about"] for w in found["warnings"]), found["warnings"])
+# The java import used to be a warning here. It is not one any more: the shim
+# provides the module, so it is reported as handled and named by the file it
+# is in. That change is the point of 2.0's plugin work.
+check("the java import is reported as handled, not as a worry",
+      any("main.py" in row["about"] for row in found["handled"]), found["handled"])
+check("and no longer appears as a warning",
+      not any("main.py" in w["about"] for w in found["warnings"]), found["warnings"])
 
 check("something that is not a plugin at all is refused",
       not bundle.inspect_mobile(os.path.join(_HOME, "nothing-here"))["ok"])
@@ -457,6 +489,13 @@ DOES_RATHER_THAN_ANSWERS = {
     "file.create", "file.rename", "file.remove", "file.import",
     "server.start", "server.stop", "package.install", "package.remove",
     "page.create", "page.start", "page.stop", "page.rename", "page.remove",
+    # 2.0's doers. Leaving android.start out of this list meant the suite
+    # called it, and it went off and tried to install the Android SDK - which
+    # is exactly what it is supposed to do when asked, and not what a
+    # "does this handler answer?" sweep should be asking it.
+    "android.start", "android.stop", "setup.start", "setup.stop",
+    "manager.install", "install.one", "known.forget",
+    "copies.replace", "copies.rollback", "copies.elevate", "console.secret",
 }
 for name in sorted(host_module.HANDLERS):
     if name in DOES_RATHER_THAN_ANSWERS:
@@ -531,6 +570,36 @@ missing = os.path.join(_HOME, "workspace", "nothing.py")
 check("a file that is not there is an answer, not an exception",
       not runner.run_file(missing, lines.append).get("ok"))
 
+say("\n== nothing can block for ever ==")
+
+# Three separate CI hangs in this project came from a subprocess call with no
+# ceiling, so this is now structural rather than remembered: every
+# subprocess.run in the app carries a timeout, and every Popen is read on a
+# thread joined against a deadline.
+import ast as _ast  # noqa: E402
+
+_unbounded = []
+_pkg = os.path.join(ROOT, "windows", "pycmd_win")
+for _name in sorted(n for n in os.listdir(_pkg) if n.endswith(".py")):
+    _tree = _ast.parse(open(os.path.join(_pkg, _name), encoding="utf-8").read())
+    for _node in _ast.walk(_tree):
+        if not isinstance(_node, _ast.Call):
+            continue
+        _f = _node.func
+        if (isinstance(_f, _ast.Attribute) and isinstance(_f.value, _ast.Name)
+                and f"{_f.value.id}.{_f.attr}" == "subprocess.run"
+                and "timeout" not in {k.arg for k in _node.keywords}):
+            _unbounded.append(f"{_name}:{_node.lineno}")
+check("every subprocess.run has a timeout", not _unbounded, _unbounded)
+
+_all_source = "".join(
+    open(os.path.join(_pkg, n), encoding="utf-8").read()
+    for n in os.listdir(_pkg) if n.endswith(".py"))
+check("and nothing waits on a pipe with communicate()",
+      ".communicate()" not in _all_source)
+check("nothing runs through a shell",
+      "shell=True" not in _all_source.replace("`shell=True`", ""))
+
 say("\n== a client that hangs up mid-response ==")
 
 # WebView2 aborts requests constantly - a panel iframe pointed at about:blank
@@ -580,14 +649,42 @@ _server.shutdown()
 say("\n== every handler the UI calls exists ==")
 import re as _re  # noqa: E402
 
-_ui = (open(os.path.join(ROOT, "windows", "ui", "app.js")).read()
-       + open(os.path.join(ROOT, "windows", "ui", "screens.js")).read())
+# Every UI file, not two of them. 2.0 split the console, the editor and the
+# lab into their own files, and a check that reads only app.js and screens.js
+# would have stopped covering exactly the screens that were being rewritten.
+_ui_files = sorted(n for n in os.listdir(os.path.join(ROOT, "windows", "ui"))
+                   if n.endswith(".js"))
+_ui = "".join(open(os.path.join(ROOT, "windows", "ui", n), encoding="utf-8").read()
+              for n in _ui_files)
+check("every UI file is covered by this check", len(_ui_files) >= 5, _ui_files)
 _called = set(_re.findall(r"PyCmd\.call\(\s*'([a-z.]+)'", _ui))
 _called |= {name for pair in _re.findall(r"PyCmd\.call\(live \? '([a-z.]+)' : '([a-z.]+)'", _ui)
             for name in pair}
 _missing = sorted(_called - set(host_module.HANDLERS))
 check("the page never calls something that is not there", not _missing, _missing)
 check("and there is more than one screen's worth of them", len(_called) >= 40, len(_called))
+
+# Defined once each, and only once. A stray second `BUILD = ...` further down
+# is invisible - Python takes the last one, while the manifest generator reads
+# the first with a regex - so the app reported build 2 while latest.json
+# claimed 3, and an update that is not newer than itself is never offered.
+# Which is exactly what an editing slip produced here.
+_host_source = open(os.path.join(ROOT, "windows", "pycmd_win", "host.py"),
+                    encoding="utf-8").read()
+for _name in ("VERSION", "BUILD"):
+    _times = len([line for line in _host_source.splitlines()
+                  if line.startswith(_name + " = ")])
+    check(f"{_name} is defined exactly once in host.py", _times == 1, _times)
+
+import importlib as _importlib  # noqa: E402
+_live = _importlib.import_module("pycmd_win.host")
+_manifest_now = json.load(open(os.path.join(ROOT, "dist-windows", "latest.json"),
+                               encoding="utf-8"))
+check("what the app reports is what the manifest promises",
+      _manifest_now["version"] == _live.VERSION
+      and int(_manifest_now["build"]) == _live.BUILD,
+      f"{_live.VERSION}/{_live.BUILD} vs "
+      f"{_manifest_now['version']}/{_manifest_now['build']}")
 
 say("\n== the update manifest ==")
 manifest = subprocess.run(
@@ -611,6 +708,111 @@ else:
           _manifest["sha256"] == "" and not [
               line for line in _sums.splitlines()
               if line.strip() and not line.startswith("#")], _sums[:120])
+
+say("\n== a phone plugin runs here, rather than being warned about ==")
+
+# 1.0 imported an Android plugin and called it a beta. What actually stops one
+# working is narrow and known: a `java` module that does not exist here, three
+# capabilities Windows does differently, and hard-coded Android paths.
+_pairs = (
+    ("/storage/emulated/0/Download/a.txt", store.folder("downloads")),
+    ("/storage/emulated/0/notes.md", store.folder("workspace")),
+    ("/sdcard/x", store.folder("workspace")),
+    ("/data/user/0/com.expstudio.pycmd/files/plugins/p", store.folder("plugins")),
+)
+for _from, _under in _pairs:
+    _to = mobile.translate(_from)
+    check(f"{_from} lands somewhere real",
+          _to.startswith(_under) and _to != _from, _to)
+check("a path that is already ours is left alone",
+      mobile.translate("C:/already/fine") == "C:/already/fine")
+
+# Found by sweeping, and it was a real hole: stripping the Android prefix and
+# joining the remainder meant `/storage/emulated/0/../../../etc/passwd`
+# normalised straight back out of the store. A phone path comes out of
+# somebody else's plugin, so it is untrusted input like any other.
+_root = os.path.realpath(store.root())
+_escapes = [
+    "/storage/emulated/0/../../../etc/passwd",
+    "/sdcard/../../etc/shadow",
+    "/data/user/0/com.expstudio.pycmd/files/../../../../etc/passwd",
+    "/storage/emulated/0/Download/../../../../../../etc/passwd",
+]
+_leaked = []
+for _path in _escapes:
+    _got = os.path.realpath(mobile.translate(_path))
+    if not (_got == _root or _got.startswith(_root + os.sep)):
+        _leaked.append((_path, _got))
+check("an Android path with .. in it cannot reach outside the store",
+      not _leaked, _leaked)
+check("and the longest rule wins, so Download does not fall into the workspace",
+      mobile.translate("/storage/emulated/0/Download").startswith(store.folder("downloads")))
+
+_said = []
+with mobile.shim(lambda kind, text: _said.append((kind, text))):
+    import java as _java  # noqa: E402
+
+    _toast = _java.jclass("android.widget.Toast")
+    _toast.makeText(None, "from a phone plugin").show()
+    _java.jclass("android.app.NotificationManager").notify(1, "a notification")
+    _build = _java.jclass("android.os.Build")
+    check("an unknown Android class does not explode", repr(_build.VERSION.SDK_INT) != "")
+    check("and is falsey, so a plugin takes its non-Android branch",
+          not _build.VERSION.SDK_INT)
+    __import__("android.os")
+    check("android.os imports", "android.os" in sys.modules)
+check("a phone toast becomes a PyCmd toast", len(_said) == 2, _said)
+check("the shim is gone once the import is over", "java" not in sys.modules)
+
+_full = mobile.report("from java import jclass\nopen('/sdcard/x')\n")
+check("a plugin whose Android bits are all covered is full, not beta",
+      _full["full"], _full)
+_part = mobile.report("import android.hardware\n")
+check("and one needing phone hardware says exactly which part cannot",
+      not _part["full"] and _part["unsupported"][0]["uses"] == "android.hardware",
+      _part)
+
+say("\n== Android Lab is honest about what it is ==")
+_plan = android_lab.plan()
+check("it says plainly that PyCmd is not an emulator",
+      "does not contain Android" in _plan["honest"], _plan["honest"][:60])
+check("and how much it would download before anything starts",
+      "GB" in _plan["download"], _plan["download"])
+check("the device is the one that was asked for",
+      _plan["device"]["ramMb"] == 4096 and _plan["device"]["storageMb"] == 10240,
+      _plan["device"])
+check("on x86_64, so it runs on the CPU rather than being translated",
+      _plan["device"]["arch"] == "x86_64" and "x86_64" in _plan["device"]["image"])
+check("every step says what it is for and what it costs",
+      all(s.get("what") and s.get("why") and s.get("size") for s in _plan["steps"]),
+      _plan["steps"])
+check("asking what is here does not start anything",
+      not android_lab.job_state().get("everStarted"), android_lab.job_state())
+
+say("\n== older copies of PyCmd ==")
+_found = copies.find_others("2.0.0")
+check("looking for them answers rather than raising", _found["ok"])
+check("and only looks where a download actually lands",
+      all(os.path.isdir(p) for p in _found["lookedIn"]), _found["lookedIn"])
+_fake = os.path.join(_HOME, "PyCmd-older.exe")
+open(_fake, "wb").write(b"MZ")
+_out = copies.replace([{"path": _fake, "version": "1.0.0"}], "2.0.0")
+check("an older copy is filed away, not destroyed",
+      _out["removed"] and not os.path.exists(_fake) and copies.kept(), _out)
+_newer = os.path.join(_HOME, "PyCmd-newer.exe")
+open(_newer, "wb").write(b"MZ")
+_out = copies.replace([{"path": _newer, "version": "9.9.9"}], "2.0.0")
+check("a newer one is refused with a reason, not silently skipped",
+      not _out["removed"] and _out["refused"] and os.path.exists(_newer), _out)
+check("version ordering is numeric, so 1.0.10 is newer than 1.0.9",
+      copies._order("1.0.10") > copies._order("1.0.9"))
+_before = len(copies.kept())
+for _i in range(copies.KEEP + 3):
+    _f = os.path.join(_HOME, f"old{_i}.exe")
+    open(_f, "wb").write(b"MZ")
+    copies.keep(_f, f"0.{_i}.0")
+check("only a handful of old builds are kept",
+      len(copies.kept()) == copies.KEEP, len(copies.kept()))
 
 say("\n== the exe is not in the repository ==")
 _tracked = subprocess.run(["git", "ls-files", "dist-windows"], cwd=ROOT,

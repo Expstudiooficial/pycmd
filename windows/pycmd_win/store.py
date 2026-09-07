@@ -16,6 +16,7 @@ clean tree without touching yours.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -119,6 +120,45 @@ def assets_path() -> str:
     if os.path.isdir(packed):
         return packed
     return os.path.join(bundled(), "app", "src", "main", "assets")
+
+
+# ---------------------------------------------------------------------------
+# Small persistent settings
+# ---------------------------------------------------------------------------
+#
+# One flat JSON file for the handful of things that have to outlive a launch
+# and are too small to deserve a home of their own - which side of a split a
+# panel sits on, whether an easter egg has been found. Anything that grows a
+# shape of its own gets its own file instead; this is for the leaves.
+
+SETTINGS = "settings.json"
+
+
+def settings() -> dict:
+    """Everything remembered. Never raises; a broken file reads as empty."""
+    try:
+        with open(os.path.join(root(), SETTINGS), "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_settings(data: dict) -> bool:
+    """Writes them back, through a temporary so a crash cannot truncate them."""
+    target = os.path.join(root(), SETTINGS)
+    temporary = target + f".writing-{os.getpid()}"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2)
+        os.replace(temporary, target)
+        return True
+    except (OSError, TypeError, ValueError):
+        try:
+            os.remove(temporary)
+        except OSError:
+            pass
+        return False
 
 
 def describe() -> dict:

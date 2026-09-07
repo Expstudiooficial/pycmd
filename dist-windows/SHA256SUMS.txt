@@ -1,1 +1,2 @@
-593c5be4e3957260fdf05b2a50fef399dfc8bda61878a6652c98ed3cd10c5d9c  PyCmd.exe
+# PyCmd for Windows 2.0.0 (build 3) has not been built yet.
+# The checksum appears here when a windows-v tag builds it.
