@@ -54,8 +54,18 @@ RAW = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}"
 RELEASES = f"https://github.com/{REPO}/releases"
 
 
-def release_urls(version: str, name: str) -> dict:
-    tag = f"windows-v{version}"
+def release_urls(version: str, name: str, tag: str = "") -> dict:
+    """The addresses for one release.
+
+    `tag` is passed in when CI knows it, and is not guessed from the version
+    when it does. Rebuilding it as f"windows-v{version}" is the obvious thing
+    and it is wrong the moment the two are written differently: the tag
+    `windows-v2.0` against a source saying "2.0.0" produced a manifest
+    pointing at a `windows-v2.0.0` release that does not exist, and a download
+    that 404s for everybody. The tag is the fact; the version is a separate
+    statement about it.
+    """
+    tag = tag or f"windows-v{version}"
     return {
         "url": f"{RELEASES}/download/{tag}/{name}",
         "latestUrl": f"{RELEASES}/latest/download/PyCmd.exe",
@@ -95,7 +105,10 @@ def agrees_with_tag(tag: str) -> int:
     """
     version, build = source_version()
     wanted = tag[len("windows-v"):] if tag.startswith("windows-v") else tag
-    if wanted != version:
+    # Compared as numbers, not as text. "2.0" and "2.0.0" are the same version
+    # written two ways, and a release should not be blocked over a trailing
+    # zero - which is exactly what happened, on a tag that was perfectly fine.
+    if _numeric(wanted) != _numeric(version):
         print(f"the tag says {wanted}, windows/pycmd_win/host.py says {version}.",
               file=sys.stderr)
         print("  Nothing is built from a disagreement like that: the exe would be",
@@ -107,6 +120,17 @@ def agrees_with_tag(tag: str) -> int:
         return 1
     print(f"the tag and the source agree: {version} (build {build})")
     return 0
+
+
+def _numeric(version: str) -> tuple:
+    """A version as numbers, so 2.0 and 2.0.0 compare equal."""
+    parts = []
+    for piece in (version or "").split("."):
+        digits = "".join(c for c in piece if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts[:3])
 
 
 def digest(path: str) -> str:
@@ -123,7 +147,7 @@ def readable(count: int) -> str:
     return f"{count // 1024} KB"
 
 
-def build_manifest(exe: str, notes: str) -> dict:
+def build_manifest(exe: str, notes: str, tag: str = "") -> dict:
     version, build = source_version()
     size = os.path.getsize(exe)
     # The asset is attached to the release under its built name, PyCmd.exe,
@@ -133,7 +157,7 @@ def build_manifest(exe: str, notes: str) -> dict:
         "name": "PyCmd for Windows",
         "version": version,
         "build": build,
-        **release_urls(version, name),
+        **release_urls(version, name, tag),
         "sha256": digest(exe),
         "bytes": size,
         "notes": notes,
@@ -207,12 +231,12 @@ def seed(notes: str) -> int:
     return 0
 
 
-def write(exe: str, notes: str) -> int:
+def write(exe: str, notes: str, tag: str = "") -> int:
     if not os.path.isfile(exe):
         print(f"there is no {exe} to describe", file=sys.stderr)
         return 1
     os.makedirs(DIST, exist_ok=True)
-    manifest = build_manifest(exe, notes)
+    manifest = build_manifest(exe, notes, tag)
     with open(MANIFEST, "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
         handle.write("\n")
@@ -242,7 +266,7 @@ def check() -> int:
     # would download a different build than the sha256 beside it describes,
     # and the updater would refuse it with a checksum error that points
     # nowhere near the actual mistake.
-    wanted = release_urls(version, "PyCmd.exe")
+    wanted = release_urls(version, "PyCmd.exe", manifest.get("tag", ""))
     if manifest.get("url") != wanted["url"]:
         problems.append(f"url is {manifest.get('url')}, "
                         f"it should be {wanted['url']}")
@@ -301,6 +325,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("exe", nargs="?", help="the built PyCmd exe to describe")
     parser.add_argument("--notes", default="", help="one line shown in the app")
+    parser.add_argument("--tag", default="",
+                        help="the release tag being built, when there is one")
     parser.add_argument("--agrees-with-tag", metavar="TAG", default="",
                         help="check the source claims the version this tag names")
     parser.add_argument("--seed", action="store_true",
@@ -310,7 +336,7 @@ def main(argv=None) -> int:
         return agrees_with_tag(args.agrees_with_tag)
     if args.seed:
         return seed(args.notes)
-    return write(args.exe, args.notes) if args.exe else check()
+    return write(args.exe, args.notes, args.tag) if args.exe else check()
 
 
 if __name__ == "__main__":

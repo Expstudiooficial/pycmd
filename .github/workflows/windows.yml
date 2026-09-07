@@ -137,7 +137,7 @@ jobs:
           # committed - see .gitignore - so this commit is one small JSON
           # file and a checksum, whatever the size of the build.
           python tools/make_latest_windows.py dist-windows/build/PyCmd.exe `
-            --notes "PyCmd for Windows $version"
+            --notes "PyCmd for Windows $version" --tag "${{ github.ref_name }}"
           python tools/make_latest_windows.py   # and prove what it wrote is true
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

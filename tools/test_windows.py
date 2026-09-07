@@ -686,6 +686,43 @@ check("what the app reports is what the manifest promises",
       f"{_live.VERSION}/{_live.BUILD} vs "
       f"{_manifest_now['version']}/{_manifest_now['build']}")
 
+say("\n== a tag and a version, spelled differently ==")
+
+# A tag and a version are two statements about the same thing, written by
+# different hands, and they will not always be spelled alike. `windows-v2.0`
+# against a source saying "2.0.0" is the same release, and refusing to build it
+# over a trailing zero is the gate being wrong rather than careful - which is
+# what it did, on a perfectly good tag.
+_gen = os.path.join(ROOT, "tools", "make_latest_windows.py")
+
+
+def _gate(tag):
+    return subprocess.run([sys.executable, _gen, "--agrees-with-tag", tag],
+                          cwd=ROOT, capture_output=True, text=True).returncode
+
+
+_source_version = _live.VERSION
+check("the tag as the source spells it is accepted",
+      _gate("windows-v" + _source_version) == 0)
+check("and the same version with a trailing zero is too",
+      _gate("windows-v" + _source_version + ".0") == 0)
+check("but a genuinely different version is still refused",
+      _gate("windows-v99.1") == 1)
+
+# The address must come from the tag, never be rebuilt from the version - the
+# two are spelled differently often enough that guessing produces a 404.
+import importlib.util as _iu  # noqa: E402
+
+_spec = _iu.spec_from_file_location("pycmd_make_latest", _gen)
+_mod = _iu.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+check("a given tag is used verbatim in the download address",
+      _mod.release_urls("2.0.0", "PyCmd.exe", "windows-v2.0")["url"]
+      .endswith("windows-v2.0/PyCmd.exe"),
+      _mod.release_urls("2.0.0", "PyCmd.exe", "windows-v2.0")["url"])
+check("and only guessed when there is no tag to use",
+      _mod.release_urls("2.0", "PyCmd.exe")["url"].endswith("windows-v2.0/PyCmd.exe"))
+
 say("\n== the update manifest ==")
 manifest = subprocess.run(
     [sys.executable, os.path.join(ROOT, "tools", "make_latest_windows.py")],

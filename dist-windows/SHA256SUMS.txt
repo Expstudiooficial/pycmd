@@ -1,2 +1,2 @@
-# PyCmd for Windows 2.0.0 (build 3) has not been built yet.
+# PyCmd for Windows 2.0 (build 3) has not been built yet.
 # The checksum appears here when a windows-v tag builds it.

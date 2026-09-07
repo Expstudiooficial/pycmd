@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Version | 2.0.0 |
+| Version | 2.0 |
 | Works on | Windows 10 and newer, 64-bit |
 | Runtime | Edge WebView2, which Windows 10 and 11 already have |
 | Installer | none — it is one exe |
@@ -23,7 +23,7 @@ To make one:
 
 - **On your own machine:**
   `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`
-- **Or push a tag** `windows-v2.0.0` and let the workflow do it — it builds on
+- **Or push a tag** `windows-v2.0` and let the workflow do it — it builds on
   a Windows runner, proves the exe starts, writes this manifest with the real
   hash, and attaches the exe to a release.
 
