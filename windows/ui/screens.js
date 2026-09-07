@@ -138,10 +138,9 @@ function Console(screen) {
 // Editor
 // ---------------------------------------------------------------------------
 
-function Editor(screen) {
-  screen.classList.add('flush');
-  screen.appendChild(el('iframe', { class: 'frame', src: '/web/editor.html' }));
-}
+/* Editor lives in editor-screen.js: it grew a toolbar, tabs and a status
+   line, and putting a real screen in this file beside the small ones made
+   both harder to read. */
 
 // ---------------------------------------------------------------------------
 // Files

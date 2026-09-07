@@ -50,7 +50,8 @@ def check(name, condition, detail=""):
 
 # ---------------------------------------------------------------------------
 
-from pycmd_win import builtins, bundle, langs, runner, store, toolchains  # noqa: E402
+from pycmd_win import (builtins, bundle, install, known, langs, runner,  # noqa: E402
+                       setup_all, store, toolchains)
 
 say("== where things live ==")
 made = store.prepare()
@@ -159,6 +160,102 @@ _took = _time.monotonic() - _started
 check("and detecting all of them is quick enough for a screen",
       _took < 60, f"{_took:.1f}s for {len(toolchains.TOOLCHAINS)}")
 say(f"        (all {len(toolchains.TOOLCHAINS)} probed in {_took:.1f}s)")
+
+say("\n== what PyCmd remembers about this machine ==")
+
+# The complaint: detecting and installing felt like it started from zero every
+# time. It did - the cache lived only as long as the process, so every launch
+# re-ran fifty-one probes and every new version began knowing nothing.
+known.forget()
+toolchains.clear_cache()
+_started = _time.monotonic()
+toolchains.detect_all()
+_cold = _time.monotonic() - _started
+toolchains.clear_cache()          # forget the process, keep the machine
+_started = _time.monotonic()
+toolchains.detect_all()
+_warm = _time.monotonic() - _started
+check("a second survey is answered from memory", _warm < max(_cold / 4, 0.5),
+      f"cold {_cold:.2f}s, warm {_warm:.2f}s")
+say(f"        (cold {_cold:.2f}s, from memory {_warm:.3f}s)")
+check("the memory lives beside the workspace, not inside a version",
+      os.path.dirname(known.path()) == store.root(), known.path())
+
+_recalled = [c.id for c in toolchains.TOOLCHAINS if known.recall(c.id)]
+check("everything probed is remembered", len(_recalled) == len(toolchains.TOOLCHAINS),
+      f"{len(_recalled)} of {len(toolchains.TOOLCHAINS)}")
+
+# A toolchain that gets upgraded under us must not be answered from a stale
+# version string. That is the one thing a cache like this must never do.
+_present = [c.id for c in toolchains.TOOLCHAINS if toolchains.detect(c.id).get("path")]
+if _present:
+    _id = _present[0]
+    _row = known.load()["found"][_id]
+    _row["stamp"] = "0:0"
+    check("a toolchain replaced since last time is re-probed",
+          known.recall(_id) is None, _row)
+    known.remember(_id, toolchains.detect(_id, refresh=True))
+    check("and remembered again afterwards", known.recall(_id) is not None)
+else:
+    check("a toolchain replaced since last time is re-probed", True, "none installed")
+
+known.remember("madeup", {"path": os.path.join(_HOME, "gone.exe")})
+check("a remembered path that has vanished is not trusted",
+      known.recall("madeup") is None)
+open(known.path(), "w", encoding="utf-8").write("{not json at all")
+known.load(refresh=True)
+check("a corrupt memory file reads as an empty one rather than crashing",
+      known.load()["found"] == {}, known.load())
+open(known.path(), "w", encoding="utf-8").write('{"format": 999, "found": {"go": {}}}')
+known.load(refresh=True)
+check("and one written by a newer PyCmd is ignored, not guessed at",
+      known.load()["found"] == {}, known.load())
+known.forget()
+
+say("\n== installing, including installing the installer ==")
+_managers = install.available()
+check("the three package managers are known", len(_managers) == 3,
+      [m["id"] for m in _managers])
+check("scoop is the one that can be set up without administrator",
+      install._BY_ID["scoop"].can_bootstrap and not install._BY_ID["scoop"].needs_admin)
+check("chocolatey is honest about needing administrator",
+      install._BY_ID["choco"].needs_admin)
+check("winget is not something PyCmd downloads",
+      not install._BY_ID["winget"].can_bootstrap)
+check("scoop is tried first", install.PREFERENCE[0] == "scoop", install.PREFERENCE)
+
+# Every toolchain must be installable somehow, or say plainly that it is not.
+_routeless = [c.id for c in toolchains.TOOLCHAINS
+              if not any(install._package_for(c, m) for m in install.PREFERENCE)]
+check("everything has an install route except what ships with Windows",
+      sorted(_routeless) == ["cmd", "powershell"], _routeless)
+
+_noplan = []
+for _chain in toolchains.TOOLCHAINS:
+    _made = install.plan(_chain.id)
+    if not _made.get("ok") and _made.get("reason") != "no-package":
+        _noplan.append((_chain.id, _made.get("error")))
+    if _made.get("ok") and not _made.get("already"):
+        for _route in _made["routes"]:
+            if "{package}" in _route["command"] or not _route["package"]:
+                _noplan.append((_chain.id, _route["command"]))
+check("every plan names a real command with the package filled in",
+      not _noplan, _noplan[:4])
+check("an unknown toolchain is an answer, not an exception",
+      not install.plan("nosuchthing")["ok"])
+
+say("\n== setting a machine up in one go ==")
+_ids = {c.id for c in toolchains.TOOLCHAINS}
+_wrong = [n for n in setup_all.FIRST + setup_all.LAST if n not in _ids]
+check("the run order names only real toolchains", not _wrong, _wrong)
+_order = setup_all.order()
+check("and covers every one of them, once",
+      len(_order) == len(_ids) and set(_order) == _ids,
+      f"{len(_order)} vs {len(_ids)}")
+check("the small fast ones go first", _order[0] in ("node", "python"), _order[:3])
+check("and the enormous ones last", "dotnet" in _order[len(_order) // 2:], _order[-6:])
+check("nothing is running before it is asked to", not setup_all.state()["running"])
+check("stopping nothing is not an error", setup_all.stop()["ok"])
 
 say("\n== planning a run ==")
 plan = toolchains.plan_for(os.path.join(_HOME, "x.py"), "python")

@@ -280,3 +280,126 @@ pre.out {
 .log-line.error .lvl { color: var(--bad); }
 .log-line.warn .lvl { color: var(--warn); }
 .log-line .det { color: var(--dim); white-space: pre-wrap; margin-left: 52px; }
+
+
+/* -- the Editor -------------------------------------------------------- */
+/*
+  Four rows: tabs, toolbar, the frame, a status line. Only the frame grows,
+  which is why it is the only `1fr` - and why the whole thing is a grid rather
+  than flex with a percentage height. The phone build learned in 2.5.8 what a
+  WebView does with a height nobody agreed to; the same rule applies here.
+*/
+
+.editor-shell {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.file-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: thin;
+}
+.file-tabs .pad { padding: 7px 12px; }
+
+.file-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 7px 8px 7px 12px;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 2px solid transparent;
+  color: var(--dim);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.file-tab:hover { background: var(--surface); color: var(--text); }
+.file-tab.on {
+  background: var(--surface);
+  color: var(--bright);
+  border-bottom-color: var(--accent);
+}
+.file-tab .dot { opacity: 0; color: var(--warn); font-size: 16px; line-height: 1; }
+.file-tab .dot.show { opacity: 1; }
+.file-tab .x {
+  opacity: 0.45;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 15px;
+  line-height: 1;
+}
+.file-tab .x:hover { opacity: 1; background: var(--bad); color: #fff; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.tgroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 10px;
+  border-right: 1px solid var(--line);
+}
+.tgroup:last-child { border-right: 0; padding-right: 0; }
+.tgroup select { margin: 0; min-width: 130px; }
+.toolbar button.on { background: var(--accent-bg); color: var(--bright); }
+.toolbar button.good { border-color: var(--good); color: var(--good); }
+.toolbar button.good:hover { background: var(--good); color: #06110B; }
+
+.statusline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 5px 12px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  font-family: Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--dim);
+}
+.statusline .grow { flex: 1; min-width: 0; }
+.statusline .warnText { color: var(--warn); }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* -- a scrolling list of rows, used by the file picker ------------------ */
+
+.list {
+  max-height: 46vh;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.row-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.row-item:last-child { border-bottom: 0; }
+.row-item:hover { background: var(--accent-bg); }
+.row-item .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

@@ -34,6 +34,8 @@ import subprocess
 import threading
 import time
 
+from . import known
+
 __all__ = [
     "Toolchain", "TOOLCHAINS", "by_id", "for_language", "detect", "detect_all",
     "plan_for", "installed_ids", "summary", "clear_cache",
@@ -201,6 +203,7 @@ TOOLCHAINS = [
             ("node", "{dir}/{stem}.js"),
         ),
         version_args=("--version",),
+        scoop="scoop install nodejs-lts", choco="choco install typescript",
         site="https://www.typescriptlang.org/",
         note="Needs Node as well, to run what it produces. `npm install -g typescript`.",
     ),
@@ -477,6 +480,7 @@ TOOLCHAINS = [
     Toolchain(
         "ocaml", "OCaml", ["ocaml"], "ocaml", _steps_run("{exe}", "{src}"),
         version_args=("-version",),
+        scoop="scoop install ocaml", choco="choco install ocpwin",
         site="https://ocaml.org/install",
     ),
     Toolchain(
@@ -500,7 +504,8 @@ TOOLCHAINS = [
     Toolchain(
         "guile", "Scheme (Guile)", ["scheme"], "guile",
         _steps_run("{exe}", "-s", "{src}"),
-        version_args=("--version",), site="https://www.gnu.org/software/guile/",
+        version_args=("--version",), scoop="scoop install guile", choco="choco install guile",
+        site="https://www.gnu.org/software/guile/",
     ),
 
     # -- the older ones, still very much in use ---------------------------
@@ -514,6 +519,7 @@ TOOLCHAINS = [
         "cobc", "GnuCOBOL", ["cobol"], "cobc",
         _steps_build(("{exe}", "-x", "-free", "-o", "{out}", "{src}")),
         version_args=("--version",),
+        choco="choco install gnucobol",
         site="https://gnucobol.sourceforge.io/",
     ),
     Toolchain(
@@ -645,12 +651,28 @@ def _no_window() -> int:
 
 
 def detect(toolchain_id: str, refresh: bool = False) -> dict:
-    """Looks for one toolchain. Cached unless asked to look again."""
+    """Looks for one toolchain. Cached unless asked to look again.
+
+    Three layers, cheapest first. The dict in this process answers a repeat
+    question for free. What PyCmd remembered from previous *launches* - and
+    from previous *versions* - answers for the cost of one stat call, which
+    is the layer that stopped detection feeling like it started from zero
+    every time. Only when neither knows does anything get run.
+    """
     chain = _BY_ID.get(toolchain_id)
     if chain is None:
         return {"installed": False, "error": "no such toolchain"}
     if not refresh and toolchain_id in _found:
         return dict(_found[toolchain_id])
+
+    if not refresh:
+        remembered = known.recall(toolchain_id)
+        if remembered is not None:
+            found = {"path": remembered["path"], "version": remembered["version"],
+                     "checked_at": int(time.time()), "remembered": True}
+            with _found_lock:
+                _found[toolchain_id] = found
+            return dict(found)
 
     path = _which(chain.program)
     found = {"path": path, "version": "", "checked_at": int(time.time())}
@@ -668,6 +690,7 @@ def detect(toolchain_id: str, refresh: bool = False) -> dict:
             found["version"] = text.splitlines()[0][:60]
     with _found_lock:
         _found[toolchain_id] = found
+    known.remember(toolchain_id, found)
     return dict(found)
 
 
@@ -684,6 +707,8 @@ def detect_all(refresh: bool = False) -> list:
             max_workers=PROBE_WORKERS, thread_name_prefix="pycmd-detect",
         ) as pool:
             list(pool.map(lambda chain: detect(chain.id, refresh=refresh), wanted))
+        # One write for the whole survey rather than fifty-one.
+        known.survey_done()
     return [chain.as_dict() for chain in TOOLCHAINS]
 
 
@@ -691,9 +716,18 @@ def installed_ids(refresh: bool = False) -> list:
     return [c.id for c in TOOLCHAINS if detect(c.id, refresh=refresh).get("path")]
 
 
-def clear_cache() -> None:
+def clear_cache(forget_machine: bool = False) -> None:
+    """Empties this process's answers, and optionally the remembered ones.
+
+    The default is deliberately the narrow one. Clearing what this process
+    thinks is what a Refresh button means; throwing away what PyCmd has
+    learned about the machine over several versions is a different and much
+    more expensive act, and has to be asked for.
+    """
     with _found_lock:
         _found.clear()
+    if forget_machine:
+        known.forget()
 
 
 def summary(refresh: bool = False) -> dict:
