@@ -24,8 +24,12 @@ import urllib.request
 
 from . import store
 
+# The repository was renamed from space_dodge-1.0 to pycmd. GitHub redirects
+# the old address, so builds already out there keep working - but that
+# redirect only lasts while nobody creates a new repository under the old
+# name, and an update channel should not depend on that staying true.
 MANIFEST_URL = (
-    "https://raw.githubusercontent.com/expstudiooficial/space_dodge-1.0/"
+    "https://raw.githubusercontent.com/expstudiooficial/pycmd/"
     "windowsmain/dist-windows/latest.json"
 )
 

@@ -154,8 +154,8 @@ against 21,000 shared, and it means a fix on either side is a fix on both.
 You do not need to build an exe to use it:
 
 ```powershell
-git clone https://github.com/expstudiooficial/space_dodge-1.0
-cd space_dodge-1.0
+git clone https://github.com/expstudiooficial/pycmd
+cd pycmd
 git checkout windowsmain
 pip install pywebview
 python -m pycmd_win.app          # from the windows\ folder on your PYTHONPATH

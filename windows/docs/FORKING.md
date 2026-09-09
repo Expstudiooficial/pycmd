@@ -9,13 +9,13 @@ is it — no licence gymnastics, no permission to ask.
 The whole thing, including the Android build it was ported from:
 
 ```powershell
-git clone https://github.com/expstudiooficial/space_dodge-1.0
-cd space_dodge-1.0
+git clone https://github.com/expstudiooficial/pycmd
+cd pycmd
 git checkout windowsmain
 ```
 
 Or download it as a zip:
-<https://codeload.github.com/expstudiooficial/space_dodge-1.0/zip/refs/heads/windowsmain>
+<https://codeload.github.com/expstudiooficial/pycmd/zip/refs/heads/windowsmain>
 
 The **System** screen inside the app has that link too, so a fork can be made
 from a machine that only has the exe.

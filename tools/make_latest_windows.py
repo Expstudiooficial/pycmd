@@ -30,7 +30,7 @@ DIST = os.path.join(ROOT, "dist-windows")
 MANIFEST = os.path.join(DIST, "latest.json")
 SUMS = os.path.join(DIST, "SHA256SUMS.txt")
 
-REPO = "expstudiooficial/space_dodge-1.0"
+REPO = "expstudiooficial/pycmd"
 BRANCH = "windowsmain"
 RAW = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}"
 
