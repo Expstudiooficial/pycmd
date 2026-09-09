@@ -99,8 +99,63 @@ def _folders() -> list:
 
 
 def _looks_like_pycmd(name: str) -> bool:
+    """Whether the *name* is worth a closer look.
+
+    Windows renames a second download rather than overwriting it, so the real
+    world is full of `PyCmd (1).exe`, `PyCmd (2).exe` and `PyCmd - Copy.exe`.
+    All of those start with "pycmd", so the rule catches them - but so would
+    `PyCmdSomethingElse.exe`, which is why the name is only the cheap first
+    filter and never the decision.
+    """
     lowered = name.lower()
     return lowered.endswith(".exe") and lowered.startswith("pycmd")
+
+
+# A string every PyCmd build contains, because it is the package the whole app
+# is built from. Present in the PyInstaller archive of any version.
+MARKER = b"pycmd_win"
+
+# How much of the file to search. The marker sits in the embedded archive,
+# which is most of the file, so this reads it in chunks rather than at once -
+# a fifteen megabyte read per candidate would be slow and pointless.
+_CHUNK = 1024 * 1024
+
+
+def _smells_like_pycmd(path: str) -> bool:
+    """Whether the file's *contents* say it is a PyCmd build.
+
+    This exists so PyCmd does not have to run a program to find out what it
+    is. Asking `--version` means executing somebody's exe, and the whole point
+    of this feature is that it then deletes things - executing an unknown file
+    named PyCmd-something.exe in order to decide whether to delete it is the
+    wrong order to do those two steps in.
+
+    Reading is safe, it is fast, and it identifies builds too old or too broken
+    to answer `--version` at all - which is what "it never deleted the ones
+    before 2.0" needed.
+    """
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return False
+    # A PyCmd build is fifteen megabytes and change. Anything under a couple is
+    # something else wearing the name.
+    if size < 2 * 1024 * 1024:
+        return False
+    try:
+        with open(path, "rb") as handle:
+            tail = b""
+            while True:
+                chunk = handle.read(_CHUNK)
+                if not chunk:
+                    return False
+                # Straddle the boundary, so a marker split across two reads is
+                # still found.
+                if MARKER in tail + chunk:
+                    return True
+                tail = chunk[-len(MARKER):]
+    except OSError:
+        return False
 
 
 def ask_version(path: str) -> str:
@@ -157,11 +212,20 @@ def find_others(my_version: str) -> dict:
                 continue
             if mine and os.path.normcase(full) == mine:
                 continue
-            version = ask_version(full)
-            if not version:
-                # Named like PyCmd, does not answer like PyCmd. Not ours to
-                # touch: somebody's unrelated file keeps its name.
+            if not _smells_like_pycmd(full):
+                # Named like PyCmd, is not one. Somebody's unrelated file
+                # keeps its name and is never touched.
                 continue
+            version = ask_version(full)
+            confirmed = bool(version)
+            if not version:
+                # It is a PyCmd build - the contents say so - but it will not
+                # say which. Old builds, half-downloaded ones, and anything
+                # whose --version broke land here. Before, they were skipped
+                # entirely, which is why nothing before 2.0 was ever offered
+                # for removal. They are listed now, as unknown, and an unknown
+                # version is never assumed to be older than this one.
+                version = ""
             try:
                 size = os.path.getsize(full)
                 when = os.path.getmtime(full)
@@ -170,8 +234,10 @@ def find_others(my_version: str) -> dict:
             others.append({
                 "path": full,
                 "version": version,
-                "older": _order(version) < _order(my_version),
-                "same": _order(version) == _order(my_version),
+                "confirmed": confirmed,
+                "older": bool(version) and _order(version) < _order(my_version),
+                "same": bool(version) and _order(version) == _order(my_version),
+                "unknown": not confirmed,
                 "bytes": size,
                 "modified": when,
                 "needsAdmin": _needs_admin(full),
@@ -258,7 +324,9 @@ def keep(path: str, version: str, why: str = "replaced") -> dict:
 
     rows = _load_record()
     rows.insert(0, {
-        "path": target, "version": version, "why": why,
+        # Stored as "unknown" rather than empty, so a screen listing archived
+        # builds shows a word rather than a gap.
+        "path": target, "version": version or "unknown", "why": why,
         "kept": time.time(), "bytes": os.path.getsize(target),
     })
     dropped = []
@@ -309,6 +377,42 @@ def go_back(path: str, to: str = "") -> dict:
                     "from is locked while it runs."}
 
 
+def restore(path: str, to: str = "") -> dict:
+    """Puts a kept build back, for real: writes the swap script and starts it.
+
+    go_back stages the file and hands back the script's *text*, which nothing
+    ever ran - so "go back to an older version" was a button that prepared
+    everything and then stopped. This writes the script to disk and launches it
+    detached, which is the only shape that works: the thing doing the swap has
+    to outlive the process being swapped.
+    """
+    staged = go_back(path, to)
+    if not staged.get("ok"):
+        return staged
+    script = os.path.join(store.folder("cache"), "pycmd-rollback.cmd")
+    try:
+        with open(script, "w", encoding="utf-8", newline="") as handle:
+            handle.write(staged["script"])
+    except OSError as error:
+        return {"ok": False, "error": f"could not write the swap script: {error}"}
+
+    if not WINDOWS:
+        return {"ok": True, "script": script, "started": False,
+                "note": "written but not started - this is not Windows"}
+    try:
+        subprocess.Popen(
+            ["cmd", "/c", "start", "", "/min", script],
+            close_fds=True,
+            creationflags=(getattr(subprocess, "DETACHED_PROCESS", 0)
+                           | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)),
+        )
+    except OSError as error:
+        return {"ok": False, "error": f"could not start the swap: {error}"}
+    return {"ok": True, "script": script, "started": True,
+            "note": "PyCmd will close, swap itself for the older build, and "
+                    "start again."}
+
+
 def swap_script(new_exe: str, target: str) -> str:
     """A batch file that waits for PyCmd to quit, swaps the exe, and restarts.
 
@@ -353,7 +457,17 @@ def replace(others: list, my_version: str, elevate: bool = True) -> dict:
         if me and os.path.normcase(path) == os.path.normcase(me):
             refused.append({"path": path, "why": "that is the copy running now"})
             continue
-        if _order(version) >= _order(my_version):
+        if not version:
+            # A build that would not say which version it is. Never removed on
+            # a guess - "it did not answer" is not evidence of being old - but
+            # removable when the person looking at the list picks it, because
+            # they can see the file and the date and PyCmd cannot.
+            if not row.get("chosen"):
+                refused.append({"path": path,
+                                "why": "it would not say which version it is; "
+                                       "tick it to remove it anyway"})
+                continue
+        elif _order(version) >= _order(my_version):
             refused.append({"path": path,
                             "why": f"{version} is not older than {my_version}"})
             continue

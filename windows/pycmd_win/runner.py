@@ -25,6 +25,7 @@ Three things it does that are worth saying out loud:
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -256,6 +257,42 @@ def stop(run_id: str) -> bool:
 
 def stop_all() -> int:
     return sum(1 for run in list(_runs.values()) if run.stop())
+
+
+def run_command(argv, write, cwd: str = "", run_id: str = "") -> dict:
+    """Runs any program on the PATH, streaming what it says.
+
+    The console is a console. Typing `go version` or `git status` or
+    `npm run build` should do what those words do, and before this it did
+    nothing at all - the line went to the Python interpreter, which has no
+    opinion about `go`, and the answer was silence.
+
+    A list of arguments, never a string through a shell: a workspace path with
+    a space in it is the normal case here.
+    """
+    if not argv:
+        return {"ok": False, "error": "nothing to run"}
+    program = shutil.which(argv[0])
+    if not program:
+        return {"ok": False, "reason": "not-found",
+                "error": f"{argv[0]} is not a program on this machine"}
+
+    run = Run(run_id or _new_id(), argv[0], "shell")
+    _runs[run.id] = run
+    try:
+        process = _spawn([program] + list(argv[1:]), cwd or os.getcwd())
+    except OSError as error:
+        run.error = str(error)
+        return {"ok": False, "error": f"could not start {argv[0]}: {error}",
+                "run": run.as_dict()}
+
+    run.attach(process)
+    code = _pump(process, write)
+    run.exit_code = code
+    run.finished = time.time()
+    if code != 0:
+        write(f"[PyCmd] {argv[0]} exited {code}\n")
+    return {"ok": code == 0, "exit": code, "run": run.as_dict()}
 
 
 def run_file(path: str, write, prefer: str = "", run_id: str = "") -> dict:

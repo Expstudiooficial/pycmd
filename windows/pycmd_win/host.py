@@ -29,14 +29,15 @@ import os
 import queue
 import subprocess
 import sys
+import shutil
 import threading
 import time
 import traceback
 
 from . import (android, builtins, bundle, copies, files, install, known,
                langs, runner, setup_all, store, toolchains)
-VERSION = "2.0"
-BUILD = 3
+VERSION = "2.0.7"
+BUILD = 4
 
 _engine_ready = False
 
@@ -250,10 +251,138 @@ def _h_hello(host, payload):
     }
 
 
+# The shared shell's own commands. These reach the engine, which does them
+# well and knows about the workspace - `cd`, `ls`, `pip install`, `serve`. The
+# router below must never steal one of these just because a program of the
+# same name happens to be on the PATH: `find` and `type` are real Windows
+# programs and mean something quite different from what people expect here.
+ENGINE_COMMANDS = {
+    "cat", "cd", "clear", "cls", "cp", "dir", "du", "echo", "edit", "env",
+    "find", "freeze", "head", "help", "install", "kill", "l", "ll", "ls",
+    "man", "mkdir", "mv", "open", "packages", "pip", "preview", "pwd",
+    "python", "rm", "serve", "servers", "show", "status", "stop", "tail",
+    "touch", "tree", "type", "uninstall", "version", "which",
+}
+
+
+def _find_for_run(wanted: str) -> str:
+    """Where `run <this>` means, resolved the way a console user expects.
+
+    The current directory first, because `cd deep` then `run n.py` has to mean
+    the one in deep - that is what `cd` is for, and resolving only against the
+    workspace root would make the console's own `cd` a lie. The workspace root
+    second, so `run app.py` works from anywhere without hunting.
+
+    Both are checked against the workspace boundary. A path that escapes it is
+    not run, and not explained away either - it simply is not found here, and
+    the engine gets to answer.
+    """
+    if not wanted:
+        return ""
+    if os.path.isabs(wanted):
+        try:
+            inside = files.resolve(wanted)
+        except Exception:  # noqa: BLE001
+            return ""
+        return inside if os.path.isfile(inside) else ""
+
+    root = os.path.abspath(store.folder("workspace"))
+    here = os.path.abspath(os.getcwd())
+    bases = []
+    # Only trust the working directory while it is still inside the workspace;
+    # the engine's `cd` cannot leave it, but nothing else guarantees that.
+    if here == root or here.startswith(root + os.sep):
+        bases.append(here)
+    bases.append(root)
+
+    for base in bases:
+        candidate = os.path.abspath(os.path.join(base, wanted))
+        if candidate != root and not candidate.startswith(root + os.sep):
+            continue
+        if os.path.isfile(candidate):
+            return candidate
+    return ""
+
+
+def _console_route(host, text, channel):
+    """Windows answers first, where Windows has a better one.
+
+    Two things the engine cannot do, because it is the phone's:
+
+    **`run somefile.rb`.** The engine runs files on the interpreters PyCmd
+    carries - the ones written in Python because Android forbids an app
+    executing code it compiled. On a phone that is the only option. Here it
+    meant the console answered "Ruby: editable and servable, but not runnable
+    on the device" on a machine with Ruby installed and working, and "Plain
+    text files cannot be run" about a Perl script. Windows has real toolchains
+    for forty-six languages and the console was using none of them.
+
+    **`go version`.** Any program on the PATH. The line went to the Python
+    interpreter, which has no opinion about `go`, and the answer was silence -
+    the worst possible one, because nothing tells you it was not understood.
+
+    Returns a reply dict when it took the line, or None to let the engine have
+    it.
+    """
+    import shlex
+
+    stripped = text.strip()
+    if not stripped:
+        return None
+    try:
+        words = shlex.split(stripped, posix=(os.name != "nt"))
+    except ValueError:
+        words = stripped.split()
+    if not words:
+        return None
+    first = words[0].lower()
+
+    def write(line):
+        host.onOutput("stdout", line, channel)
+
+    # `run <file>` - through the real toolchains.
+    if first == "run" and len(words) > 1:
+        path = _find_for_run(words[1])
+        if not path:
+            return None          # let the engine explain what it cannot find
+
+        def work():
+            started = time.monotonic()
+            result = runner.run_file(path, write)
+            host.onFinished(result.get("run", {}).get("id", 0),
+                            "ok" if result.get("ok") else "error",
+                            int((time.monotonic() - started) * 1000))
+
+        threading.Thread(target=work, name="pycmd-console-run", daemon=True).start()
+        return {"queued": True, "routed": "run"}
+
+    # Any other program on the PATH, as long as the engine has no command of
+    # that name and it is not something that reads as Python.
+    if first in ENGINE_COMMANDS or "=" in stripped or stripped.endswith(":"):
+        return None
+    if not shutil.which(words[0]):
+        return None
+
+    def work_command():
+        started = time.monotonic()
+        result = runner.run_command(words, write, cwd=os.getcwd())
+        host.onFinished(result.get("run", {}).get("id", 0),
+                        "ok" if result.get("ok") else "error",
+                        int((time.monotonic() - started) * 1000))
+
+    threading.Thread(target=work_command, name="pycmd-console-cmd",
+                     daemon=True).start()
+    return {"queued": True, "routed": "command"}
+
+
 def _h_console_run(host, payload):
     """Runs a console line on the interpreter thread and returns at once."""
     text = str(payload.get("text", ""))
     channel = str(payload.get("channel", "console"))
+
+    routed = _console_route(host, text, channel)
+    if routed is not None:
+        return routed
 
     def work():
         try:
@@ -290,8 +419,22 @@ def _h_completions(host, payload):
 
 
 def _h_run_file(host, payload):
-    """Runs a file with a real toolchain, streaming as it goes."""
+    """Runs a file with a real toolchain, streaming as it goes.
+
+    The path may be workspace-relative - which is what the Files and Editor
+    screens have - or absolute. It used to be handed to the runner as it came,
+    and the runner does os.path.abspath, which resolves against the *process
+    working directory*. That is wherever the exe was launched from: somebody's
+    Downloads folder. So pressing Run in the editor said "opening the console"
+    and the console then said the file was not there, which is a baffling
+    thing to be told about a file you are looking at.
+    """
     path = str(payload.get("path", ""))
+    if path and not os.path.isabs(path):
+        try:
+            path = files.resolve(path)
+        except Exception:  # noqa: BLE001 - refused paths fall through as-is
+            pass
     prefer = str(payload.get("toolchain", ""))
     channel = str(payload.get("channel", "console"))
 
@@ -793,7 +936,15 @@ def _h_copies_kept(host, payload):
 
 
 def _h_copies_rollback(host, payload):
-    return copies.go_back(str(payload.get("path", "")))
+    return copies.restore(str(payload.get("path", "")),
+                          str(payload.get("to", "")))
+
+
+def _h_copies_archive(host, payload):
+    """Files a copy away without it having to be older, when asked by name."""
+    path = str(payload.get("path", ""))
+    version = str(payload.get("version", "")) or "unknown"
+    return copies.keep(path, version, why="archived on purpose")
 
 
 def _h_copies_elevate(host, payload):
@@ -895,6 +1046,7 @@ HANDLERS = {
     "copies.replace": _h_copies_replace,
     "copies.kept": _h_copies_kept,
     "copies.rollback": _h_copies_rollback,
+    "copies.archive": _h_copies_archive,
     "copies.elevate": _h_copies_elevate,
     "android": _h_android,
     "android.plan": _h_android_plan,

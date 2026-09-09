@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -56,8 +57,9 @@ def check(name, condition, detail=""):
 # silently shadowed the module being tested and made every check after
 # it disappear.
 from pycmd_win import android as android_lab  # noqa: E402
-from pycmd_win import (builtins, bundle, copies, install, known,  # noqa: E402
-                       langs, mobile, runner, setup_all, store, toolchains)
+from pycmd_win import (builtins, bundle, copies, envpath, install,  # noqa: E402
+                       known, langs, mobile, runner, setup_all, store,
+                       toolchains)
 
 say("== where things live ==")
 made = store.prepare()
@@ -746,6 +748,120 @@ else:
               line for line in _sums.splitlines()
               if line.strip() and not line.startswith("#")], _sums[:120])
 
+say("\n== the PATH a running process holds goes stale ==")
+
+# This is what "the toolchains install but twenty-seven of them cannot be
+# installed" actually was, and it had nothing to do with the installers.
+# Windows hands a process a *copy* of PATH at startup and never updates it, so
+# PyCmd installed Go perfectly and then asked a PATH that could not possibly
+# know about it. Every success was reported as "it ran but the program did not
+# appear".
+_before = os.environ.get("PATH", "")
+_result = envpath.refresh()
+check("refreshing answers rather than raising", isinstance(_result, dict), _result)
+check("and never loses an entry that was already there",
+      all(part in os.environ.get("PATH", "")
+          for part in _before.split(os.pathsep) if part.strip()))
+check("it reports what it added", isinstance(_result.get("added"), list), _result)
+
+_made = os.path.join(_HOME, "a-real-folder")
+os.makedirs(_made, exist_ok=True)
+check("a real folder can be put on the PATH", envpath.ensure(_made) == [_made])
+check("and asking twice does not add it twice", envpath.ensure(_made) == [])
+check("a folder that is not there is never added",
+      envpath.ensure(os.path.join(_HOME, "not-here")) == [])
+check("every known folder is a template with a variable in it",
+      all("%" in template for template, _why in envpath.KNOWN),
+      [t for t, _w in envpath.KNOWN if "%" not in t])
+
+# Scoop keeps most of its catalogue in buckets you have to add first.
+check("scoop's standard buckets are added", "extras" in install.BUCKETS
+      and "java" in install.BUCKETS, install.BUCKETS)
+check("and asking for them without scoop is not an error",
+      install.add_buckets() == [])
+
+say("\n== the console is a console, not a Python prompt ==")
+
+# It answered with the *phone's* limitations on a Windows machine: "Ruby:
+# editable and servable, but not runnable on the device", about a machine with
+# Ruby installed. And an unknown command printed nothing at all.
+_host_for_console = host_module.Host()
+_lines = []
+_host_for_console.onOutput = lambda stream, text, channel="console": _lines.append(text)
+
+_routed = host_module._console_route(_host_for_console, "echo hello", "console")
+check("the engine keeps its own commands", _routed is None, _routed)
+for _line in ("cd somewhere", "pip install flask", "ls", "which python"):
+    check(f"and keeps {_line.split()[0]!r}",
+          host_module._console_route(_host_for_console, _line, "console") is None)
+
+check("Python is not mistaken for a program",
+      host_module._console_route(_host_for_console, "x = 5", "console") is None)
+check("nor is an expression",
+      host_module._console_route(_host_for_console, "print(2 + 2)", "console") is None)
+
+_real = "python3" if not toolchains.WINDOWS else "cmd"
+if shutil.which(_real):
+    _took = host_module._console_route(
+        _host_for_console, f"{_real} --version", "console")
+    check("but a real program on the PATH is run",
+          _took is not None and _took.get("routed") == "command", _took)
+else:
+    check("but a real program on the PATH is run", True, "none to try")
+
+check("an unknown word is left to the engine to explain",
+      host_module._console_route(
+          _host_for_console, "definitelynotaprogram123", "console") is None)
+
+say("\n== `run` resolves the way a console user expects ==")
+
+os.makedirs(os.path.join(store.folder("workspace"), "sub"), exist_ok=True)
+files.write("sub/inner.py", "print('inner')\n")
+files.write("outer.py", "print('outer')\n")
+_root_dir = os.path.abspath(store.folder("workspace"))
+_was = os.getcwd()
+try:
+    os.chdir(os.path.join(_root_dir, "sub"))
+    check("the current directory comes first, so cd means something",
+          host_module._find_for_run("inner.py")
+          == os.path.join(_root_dir, "sub", "inner.py"),
+          host_module._find_for_run("inner.py"))
+    check("and the workspace root is the fallback",
+          host_module._find_for_run("outer.py")
+          == os.path.join(_root_dir, "outer.py"),
+          host_module._find_for_run("outer.py"))
+    check("dot-dot inside the workspace is fine",
+          host_module._find_for_run("../outer.py")
+          == os.path.join(_root_dir, "outer.py"))
+    for _escape in ("../../../../etc/passwd", "/etc/passwd", "..\\..\\Windows"):
+        check(f"but {_escape!r} is not found here",
+              host_module._find_for_run(_escape) == "",
+              host_module._find_for_run(_escape))
+    check("and neither is something that is simply not there",
+          host_module._find_for_run("nope.py") == "")
+finally:
+    os.chdir(_was)
+
+say("\n== running a file does not depend on the working directory ==")
+
+# `run.file` was handed the path as it came and the runner did abspath, which
+# resolves against the process working directory - wherever the exe was
+# launched from. The engine happens to chdir into the workspace at boot, so
+# this worked until somebody typed `cd` in the console, and then Run said the
+# file you were looking at did not exist.
+files.write("cwd-test.py", "print('ran')\n")
+_was = os.getcwd()
+try:
+    os.chdir(_HOME)
+    _resolved = files.resolve("cwd-test.py")
+    check("a workspace-relative path resolves to the workspace",
+          _resolved.startswith(os.path.abspath(store.folder("workspace"))),
+          _resolved)
+    check("and not to wherever the exe was started from",
+          not _resolved.startswith(os.path.join(_HOME, "cwd-test")), _resolved)
+finally:
+    os.chdir(_was)
+
 say("\n== a phone plugin runs here, rather than being warned about ==")
 
 # 1.0 imported an Android plugin and called it a beta. What actually stops one
@@ -827,6 +943,63 @@ check("asking what is here does not start anything",
       not android_lab.job_state().get("everStarted"), android_lab.job_state())
 
 say("\n== older copies of PyCmd ==")
+
+# 2.0 shipped all of copies.py and not one button that called it, which is
+# exactly why nothing ever appeared to happen.
+_ui_all = "".join(
+    open(os.path.join(ROOT, "windows", "ui", n), encoding="utf-8").read()
+    for n in os.listdir(os.path.join(ROOT, "windows", "ui")) if n.endswith(".js"))
+for _handler in ("copies", "copies.replace", "copies.kept", "copies.rollback"):
+    check(f"something in the interface calls {_handler}",
+          f"'{_handler}'" in _ui_all, _handler)
+check("and there is a tab to reach it by",
+      "id: 'copies'" in open(os.path.join(ROOT, "windows", "ui", "app.js"),
+                             encoding="utf-8").read())
+
+# A name is not identity, and running an unknown exe to decide whether to
+# delete it is the wrong order to do those two steps in.
+_marked = os.path.join(_HOME, "PyCmd (1).exe")
+with open(_marked, "wb") as _handle:
+    _handle.write(b"MZ" + b"x" * (3 * 1024 * 1024) + copies.MARKER)
+_plain = os.path.join(_HOME, "PyCmd-notours.exe")
+with open(_plain, "wb") as _handle:
+    _handle.write(b"MZ" + b"x" * (3 * 1024 * 1024))
+_tiny = os.path.join(_HOME, "PyCmdTiny.exe")
+with open(_tiny, "wb") as _handle:
+    _handle.write(b"MZ" + copies.MARKER)
+
+check("a renamed copy is still recognised by name",
+      copies._looks_like_pycmd("PyCmd (1).exe")
+      and copies._looks_like_pycmd("PyCmd - Copy.exe"))
+check("and confirmed by reading it, not by running it",
+      copies._smells_like_pycmd(_marked))
+check("something else wearing the name is left alone",
+      not copies._smells_like_pycmd(_plain))
+check("and so is something far too small to be a build",
+      not copies._smells_like_pycmd(_tiny))
+
+_unknown = [{"path": _marked, "version": ""}]
+_out = copies.replace(_unknown, "2.0.7")
+check("a build that will not say its version is never removed on a guess",
+      not _out["removed"] and _out["refused"], _out)
+_out = copies.replace([{"path": _marked, "version": "", "chosen": True}], "2.0.7")
+check("but is removed when the person picks it",
+      _out["removed"] == [_marked], _out)
+check("and lands in the archive as 'unknown' rather than as a blank",
+      any(row["version"] == "unknown" for row in copies.kept()),
+      [r["version"] for r in copies.kept()])
+
+# A target is passed in because this runs from a checkout, where there is no
+# exe to replace - restore refuses that case on purpose, which is right and
+# also makes the script itself untestable without one.
+_pretend_exe = os.path.join(_HOME, "PyCmd-running.exe")
+with open(_pretend_exe, "wb") as _handle:
+    _handle.write(b"MZ")
+_back = copies.restore(copies.kept()[0]["path"], _pretend_exe)
+check("going back writes a swap script that actually exists",
+      _back["ok"] and os.path.isfile(_back["script"]), _back)
+check("and the script restarts PyCmd afterwards",
+      'start ""' in open(_back["script"], encoding="utf-8").read())
 _found = copies.find_others("2.0.0")
 check("looking for them answers rather than raising", _found["ok"])
 check("and only looks where a download actually lands",

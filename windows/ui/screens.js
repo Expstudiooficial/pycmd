@@ -1125,6 +1125,7 @@ window.Screens = {
   plugins: Plugins,
   docs: Docs,
   android: Android,
+  copies: Copies,
   system: System,
   log: Log,
 };

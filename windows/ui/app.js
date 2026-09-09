@@ -193,6 +193,7 @@ const TABS = [
   { id: 'packages', name: 'Packages', key: '◎' },
   { id: 'plugins', name: 'Plugins', key: '◈' },
   { id: 'android', name: 'Android Lab', key: '▲' },
+  { id: 'copies', name: 'Copies', key: '⧉' },
   { id: 'docs', name: 'Guides', key: '?' },
   { id: 'system', name: 'System', key: '⌘' },
 ];

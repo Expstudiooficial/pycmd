@@ -38,7 +38,7 @@ import subprocess
 import threading
 import time
 
-from . import install, store
+from . import envpath, install, store
 
 WINDOWS = os.name == "nt"
 
@@ -101,6 +101,26 @@ def _tool(name: str) -> str:
             if os.path.isfile(where):
                 return where
     return shutil.which(name) or ""
+
+
+def _sdk_folders() -> list:
+    """Puts the SDK's own bin folders on the PATH.
+
+    The Android SDK does not put platform-tools or emulator on the PATH at
+    all - Android Studio sets that up, and the command-line tools package
+    does not. So finding adb after installing the SDK is not a matter of
+    waiting for the registry: nothing was ever going to add it, and PyCmd has
+    to know the layout. Which it does, because the layout is fixed.
+    """
+    root = sdk_root()
+    if not root:
+        return []
+    return envpath.ensure(
+        os.path.join(root, "platform-tools"),
+        os.path.join(root, "emulator"),
+        os.path.join(root, "cmdline-tools", "latest", "bin"),
+        os.path.join(root, "tools", "bin"),
+    )
 
 
 def tools() -> dict:
@@ -311,6 +331,13 @@ def ensure_sdk(write) -> bool:
         command = [manager.program] + [
             part.format(package=package) for part in manager.install_verb]
         ok, _ = _run(command, write, STEP_TIMEOUT)
+        # The SDK was just put on the disk and named on the registry PATH.
+        # This process still has the PATH it started with, so without taking
+        # the new one on board sdkmanager is invisible and the install looks
+        # like it failed - which is exactly what "the emulator cannot be
+        # installed" was.
+        envpath.refresh()
+        _sdk_folders()
         if ok and _tool("sdkmanager"):
             return True
     if not any(install.find(m) for m in install.PREFERENCE):
@@ -325,6 +352,7 @@ def ensure_sdk(write) -> bool:
 
 def ensure_image(write) -> bool:
     """Downloads Android itself. This is the 2.5 GB step."""
+    _sdk_folders()
     manager = _tool("sdkmanager")
     if not manager:
         return False
@@ -501,6 +529,8 @@ def start(apk: str = "") -> dict:
             if not ensure_sdk(job.write):
                 job.error = "the Android SDK could not be installed"
                 return
+            envpath.refresh()
+            _sdk_folders()
             job.step = "image"
             if not ensure_image(job.write):
                 job.error = "the Android system image could not be downloaded"

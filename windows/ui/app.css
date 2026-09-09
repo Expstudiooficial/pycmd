@@ -10,18 +10,35 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0B0F14;
-  --surface: #121A24;
-  --line: #223041;
-  --text: #DCE3EC;
-  --bright: #F1F5FA;
-  --dim: #8FA0B4;
-  --accent: #2E7DD1;
-  --accent-bg: #16324D;
-  --good: #43B581;
-  --warn: #E0A33E;
-  --bad: #E05A5A;
-  --rail: 168px;
+
+  /* Three grounds rather than two. Everything used to sit on one flat panel
+     colour, which is most of why the app read as unfinished: with no depth,
+     a card, the rail and the page all looked like the same surface and the
+     eye had nothing to follow. */
+  --bg: #090D12;
+  --sunken: #06090D;
+  --surface: #111923;
+  --raised: #16202C;
+
+  --line: #1F2B3A;
+  --line-soft: #18222E;
+
+  --text: #C9D4E1;
+  --bright: #F2F6FB;
+  --dim: #7D8FA5;
+  --faint: #55657A;
+
+  --accent: #3B8FE8;
+  --accent-bg: #12304F;
+  --accent-line: #245B96;
+  --good: #46C08A;
+  --warn: #E5A945;
+  --bad: #E8635F;
+
+  --rail: 182px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .6);
 }
 
 * { box-sizing: border-box; }
@@ -36,7 +53,8 @@ body {
   grid-template-rows: auto 1fr;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.55 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font: 14px/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
 
@@ -120,8 +138,17 @@ body {
   color: var(--dim);
   cursor: pointer;
 }
-.tab:hover { background: #16202C; color: var(--text); }
-.tab.on { background: var(--accent-bg); border-color: var(--accent); color: var(--bright); }
+.tab { position: relative; transition: background .12s ease, color .12s ease; }
+.tab:hover { background: var(--raised); color: var(--text); }
+.tab.on { background: var(--accent-bg); border-color: var(--accent-line); color: var(--bright); }
+/* A bar down the left of the active tab. Colour alone was doing all the work
+   of saying where you are, and on a dark panel that is a weak signal. */
+.tab.on::before {
+  content: "";
+  position: absolute; left: -6px; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
 .tab .k { width: 18px; text-align: center; opacity: .85; }
 .tab .n { flex: 1 1 auto; }
 .tab .c {
@@ -130,9 +157,11 @@ body {
   border-radius: 10px; padding: 0 6px;
 }
 .rail-head {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-  color: #5D6E82; padding: 12px 10px 4px;
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .09em;
+  color: var(--faint); padding: 16px 10px 5px;
 }
+.rail-head:first-child { padding-top: 6px; }
 
 /* The one thing that scrolls. */
 .screen {
@@ -145,8 +174,15 @@ body {
 
 /* -- ordinary furniture ------------------------------------------------ */
 
-h1 { font-size: 19px; color: var(--bright); margin: 0 0 4px; }
-h2 { font-size: 15px; color: var(--bright); margin: 22px 0 8px; }
+h1 { font-size: 21px; font-weight: 620; letter-spacing: -.01em;
+     color: var(--bright); margin: 0 0 5px; }
+/* Section headings need air above them; a heading inside a card does not,
+   because the card's own padding already provides it. Setting the top margin
+   to zero for both jammed every section heading against whatever preceded it. */
+h2 { font-size: 14px; font-weight: 620; letter-spacing: .01em;
+     color: var(--bright); margin: 26px 0 10px; }
+.card h2 { margin-top: 0; }
+.card h2:not(:first-child) { margin-top: 20px; }
 p { margin: 6px 0; }
 .muted { color: var(--dim); font-size: 12.5px; }
 .lead { color: var(--dim); margin: 0 0 16px; max-width: 70ch; }
@@ -154,9 +190,10 @@ p { margin: 6px 0; }
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 13px 15px;
-  margin: 9px 0;
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  margin: 12px 0;
+  box-shadow: var(--shadow);
 }
 .card.tight { padding: 10px 12px; }
 .row { display: flex; align-items: center; gap: 10px; }
@@ -178,20 +215,41 @@ button.small, .btn {
   color: var(--text);
   cursor: pointer;
 }
-button.small:hover, .btn:hover { border-color: var(--accent); }
-button.small.primary, .btn.primary { background: var(--accent-bg); border-color: var(--accent); color: var(--bright); }
+button.small, .btn {
+  transition: background .12s ease, border-color .12s ease, transform .06s ease;
+}
+button.small:hover, .btn:hover { border-color: var(--accent-line); background: var(--raised); }
+button.small:active, .btn:active { transform: translateY(1px); }
+button.small.primary, .btn.primary {
+  background: var(--accent-bg); border-color: var(--accent-line); color: var(--bright);
+}
+button.small.primary:hover, .btn.primary:hover { background: #17406A; border-color: var(--accent); }
 button.small.danger { border-color: #5A2A2A; color: #F0A5A5; }
-button.small:disabled { opacity: .45; cursor: default; }
+button.small.danger:hover { background: #2A1212; border-color: var(--bad); }
+button.small:disabled { opacity: .4; cursor: default; }
+button.small:disabled:hover { background: var(--bg); border-color: var(--line); }
+
+/* Keyboard focus has to be visible. It was not visible at all, which makes the
+   app unusable without a mouse and is the kind of thing that reads as unfinished
+   even to somebody who never uses the keyboard. */
+:where(button, input, select, textarea, .tab, .row-item):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 input, select, textarea {
   font: inherit;
   width: 100%;
   padding: 8px 11px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   border: 1px solid var(--line);
-  background: #10161F;
+  background: var(--sunken);
   color: var(--text);
+  transition: border-color .12s ease;
 }
+input:hover, select:hover, textarea:hover { border-color: var(--accent-line); }
+input::placeholder, textarea::placeholder { color: var(--faint); }
+input[type="checkbox"] { width: auto; accent-color: var(--accent); }
 label.field { display: block; margin: 10px 0; }
 label.field > span { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
 
@@ -499,3 +557,45 @@ textarea.plain {
   background: var(--good);
   transition: width 0.4s ease;
 }
+
+
+/* -- pieces the newer screens need ------------------------------------- */
+
+.tag {
+  font-size: 11px;
+  font-family: Consolas, ui-monospace, monospace;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  color: var(--dim);
+  white-space: nowrap;
+}
+.tag.warn { color: var(--warn); border-color: #4A3D1F; }
+.tag.good { color: var(--good); border-color: #1D4634; }
+
+/* An empty state should look deliberate rather than like something failed to
+   load, which is what an unstyled line of grey text looks like. */
+.empty {
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--dim);
+  background: var(--sunken);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.list { background: var(--sunken); }
+.row-item { transition: background .1s ease; }
+label.row-item { cursor: pointer; }
+label.row-item input[type="checkbox"] { flex: 0 0 auto; }
+
+/* The scrollbars, which were the browser's default and looked it. */
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--line); border-radius: 6px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent-line); }

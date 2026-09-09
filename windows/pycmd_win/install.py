@@ -42,7 +42,7 @@ import subprocess
 import threading
 import time
 
-from . import known, toolchains
+from . import envpath, known, toolchains
 
 WINDOWS = os.name == "nt"
 
@@ -129,6 +129,13 @@ _BY_ID = {manager.id: manager for manager in MANAGERS}
 # without elevation, so a machine with nothing installed can get from nothing
 # to a working toolchain without a single administrator prompt.
 PREFERENCE = ("scoop", "winget", "choco")
+
+# Scoop keeps most things in `main` and the rest in buckets you have to add.
+# `scoop install kotlin` on a fresh scoop simply says it cannot find kotlin,
+# which reads as "that package does not exist" rather than "you have not added
+# the bucket it lives in". Adding the three standard ones costs a git clone
+# each, once, and turns a large class of "cannot be installed" into installs.
+BUCKETS = ("extras", "java", "versions")
 
 _where: dict[str, str] = {}
 _where_lock = threading.RLock()
@@ -319,13 +326,39 @@ def bootstrap(manager_id: str, write=None) -> dict:
          "-Command", manager.bootstrap],
         BOOTSTRAP_TIMEOUT, write,
     )
+    # The installer put things on the PATH *in the registry*; this process is
+    # still holding the copy it started with, so without this the manager it
+    # just installed is invisible to the next line of code.
+    envpath.refresh()
     where = find(manager_id, refresh=True)
     if where:
         write(f"[PyCmd] {manager.name} is in place at {where}\n")
+        if manager_id == "scoop":
+            add_buckets(write)
         return {"ok": True, "path": where}
     return {"ok": False,
             "error": f"{manager.name} did not appear afterwards. {manager.note}",
             "site": manager.site, "output": output[-2000:] if output else ""}
+
+
+def add_buckets(write=None) -> list:
+    """Adds scoop's standard buckets, so its whole catalogue is reachable.
+
+    Idempotent: scoop says "bucket already added" and exits non-zero for one
+    that is there, which is not a failure and is not treated as one.
+    """
+    write = write or (lambda text: None)
+    scoop = find("scoop")
+    if not scoop:
+        return []
+    added = []
+    for bucket in BUCKETS:
+        ok, output = _run([scoop, "bucket", "add", bucket], 300, write)
+        if ok or "already" in (output or "").lower():
+            added.append(bucket)
+    if added:
+        write(f"[PyCmd] scoop buckets ready: {', '.join(added)}\n")
+    return added
 
 
 def install(toolchain_id: str, write=None, allow_bootstrap: bool = True) -> dict:
@@ -341,6 +374,7 @@ def install(toolchain_id: str, write=None, allow_bootstrap: bool = True) -> dict
     if chain is None:
         return {"ok": False, "error": f"there is no toolchain called {toolchain_id!r}"}
 
+    envpath.refresh()
     found = toolchains.detect(toolchain_id, refresh=True)
     if found.get("path"):
         write(f"[PyCmd] {chain.name} is already here ({found.get('version', '')})\n")
@@ -377,6 +411,14 @@ def install(toolchain_id: str, write=None, allow_bootstrap: bool = True) -> dict
         ]
         write(f"[PyCmd] {chain.name} through {manager.name}\n")
         ok, output = _run(command, INSTALL_TIMEOUT, write)
+
+        # Look again *after* taking the new PATH on board. Without this the
+        # check below asks the PATH this process started with, which cannot
+        # possibly know about something installed a second ago - and every
+        # successful install was reported as "it ran but the program did not
+        # appear". That one missing line is what made twenty-seven of them
+        # look impossible to install.
+        envpath.refresh()
 
         # Whether the installer said it worked matters less than whether the
         # program is now there. Package managers exit 0 on all sorts of
