@@ -1,2 +1,1 @@
-# PyCmd for Windows 2.0.7 (build 4) has not been built yet.
-# The checksum appears here when a windows-v tag builds it.
+a647112f1c99c227c4e4f8aa85f76d78aa47ef942a267fa08a2273ac2faead3e  PyCmd.exe
