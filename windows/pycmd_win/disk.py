@@ -39,6 +39,7 @@ are genuinely easy to get wrong:
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import stat
 import string
@@ -80,6 +81,31 @@ def _is_forbidden(path: str) -> str:
         low = os.path.normcase(base)
         if lowered == low or lowered.startswith(low + os.sep):
             return f"{base} belongs to Windows. PyCmd will not write there."
+    return ""
+
+
+def _is_root(path: str) -> bool:
+    """Is this the top of a drive, or of the filesystem?
+
+    `os.path.dirname("C:\\")` is `"C:\\"` - a root is its own parent, which
+    is exactly the shape that makes a rename or a recursive delete do something
+    enormous while looking like an ordinary one. `remove` with `recursive` set
+    would have handed `shutil.rmtree` a whole drive.
+    """
+    # The drive-letter form is checked against what was passed, not against
+    # what abspath makes of it. `C:\\` is a drive root because of how it is
+    # spelled, and off Windows abspath turns it into a folder under the
+    # working directory - which would quietly answer "no" in the tests.
+    if re.fullmatch(r"[A-Za-z]:[\\/]?", str(path).strip()):
+        return True
+    target = os.path.abspath(os.path.expanduser(path))
+    return target == os.path.dirname(target)
+
+
+def _guard_root(path: str) -> str:
+    if _is_root(path):
+        return ("That is the top of a drive. PyCmd will not rename, move or "
+                "delete a whole drive.")
     return ""
 
 
@@ -384,6 +410,9 @@ def rename(path: str, name: str) -> dict:
     why = _blank(path)
     if why:
         return {"ok": False, "error": why}
+    why = _guard_root(path)
+    if why:
+        return {"ok": False, "error": why}
     target = os.path.abspath(os.path.expanduser(path))
     if not os.path.exists(target):
         return {"ok": False, "error": "that is not there any more"}
@@ -411,6 +440,9 @@ def remove(path: str, recursive: bool = False) -> dict:
     screen asks before it sets this.
     """
     why = _blank(path)
+    if why:
+        return {"ok": False, "error": why}
+    why = _guard_root(path)
     if why:
         return {"ok": False, "error": why}
     target = os.path.abspath(os.path.expanduser(path))
@@ -475,6 +507,9 @@ def copy(source: str, destination: str) -> dict:
 
 def move(source: str, destination: str) -> dict:
     why = _blank(source, destination)
+    if why:
+        return {"ok": False, "error": why}
+    why = _guard_root(source)
     if why:
         return {"ok": False, "error": why}
     src = os.path.abspath(os.path.expanduser(source))

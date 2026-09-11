@@ -1333,6 +1333,11 @@ let diskAt = '';
 let diskHidden = false;
 let diskClip = null;   // { path, name, op: 'copy' | 'move' }
 
+async function diskReveal(path) {
+  const done = await PyCmd.call('disk.reveal', { path });
+  if (!done.ok) PyCmd.toast(done.error || 'Explorer would not open');
+}
+
 function diskJoin(folder, name) {
   const clean = String(folder).replace(/[\\/]+$/, '');
   // Windows accepts both, but echoing back the separator the path already
@@ -1369,22 +1374,27 @@ async function DiskFiles(screen) {
   });
   screen.appendChild(crumbs);
 
+  // A folder Windows owns is read-only here, so the buttons that would write
+  // into it are not drawn. Offering a button that can only fail is worse than
+  // not offering it, and the line below says why it is missing.
+  const canWrite = reply.writable !== false;
   const tools = el('div', { class: 'row wrap', style: 'margin-bottom:10px' },
     reply.parent ? el('button', {
       class: 'small', text: '↑ Up',
       onclick: () => { diskAt = reply.parent; go('files'); },
     }) : null,
-    el('button', { class: 'small primary', text: '+ New file', onclick: () => diskNewFile(reply.path) }),
-    el('button', { class: 'small', text: '+ New folder', onclick: () => diskNewFolder(reply.path) }),
-    diskClip ? el('button', {
+    canWrite ? el('button', { class: 'small primary', text: '+ New file', onclick: () => diskNewFile(reply.path) }) : null,
+    canWrite ? el('button', { class: 'small', text: '+ New folder', onclick: () => diskNewFolder(reply.path) }) : null,
+    (canWrite && diskClip) ? el('button', {
       class: 'small primary',
       text: (diskClip.op === 'move' ? 'Move ' : 'Paste ') + diskClip.name + ' here',
       onclick: () => diskPaste(reply.path),
     }) : null,
     diskClip ? el('button', {
-      class: 'small', text: 'Cancel', onclick: () => { diskClip = null; go('files'); },
+      class: 'small', text: 'Cancel the ' + (diskClip.op === 'move' ? 'move' : 'copy'),
+      onclick: () => { diskClip = null; go('files'); },
     }) : null,
-    el('button', { class: 'small', text: 'Open in Explorer', onclick: () => PyCmd.call('disk.reveal', { path: reply.path }) }),
+    el('button', { class: 'small', text: 'Open in Explorer', onclick: () => diskReveal(reply.path) }),
     el('button', {
       class: 'small', text: diskHidden ? 'Hide hidden' : 'Show hidden',
       onclick: () => { diskHidden = !diskHidden; go('files'); },
@@ -1409,7 +1419,7 @@ async function DiskFiles(screen) {
 
   const list = el('div', { class: 'card', style: 'padding:4px 6px' });
   reply.entries.forEach((entry) => {
-    list.appendChild(diskRow(entry, reply));
+    list.appendChild(diskRow(entry));
   });
   screen.appendChild(list);
 
@@ -1420,7 +1430,7 @@ async function DiskFiles(screen) {
   screen.appendChild(el('p', { class: 'muted mono', style: 'font-size:11px', text: reply.path }));
 }
 
-function diskRow(entry, here) {
+function diskRow(entry) {
   const open = () => {
     if (entry.folder) { diskAt = entry.path; go('files'); return; }
     openInEditor(entry.path, true);
@@ -1442,11 +1452,11 @@ function diskRow(entry, here) {
       class: 'small primary', text: 'Run',
       onclick: () => runPath(entry.path, entry.name),
     }) : null,
-    el('button', { class: 'small', text: '⋯', onclick: () => diskMenu(entry, here) }),
+    el('button', { class: 'small', text: '⋯', title: 'More', onclick: () => diskMenu(entry) }),
   );
 }
 
-function diskMenu(entry, here) {
+function diskMenu(entry) {
   const act = (label, kind, what) => el('button', { class: 'small ' + kind, text: label, onclick: what });
   PyCmd.sheet(entry.name, el('div', {},
     el('p', { class: 'muted mono', style: 'font-size:11px', text: entry.path }),
@@ -1457,7 +1467,7 @@ function diskMenu(entry, here) {
         PyCmd.closeSheet();
         if (!done.ok) PyCmd.toast(done.error || 'Windows would not open that');
       }),
-      act('Show in Explorer', '', () => { PyCmd.call('disk.reveal', { path: entry.path }); PyCmd.closeSheet(); }),
+      act('Show in Explorer', '', () => { PyCmd.closeSheet(); diskReveal(entry.path); }),
       act('Copy', '', () => {
         diskClip = { path: entry.path, name: entry.name, op: 'copy' };
         PyCmd.closeSheet();
@@ -1470,7 +1480,7 @@ function diskMenu(entry, here) {
         PyCmd.toast('Cut. Open a folder and press Move.');
         go('files');
       }),
-      act('Copy into the workspace', '', async () => {
+      entry.folder ? null : act('Copy into the workspace', '', async () => {
         const done = await PyCmd.call('file.import', { source: entry.path, into: '' });
         PyCmd.closeSheet();
         PyCmd.toast(done.ok ? (done.name + ' is in the workspace') : (done.error || 'that would not copy'));

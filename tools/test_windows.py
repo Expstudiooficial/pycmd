@@ -1063,6 +1063,17 @@ check("and node_modules is not walked",
       not any("node_modules" in r["path"]
               for r in disk.find_runnable(_sand)["files"]))
 
+# A root is its own parent, which is the shape that turns an ordinary-looking
+# delete into an enormous one.
+for _root in ("/", "C:\\", "C:", "c:/"):
+    check(f"{_root!r} is recognised as the top of a drive", disk._is_root(_root))
+for _not in ("/home", "C:\\Users", os.path.join(_sand, "project")):
+    check(f"{_not!r} is not", not disk._is_root(_not))
+check("a whole drive is not deleted",
+      not disk.remove("/", recursive=True)["ok"])
+check("nor renamed", not disk.rename("/", "x")["ok"])
+check("nor moved", not disk.move("/", _sand)["ok"])
+
 check("Windows' own folders are refused for writing",
       bool(disk._is_forbidden(r"C:\Windows\System32\x.dll")) is disk.WINDOWS)
 

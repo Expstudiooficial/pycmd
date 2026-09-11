@@ -57,17 +57,33 @@ a dozen more; everything else is Python. Output streams as it is produced,
 auto-indent that follows *that* language's rules, bracket matching, a snippet
 bar that changes with the file type, go-to-line and autosave.
 
-**Files** — your workspace, browsed. Folders you can walk into with a
-breadcrumb back out, a new-file menu covering all 65 languages with their
-starter templates, new folders, rename, delete, and a **Bring a file in**
-that copies anything from anywhere on the disk. Click a file to open it in an
-editor pane with **Save** and, for anything runnable, **Save and run**. Every
-row says what language it is and how big it is, and a runnable one gets a Run
-button.
+**Files** — two halves. **Workspace** is where new projects land and what the
+console's `cd` and `run` mean: a new-file menu covering all 65 languages with
+their starter templates, new folders, rename, delete, and a **Bring a file in**
+that copies something from elsewhere on the disk.
 
-**Run** — point at a file and press Run. PyCmd works out what it is, finds the
-best toolchain installed for it, builds if it needs building, and streams the
-output to the Console. It always says which toolchain it used.
+**This PC** is everything else — every drive, your Desktop, Documents and
+Downloads, and every folder under them. Files there are edited *in place*: open
+one, change it, save it, and you have changed that file, not a copy that has to
+be exported back afterwards. Copy, cut and paste, rename, delete, make folders,
+show something in Explorer, or open it with whatever Windows normally uses for
+it. Folders Windows owns are read-only, and PyCmd says so rather than offering
+buttons that can only fail.
+
+The phone's Files screen is a workspace with *bring a file in* and *send a file
+out* on either side of it, because Android hands an app a private folder and a
+document picker and nothing else. Windows hands you the disk.
+
+Clicking a file — in either half — opens it in the **Editor**. There is one
+editor and it is the good one.
+
+**Run** — a list of everything under a folder that PyCmd knows how to run, with
+its language beside it. Pick one. No typing a path, no remembering whether it
+was `.rs` or `.rust`. Point it at the workspace or at any folder on the PC.
+PyCmd finds the best toolchain installed for the file, builds if it needs
+building, and streams the output to the Console — and switches you to the
+Console, so a program that calls `input()` asks its question on the screen you
+are looking at. It always says which toolchain it used.
 
 **Toolchains** — the screen that is new on Windows, and the most useful one
 here. It lists 51 compilers and interpreters, says which are installed and

@@ -56,13 +56,24 @@ Go to **Files** and press **+ New file**. Name it `hello.py`, pick **Python**
 from the list of 65, and press Create — you get a starter template, not an
 empty file.
 
-Click it to open it. Edit, press **Save**, or **Save and run** to do both and
-watch the output on the Console.
+Click it. It opens in the **Editor** — the real one, with tabs, highlighting,
+find and replace and Ctrl+S. Press **Run** and PyCmd takes you to the Console,
+where the output appears and where the program can ask you things.
 
 It lands in `%LOCALAPPDATA%\PyCmd\workspace` — an ordinary Windows folder.
-Open it in Explorer if you like; PyCmd will not mind. **Bring a file in**
-copies one from anywhere on the disk if you would rather start from something
-you already have.
+Open it in Explorer if you like; PyCmd will not mind.
+
+### Or work on files you already have
+
+Press **This PC** at the top of the Files screen. Every drive, your Desktop,
+Documents and Downloads, and everything under them. Open a file there and you
+are editing that file — saving writes it back where it lives. Nothing has to
+be copied into PyCmd first.
+
+That is the one place where the Windows PyCmd and the phone one genuinely
+differ, and it is not a missing feature on the phone: Android gives an app a
+private folder and a document picker, so *bring a file in* and *send a file
+out* is the only shape available there. Windows gives you the disk.
 
 ## 5. Run something that is not Python
 

@@ -72,6 +72,13 @@ if toolchains.detect("go").get("path"):
 write an ordinary page, do not ask for a percentage height, and put anything
 that must be reachable at the top rather than pinning it to the bottom.
 
+**A panel is a tab.** Since 3.0, a plugin that declares a `panel` gets its own
+entry in the sidebar, under **Plugins**, beside the screens PyCmd ships with —
+it is not a sheet that opens over the app any more. So it gets the whole middle
+of the window and it stays where the person left it. `pycmd.close()` still
+works; it takes the person back to the Plugins tab rather than dismissing
+anything.
+
 ## Testing one
 
 ```powershell
