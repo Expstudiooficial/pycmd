@@ -228,11 +228,20 @@ def listing(path: str = "", show_hidden: bool = False) -> dict:
                 if not show_hidden and _hidden(item, name):
                     continue
                 try:
-                    is_dir = item.is_dir(follow_symlinks=False)
+                    # Followed, on purpose. Windows is full of directory
+                    # links - a redirected Documents folder, a junction under
+                    # AppData, OneDrive's placeholders - and not following
+                    # them here listed every one of them as a file, so
+                    # clicking one tried to open a folder in the editor.
+                    # Deleting still refuses to follow: see `remove`.
+                    is_dir = item.is_dir()
                     info = item.stat(follow_symlinks=False)
                     size = 0 if is_dir else info.st_size
                     when = info.st_mtime
                 except OSError:
+                    # A link to somewhere that is gone, or a file another
+                    # program is holding. It is still listed, because it is
+                    # still there; it just cannot say much about itself.
                     is_dir, size, when = False, 0, 0.0
                 row = {
                     "name": name,
@@ -319,9 +328,13 @@ def read(path: str) -> dict:
     except OSError as error:
         return {"ok": False, "error": str(error)}
     if size > MAX_EDIT:
+        # Said to one decimal place: integer megabytes made the refusal read
+        # "that file is 8 MB, PyCmd opens files up to 8 MB", which sounds like
+        # a bug rather than a limit.
         return {"ok": False, "reason": "too-big",
-                "error": f"That file is {size // (1024 * 1024)} MB. PyCmd opens "
-                         f"files up to {MAX_EDIT // (1024 * 1024)} MB in the editor.",
+                "error": f"That file is {size / (1024 * 1024):.1f} MB. PyCmd "
+                         f"opens files up to {MAX_EDIT // (1024 * 1024)} MB in "
+                         f"the editor.",
                 "bytes": size}
 
     try:

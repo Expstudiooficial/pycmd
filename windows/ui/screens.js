@@ -1517,17 +1517,24 @@ function diskRename(entry) {
 }
 
 function diskDelete(entry) {
-  PyCmd.sheet('Delete ' + entry.name + '?', el('div', {},
-    el('p', { class: 'muted', text: entry.folder
+  // A shortcut to a folder is not the folder. Saying "and everything in it"
+  // about a link would be frightening and wrong: only the link goes.
+  const what = entry.link
+    ? 'This is a link. Deleting it removes the link — whatever it points at '
+      + 'stays where it is.'
+    : entry.folder
       ? 'This is a real folder on your disk, not a copy inside PyCmd. It and '
         + 'everything in it go, and they do not go to the Recycle Bin.'
-      : 'This is a real file on your disk. It does not go to the Recycle Bin.' }),
+      : 'This is a real file on your disk. It does not go to the Recycle Bin.';
+  PyCmd.sheet('Delete ' + entry.name + '?', el('div', {},
+    el('p', { class: 'muted', text: what }),
     el('p', { class: 'muted mono', style: 'font-size:11px', text: entry.path }),
     el('div', { class: 'row', style: 'margin-top:12px' },
       el('button', {
         class: 'small danger', text: 'Delete it',
         onclick: async () => {
-          const done = await PyCmd.call('disk.remove', { path: entry.path, recursive: !!entry.folder });
+          const done = await PyCmd.call('disk.remove',
+            { path: entry.path, recursive: !!entry.folder && !entry.link });
           if (done.ok) { PyCmd.closeSheet(); go('files'); }
           else PyCmd.toast(done.error || 'that would not delete');
         },
@@ -1614,7 +1621,13 @@ function diskRoot(screen, reply) {
       el('div', { class: 'muted', text: drive.ready
         ? PyCmd.bytes(drive.free) + ' free of ' + PyCmd.bytes(drive.total) + ' · ' + used + '% used'
         : 'not ready' }),
-      drive.ready ? el('div', { class: 'progress' }, el('div', { class: 'fill', style: 'width:' + used + '%' })) : null));
+      // Green at 94% full reads as "fine". The bar says how full it is,
+      // so it should look like it.
+      drive.ready ? el('div', { class: 'progress' }, el('div', {
+        class: 'fill',
+        style: 'width:' + used + '%;background:'
+          + (used >= 90 ? 'var(--bad)' : used >= 75 ? 'var(--warn)' : 'var(--good)'),
+      })) : null));
   });
   screen.appendChild(drives);
 }

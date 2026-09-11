@@ -1063,6 +1063,26 @@ check("and node_modules is not walked",
       not any("node_modules" in r["path"]
               for r in disk.find_runnable(_sand)["files"]))
 
+# Windows is full of directory links - a redirected Documents folder, a
+# junction under AppData - and listing one as a file sent clicks at the editor.
+_linked = os.path.join(_sand, "shortcut")
+os.symlink(os.path.join(_sand, "project"), _linked)
+_rows = {r["name"]: r for r in disk.listing(_sand)["entries"]}
+check("a link to a folder is listed as a folder",
+      _rows["shortcut"]["folder"], _rows.get("shortcut"))
+check("and is still marked as a link", _rows["shortcut"]["link"])
+check("deleting the link leaves what it points at",
+      disk.remove(_linked)["ok"] and os.path.isdir(os.path.join(_sand, "project")))
+
+_huge = os.path.join(_sand, "huge.txt")
+with open(_huge, "wb") as _f:
+    _f.write(b"a" * (disk.MAX_EDIT + 16))
+_answer = disk.read(_huge)
+check("an enormous file is refused with its real size",
+      _answer.get("reason") == "too-big" and "8.0 MB" in _answer["error"],
+      _answer.get("error"))
+os.remove(_huge)
+
 # A root is its own parent, which is the shape that turns an ordinary-looking
 # delete into an enormous one.
 for _root in ("/", "C:\\", "C:", "c:/"):
