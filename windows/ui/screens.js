@@ -36,18 +36,36 @@ function card(...children) {
 // ---------------------------------------------------------------------------
 
 let filesAt = '';
+let filesSource = 'workspace';   // 'workspace' or 'pc'
+
+function filesSwitch() {
+  const pick = (id, label, hint) => el('button', {
+    class: 'small' + (filesSource === id ? ' primary' : ''),
+    text: label, title: hint,
+    onclick: () => { filesSource = id; go('files'); },
+  });
+  return el('div', { class: 'row wrap', style: 'margin-bottom:10px' },
+    pick('workspace', 'Workspace', 'Where PyCmd keeps projects'),
+    pick('pc', 'This PC', 'Every drive and folder you can reach'),
+    el('span', { class: 'muted', text: filesSource === 'workspace'
+      ? 'What the console\u2019s cd and run mean.'
+      : 'Real files, in place. Editing one edits the file itself.' }));
+}
 
 async function Files(screen) {
+  screen.appendChild(head('Files',
+    'The workspace is where new projects land. This PC is everything else — ' +
+    'PyCmd opens, edits, runs and organises files wherever they already live.'));
+  screen.appendChild(filesSwitch());
+
+  if (filesSource === 'pc') return DiskFiles(screen);
+
   const reply = await PyCmd.call('files', { path: filesAt });
   if (!reply.ok) {
     filesAt = '';
     screen.appendChild(el('div', { class: 'empty', text: reply.error }));
     return;
   }
-
-  screen.appendChild(head('Files',
-    'Your workspace is an ordinary Windows folder. Open it in Explorer, back it ' +
-    'up, put it in git — PyCmd will not mind.'));
 
   const crumbs = el('div', { class: 'row wrap', style: 'margin-bottom:8px' },
     el('button', {
@@ -81,7 +99,7 @@ async function Files(screen) {
   reply.entries.forEach((entry) => {
     const open = () => {
       if (entry.folder) { filesAt = entry.path; go('files'); return; }
-      openFile(entry);
+      openInEditor(entry.path, false);
     };
     list.appendChild(el('div', {
       class: 'row',
@@ -96,10 +114,7 @@ async function Files(screen) {
       entry.folder ? null : el('span', { class: 'muted', text: PyCmd.bytes(entry.bytes) }),
       entry.runnable ? el('button', {
         class: 'small primary', text: 'Run',
-        onclick: async () => {
-          PyCmd.toast('Running ' + entry.name + ' — output is on the Console.');
-          await PyCmd.call('run.file', { path: reply.root + '\\' + entry.name });
-        },
+        onclick: () => runPath(entry.path, entry.name),
       }) : null,
       el('button', {
         class: 'small', text: 'Rename',
@@ -115,42 +130,42 @@ async function Files(screen) {
   screen.appendChild(el('p', { class: 'muted mono', style: 'font-size:11px', text: reply.root }));
 }
 
-async function openFile(entry) {
-  const reply = await PyCmd.call('file.read', { path: entry.path });
-  if (!reply.ok) {
-    PyCmd.sheet(entry.name, el('p', { class: 'muted', text: reply.error }));
-    return;
-  }
-  const box = el('textarea', {
-    spellcheck: 'false',
-    style: 'width:100%;height:52vh;font-family:Consolas,ui-monospace,monospace;font-size:12.5px',
-  });
-  box.value = reply.text;
-  PyCmd.sheet(entry.name, el('div', {},
-    el('div', { class: 'row', style: 'margin-bottom:8px' },
-      el('span', { class: 'pill', text: (reply.language || {}).name || 'text' }),
-      el('span', { class: 'muted', text: PyCmd.bytes(reply.bytes) })),
-    box,
-    el('div', { class: 'row', style: 'margin-top:10px' },
-      el('button', {
-        class: 'small primary', text: 'Save',
-        onclick: async () => {
-          const done = await PyCmd.call('file.write', { path: entry.path, text: box.value });
-          PyCmd.toast(done.ok ? 'Saved.' : (done.error || 'that would not save'));
-          if (done.ok) PyCmd.closeSheet();
-        },
-      }),
-      entry.runnable ? el('button', {
-        class: 'small', text: 'Save and run',
-        onclick: async () => {
-          await PyCmd.call('file.write', { path: entry.path, text: box.value });
-          PyCmd.closeSheet();
-          go('console');
-          await PyCmd.call('run.file', { path: (PyCmd.state.root || '') + '\\workspace\\' + entry.path.replace(/\//g, '\\') });
-        },
-      }) : null,
-      el('button', { class: 'small', text: 'Cancel', onclick: PyCmd.closeSheet }),
-    )));
+/*
+ * One way to open a file, and it is the editor.
+ *
+ * There used to be two: the Editor tab, with tabs, a toolbar, find and
+ * replace, go-to-line and a status bar - and a textarea in a sheet that
+ * appeared when you clicked a file in the list. The second one existed
+ * because clicking a row had to do *something* and a sheet was the quickest
+ * thing to write. It had none of the editor: no highlighting, no undo worth
+ * the name, no second file open beside it. Clicking a file and being given
+ * the worse of the two editors is a strange thing for an app to do, so it
+ * no longer does it.
+ *
+ * `onDisk` says which half of the world the path belongs to: a
+ * workspace-relative path goes through `file.read`/`file.write`, an absolute
+ * one anywhere on the PC through `disk.read`/`disk.write`. The editor keeps
+ * the flag on the open file so saving goes back the way it came.
+ */
+async function openInEditor(path, onDisk) {
+  const done = await edOpenPath(path, !!onDisk);
+  if (done) go('editor');
+}
+
+/*
+ * Running anything, from anywhere, ends up on the Console.
+ *
+ * The program may ask a question. `input()` is the first thing a beginner
+ * writes after `print`, and PyCmd used to start the program, say "output is
+ * on the Console" in a toast that fades after three seconds, and leave you
+ * looking at the file list while a prompt waited on a screen you were not
+ * on. The console is where the program is; that is where Run goes.
+ */
+async function runPath(path, name, toolchain) {
+  go('console');
+  const reply = await PyCmd.call('run.file', { path, toolchain: toolchain || '' });
+  if (!reply.ok) PyCmd.toast(reply.error || 'that would not run');
+  else PyCmd.toast('Running ' + (name || diskName(path)));
 }
 
 function newFile(where) {
@@ -258,43 +273,168 @@ function confirmDelete(entry) {
 // Run
 // ---------------------------------------------------------------------------
 
+/*
+ * Run: a list of what can be run, not a box to type a path into.
+ *
+ * The old screen asked for "hello.go" and a toolchain. To use it you had to
+ * already know the file's name, its extension and where it sat relative to
+ * the workspace - three things the app knows perfectly well and you should
+ * not have to retype. Worse, a typo gave you "that did not start", which
+ * tells you nothing about which of the three you got wrong.
+ *
+ * So PyCmd walks the folder and shows you what is runnable. Pick one.
+ */
+
+let runRoot = '';        // '' means the workspace
+let runFilter = '';
+let runChain = '';
+let runFound = null;     // the last answer, kept so typing in the filter is instant
+
 async function Run(screen) {
   screen.appendChild(head('Run a file',
-    'Type a path and PyCmd works out what runs it — the real compiler if you have one, ' +
-    'the interpreter it carries if you do not.'));
+    'Everything under here that PyCmd knows how to run. Pick one — it starts on ' +
+    'the Console, where it can ask you things.'));
 
-  const path = el('input', { placeholder: 'hello.go', spellcheck: 'false' });
-  const pick = el('select', {});
-  pick.appendChild(el('option', { value: '', text: 'Best available toolchain' }));
+  const where = el('div', { class: 'row wrap', style: 'margin-bottom:8px' },
+    el('button', {
+      class: 'small' + (runRoot ? '' : ' primary'), text: 'Workspace',
+      onclick: () => { runRoot = ''; runFound = null; go('run'); },
+    }),
+    runRoot ? el('span', { class: 'pill mono', text: runRoot }) : null,
+    el('button', {
+      class: 'small', text: 'Look somewhere else…', onclick: pickRoot,
+    }),
+    el('button', {
+      class: 'small', text: 'Look again',
+      onclick: () => { runFound = null; go('run'); },
+    }),
+  );
+  screen.appendChild(where);
+
+  const filter = el('input', { placeholder: 'Filter by name or language', spellcheck: 'false' });
+  filter.value = runFilter;
+  const chain = el('select', {});
+  chain.appendChild(el('option', { value: '', text: 'Best available toolchain' }));
   (PyCmd.state.toolchains || []).filter((c) => c.installed).forEach((c) => {
-    pick.appendChild(el('option', { value: c.id, text: c.name + ' — ' + c.languages.join(', ') }));
+    chain.appendChild(el('option', { value: c.id, text: c.name + ' — ' + c.languages.join(', ') }));
   });
-
-  async function run() {
-    const value = path.value.trim();
-    if (!value) return;
-    const full = value.includes(':') || value.startsWith('\\')
-      ? value
-      : (PyCmd.state.root || '') + '\\workspace\\' + value;
-    PyCmd.toast('Running ' + value + ' — output is on the Console.');
-    const reply = await PyCmd.call('run.file', { path: full, toolchain: pick.value });
-    if (!reply.ok) PyCmd.toast(reply.error || 'that did not start');
-  }
+  chain.value = runChain;
+  chain.addEventListener('change', () => { runChain = chain.value; });
 
   screen.appendChild(card(
-    el('label', { class: 'field' }, el('span', { text: 'File, relative to the workspace' }), path),
-    el('label', { class: 'field' }, el('span', { text: 'Run it with' }), pick),
+    el('div', { class: 'row wrap' },
+      el('label', { class: 'field', style: 'flex:2 1 260px' },
+        el('span', { text: 'Which file' }), filter),
+      el('label', { class: 'field', style: 'flex:1 1 220px' },
+        el('span', { text: 'Run it with' }), chain)),
     el('div', { class: 'row' },
-      el('button', { class: 'small primary', text: 'Run', onclick: run }),
-      el('button', { class: 'small', text: 'Stop', onclick: () => PyCmd.call('run.stop') }),
-      el('span', { class: 'muted', text: 'Output goes to the Console.' }),
-    ),
+      el('button', { class: 'small', text: 'Stop whatever is running', onclick: () => PyCmd.call('run.stop') }),
+      el('span', { class: 'muted', text: 'Output, and any question it asks, are on the Console.' })),
   ));
 
-  const stats = PyCmd.state.languageStats || {};
-  screen.appendChild(el('p', { class: 'muted' },
-    String(stats.runnable || 0), ' of ', String(stats.total || 0),
-    ' file types can be run here. The Toolchains screen says which of them this machine is ready for.'));
+  const list = el('div', {});
+  screen.appendChild(list);
+
+  const note = el('p', { class: 'muted' });
+  screen.appendChild(note);
+
+  filter.addEventListener('input', () => { runFilter = filter.value; draw(); });
+
+  if (!runFound || runFound.asked !== runRoot) {
+    list.appendChild(el('div', { class: 'empty', text: 'Looking…' }));
+    const reply = await PyCmd.call('disk.runnable', { root: runRoot });
+    if (!reply.ok) {
+      PyCmd.clear(list);
+      list.appendChild(el('div', { class: 'empty', text: reply.error || 'that folder would not open' }));
+      return;
+    }
+    // A record of its own rather than the reply with fields bolted on: the
+    // first draft set `runFound.root` to the folder that was *asked for* and
+    // then read `reply.root` for the one that was *found* - but runFound and
+    // reply were the same object, so the screen said "nothing runnable under
+    // (empty)" instead of naming the folder.
+    runFound = {
+      asked: runRoot,
+      root: reply.root,
+      files: reply.files || [],
+      truncated: !!reply.truncated,
+    };
+  }
+  draw();
+
+  function draw() {
+    PyCmd.clear(list);
+    const wanted = runFilter.trim().toLowerCase();
+    const rows = (runFound.files || []).filter((row) => !wanted
+      || row.name.toLowerCase().includes(wanted)
+      || (row.folder || '').toLowerCase().includes(wanted)
+      || (row.language || '').toLowerCase().includes(wanted));
+
+    if (!(runFound.files || []).length) {
+      list.appendChild(el('div', { class: 'empty',
+        text: 'Nothing runnable under ' + runFound.root + '. Make a file in the '
+            + 'Editor, or point this at a folder that has one.' }));
+      return;
+    }
+    if (!rows.length) {
+      list.appendChild(el('div', { class: 'empty', text: 'Nothing matches “' + runFilter + '”.' }));
+      return;
+    }
+
+    const box = el('div', { class: 'card', style: 'padding:4px 6px' });
+    rows.slice(0, 300).forEach((row) => {
+      box.appendChild(el('div', {
+        class: 'row', style: 'padding:7px 9px;border-bottom:1px solid #182231',
+      },
+        el('button', {
+          class: 'small',
+          style: 'flex:1 1 auto;text-align:left;border-color:transparent;background:none',
+          onclick: () => runPath(row.path, row.name, runChain),
+        },
+          el('span', { text: row.name }),
+          row.folder ? el('span', { class: 'muted', text: '  in ' + row.folder }) : null),
+        el('span', { class: 'pill', text: row.language }),
+        el('span', { class: 'muted', text: PyCmd.bytes(row.bytes) }),
+        el('button', {
+          class: 'small', text: 'Edit',
+          onclick: () => openInEditor(row.path, true),
+        }),
+        el('button', {
+          class: 'small primary', text: 'Run',
+          onclick: () => runPath(row.path, row.name, runChain),
+        }),
+      ));
+    });
+    list.appendChild(box);
+
+    const stats = PyCmd.state.languageStats || {};
+    note.textContent = rows.length + ' of ' + runFound.files.length + ' shown'
+      + (runFound.truncated ? ' · the search stopped at 400 files' : '')
+      + ' · ' + (stats.runnable || 0) + ' of ' + (stats.total || 0)
+      + ' file types can be run here.';
+  }
+}
+
+function pickRoot() {
+  const path = el('input', {
+    placeholder: 'C:\\Users\\you\\projects', spellcheck: 'false',
+  });
+  path.value = runRoot;
+  PyCmd.sheet('Look for runnable files in', el('div', {},
+    el('p', { class: 'muted',
+      text: 'Any folder on this PC. Files screen → This PC → “Run something here” '
+          + 'fills this in for you.' }),
+    el('label', { class: 'field' }, el('span', { text: 'Folder' }), path),
+    el('button', {
+      class: 'small primary', text: 'Look there',
+      onclick: () => {
+        runRoot = path.value.trim();
+        runFound = null;
+        PyCmd.closeSheet();
+        go('run');
+      },
+    })));
+  setTimeout(() => path.focus(), 60);
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +505,10 @@ async function Toolchains(screen) {
           el('button', {
             class: 'small', text: 'Run',
             onclick: async () => {
-              PyCmd.toast('Installing ' + row.name + ' — watch the Console.');
+              // An install streams to the console and can ask for elevation.
+              // Watching it happen beats a toast that fades in three seconds.
+              go('console');
+              PyCmd.toast('Installing ' + row.name + '…');
               await PyCmd.call('toolchain.install', { id: row.id, with: manager });
             },
           }),
@@ -450,7 +593,13 @@ async function Plugins(screen) {
     'Python and HTML, installed here or brought from a phone.'));
 
   const reply = await PyCmd.call('plugins');
-  if (reply.ok) PyCmd.state.plugins = reply;
+  if (reply.ok) {
+    PyCmd.state.plugins = reply;
+    // The rail is drawn before this screen runs, so a plugin installed or
+    // removed a moment ago would otherwise keep or lack its tab until the
+    // next time something else redrew the rail.
+    drawTabs();
+  }
   const builtin = (reply.builtin || {});
 
   screen.appendChild(card(
@@ -494,7 +643,9 @@ async function Plugins(screen) {
               plugin.panel
                 ? el('button', {
                     class: 'small primary', text: 'Open',
-                    onclick: () => openPanel(plugin, plugin.panel),
+                    // It has a tab of its own in the rail now; this goes there
+                    // rather than opening a second, worse copy in a sheet.
+                    onclick: () => go('panel:' + plugin.id),
                   })
                 : null,
               el('button', {
@@ -653,15 +804,15 @@ async function importMobile() {
  * `__pycmd_panel` is the same four verbs Kotlin exposes: call, toast, log,
  * close. The plugin cannot tell the difference, and that is the whole point.
  */
-async function openPanel(plugin, panelFile) {
+async function panelFrame(plugin, panelFile, style, onClose) {
   const reply = await PyCmd.call('plugin.panel', { id: plugin.id, panel: panelFile || '' });
   if (!reply.ok || !reply.html) {
     PyCmd.toast((reply && reply.error) || 'that panel would not build');
-    return;
+    return null;
   }
 
   const frame = el('iframe', {
-    style: 'width:100%;height:70vh;border:0;border-radius:10px;background:var(--bg)',
+    style: style || 'width:100%;height:70vh;border:0;border-radius:10px;background:var(--bg)',
     src: 'about:blank',
   });
 
@@ -691,7 +842,7 @@ async function openPanel(plugin, panelFile) {
       },
       toast: (text) => PyCmd.toast(String(text).slice(0, 300)),
       log: (text) => console.log('[' + plugin.id + ']', text),
-      close: () => PyCmd.closeSheet(),
+      close: () => (onClose ? onClose() : PyCmd.closeSheet()),
       innerScroll() {},
       manifest: () => JSON.stringify({
         id: plugin.id, name: plugin.name, version: plugin.version, author: plugin.author,
@@ -703,14 +854,58 @@ async function openPanel(plugin, panelFile) {
     document_.close();
   });
 
-  PyCmd.sheet(plugin.name || plugin.id, frame);
+  return frame;
 }
 
-// A plugin pushing to its own panel, the way api.send does on the phone.
+/* The panel as a screen: the rail already says which plugin it is, so the
+   frame simply gets the whole middle of the window. `close()` from inside the
+   panel used to shut a sheet; with no sheet to shut it goes back to the
+   Plugins tab, which is the same promise kept a different way. */
+async function drawPanelScreen(screen, plugin) {
+  screen.appendChild(el('div', { class: 'row spread', style: 'margin-bottom:8px' },
+    el('div', {},
+      el('b', { text: plugin.name || plugin.id }),
+      el('span', { class: 'muted', text: '  ' + (plugin.version ? 'v' + plugin.version : '') })),
+    el('div', { class: 'row' },
+      el('button', { class: 'small', text: 'Settings', onclick: () => openSettings(plugin) }),
+      el('button', { class: 'small', text: 'Reload', onclick: () => go('panel:' + plugin.id) }),
+      el('button', { class: 'small', text: 'Manage plugins', onclick: () => go('plugins') }))));
+
+  const holder = el('div', { style: 'flex:1 1 auto' });
+  screen.appendChild(holder);
+  holder.appendChild(el('div', { class: 'empty', text: 'Loading ' + (plugin.name || plugin.id) + '…' }));
+
+  const frame = await panelFrame(plugin, plugin.panel,
+    'width:100%;height:calc(100vh - 210px);min-height:360px;border:0;'
+    + 'border-radius:12px;background:var(--bg);border:1px solid var(--line)',
+    () => go('plugins'));
+  PyCmd.clear(holder);
+  if (!frame) {
+    holder.appendChild(el('div', { class: 'empty',
+      text: 'That panel would not build. The debug log has the reason.' }));
+    return;
+  }
+  holder.appendChild(frame);
+}
+window.drawPanelScreen = drawPanelScreen;
+
+// Opening a panel in a sheet is still how the Plugins tab previews one.
+async function openPanel(plugin, panelFile) {
+  const frame = await panelFrame(plugin, panelFile);
+  if (frame) PyCmd.sheet(plugin.name || plugin.id, frame);
+}
+
+/* A plugin pushing to its own panel, the way api.send does on the phone.
+   The panels are written into about:blank frames rather than srcdoc ones, so
+   looking for `iframe[srcdoc]` found none of them and every message a plugin
+   sent to its own panel went nowhere. Ask the frames themselves. */
 PyCmd.on('plugin-message', (event) => {
-  document.querySelectorAll('iframe[srcdoc]').forEach((frame) => {
-    const view = frame.contentWindow;
-    if (view && view.__pycmd_message) view.__pycmd_message(event.body);
+  document.querySelectorAll('iframe').forEach((frame) => {
+    let view = null;
+    try { view = frame.contentWindow; } catch (error) { return; }
+    if (view && view.__pycmd_panel && view.__pycmd_message) {
+      view.__pycmd_message(event.body);
+    }
   });
 });
 
@@ -878,7 +1073,8 @@ async function Packages(screen) {
         onclick: async () => {
           const asked = name.value.trim();
           if (!asked) return;
-          PyCmd.toast('Installing ' + asked + ' — watch the Console.');
+          go('console');
+          PyCmd.toast('Installing ' + asked + '…');
           await PyCmd.call('package.install', { name: asked });
         },
       })),
@@ -1110,6 +1306,307 @@ async function Log(screen) {
       entry.detail ? el('div', { class: 'det', text: entry.detail.slice(0, 1200) }) : null));
   });
   screen.appendChild(host);
+}
+
+// ---------------------------------------------------------------------------
+// This PC — the whole disk, not just the workspace
+// ---------------------------------------------------------------------------
+
+/*
+ * The phone's Files screen is a workspace and two buttons: bring a file in,
+ * send a file out. It has to be. Android hands an app a private folder and a
+ * document picker, and everything else on the device is somebody else's.
+ *
+ * Windows is not like that. The disk is one namespace and the person using
+ * PyCmd already owns it - Notepad can open any file they can, and so can
+ * `python` at a prompt. Copying a file *into* PyCmd to edit it, and then
+ * exporting it back out, would be a ceremony invented to work around a
+ * restriction that does not exist here. So this screen browses the disk:
+ * drives, the folders people actually keep things in, and every file in them.
+ *
+ * The workspace does not go away. It is still where new projects land and
+ * what `cd` and `run` mean in the console. It is now one place among many
+ * rather than the only one PyCmd can see.
+ */
+
+let diskAt = '';
+let diskHidden = false;
+let diskClip = null;   // { path, name, op: 'copy' | 'move' }
+
+function diskJoin(folder, name) {
+  const clean = String(folder).replace(/[\\/]+$/, '');
+  // Windows accepts both, but echoing back the separator the path already
+  // uses keeps `C:\\Users\\you\\thing.py` from becoming
+  // `C:\\Users\\you/thing.py` in every message that shows it.
+  const slash = clean.includes('\\') || /^[A-Za-z]:$/.test(clean) ? '\\' : '/';
+  return clean + slash + name;
+}
+
+function diskName(path) {
+  const parts = String(path).split(/[\\/]/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : path;
+}
+
+async function DiskFiles(screen) {
+  const reply = await PyCmd.call('disk', { path: diskAt, hidden: diskHidden });
+  if (!reply.ok) {
+    PyCmd.toast(reply.error || 'that folder would not open');
+    diskAt = '';
+    return diskRoot(screen, await PyCmd.call('disk', { path: '' }));
+  }
+  if (reply.atRoot) return diskRoot(screen, reply);
+
+  // Where you are, one button per step, plus the way back out to the drives.
+  const crumbs = el('div', { class: 'row wrap', style: 'margin-bottom:8px' },
+    el('button', { class: 'small', text: 'This PC', onclick: () => { diskAt = ''; go('files'); } }));
+  (reply.crumbs || []).forEach((crumb, index, all) => {
+    crumbs.appendChild(el('span', { class: 'muted', text: '›' }));
+    crumbs.appendChild(el('button', {
+      class: 'small' + (index === all.length - 1 ? ' primary' : ''),
+      text: crumb.name,
+      onclick: () => { diskAt = crumb.path; go('files'); },
+    }));
+  });
+  screen.appendChild(crumbs);
+
+  const tools = el('div', { class: 'row wrap', style: 'margin-bottom:10px' },
+    reply.parent ? el('button', {
+      class: 'small', text: '↑ Up',
+      onclick: () => { diskAt = reply.parent; go('files'); },
+    }) : null,
+    el('button', { class: 'small primary', text: '+ New file', onclick: () => diskNewFile(reply.path) }),
+    el('button', { class: 'small', text: '+ New folder', onclick: () => diskNewFolder(reply.path) }),
+    diskClip ? el('button', {
+      class: 'small primary',
+      text: (diskClip.op === 'move' ? 'Move ' : 'Paste ') + diskClip.name + ' here',
+      onclick: () => diskPaste(reply.path),
+    }) : null,
+    diskClip ? el('button', {
+      class: 'small', text: 'Cancel', onclick: () => { diskClip = null; go('files'); },
+    }) : null,
+    el('button', { class: 'small', text: 'Open in Explorer', onclick: () => PyCmd.call('disk.reveal', { path: reply.path }) }),
+    el('button', {
+      class: 'small', text: diskHidden ? 'Hide hidden' : 'Show hidden',
+      onclick: () => { diskHidden = !diskHidden; go('files'); },
+    }),
+    el('button', {
+      class: 'small', text: 'Run something here',
+      onclick: () => { runRoot = reply.path; go('run'); },
+    }),
+    el('span', { class: 'muted', text: reply.folders + ' folders · ' + reply.files + ' files' }),
+  );
+  screen.appendChild(tools);
+
+  if (!reply.writable) {
+    screen.appendChild(el('p', { class: 'muted',
+      text: 'This folder is Windows’ own. PyCmd will read it, but it will not write here.' }));
+  }
+
+  if (!reply.entries.length) {
+    screen.appendChild(el('div', { class: 'empty', text: 'Nothing in here.' }));
+    return;
+  }
+
+  const list = el('div', { class: 'card', style: 'padding:4px 6px' });
+  reply.entries.forEach((entry) => {
+    list.appendChild(diskRow(entry, reply));
+  });
+  screen.appendChild(list);
+
+  if (reply.truncated) {
+    screen.appendChild(el('p', { class: 'muted',
+      text: 'Only the first 2000 entries are shown — this folder has more.' }));
+  }
+  screen.appendChild(el('p', { class: 'muted mono', style: 'font-size:11px', text: reply.path }));
+}
+
+function diskRow(entry, here) {
+  const open = () => {
+    if (entry.folder) { diskAt = entry.path; go('files'); return; }
+    openInEditor(entry.path, true);
+  };
+  return el('div', {
+    class: 'row',
+    style: 'padding:7px 9px;border-bottom:1px solid #182231',
+  },
+    el('span', { style: 'width:20px;text-align:center', text: entry.folder ? '▸' : '·' }),
+    el('button', {
+      class: 'small',
+      style: 'flex:1 1 auto;text-align:left;border-color:transparent;background:none',
+      text: entry.name, onclick: open,
+    }),
+    entry.language && entry.language !== 'Plain text'
+      ? el('span', { class: 'pill', text: entry.language }) : null,
+    entry.folder ? null : el('span', { class: 'muted', text: PyCmd.bytes(entry.bytes) }),
+    entry.runs ? el('button', {
+      class: 'small primary', text: 'Run',
+      onclick: () => runPath(entry.path, entry.name),
+    }) : null,
+    el('button', { class: 'small', text: '⋯', onclick: () => diskMenu(entry, here) }),
+  );
+}
+
+function diskMenu(entry, here) {
+  const act = (label, kind, what) => el('button', { class: 'small ' + kind, text: label, onclick: what });
+  PyCmd.sheet(entry.name, el('div', {},
+    el('p', { class: 'muted mono', style: 'font-size:11px', text: entry.path }),
+    el('div', { class: 'row wrap', style: 'margin-top:10px' },
+      entry.folder ? null : act('Edit', 'primary', () => { PyCmd.closeSheet(); openInEditor(entry.path, true); }),
+      act('Open with Windows', '', async () => {
+        const done = await PyCmd.call('disk.open', { path: entry.path });
+        PyCmd.closeSheet();
+        if (!done.ok) PyCmd.toast(done.error || 'Windows would not open that');
+      }),
+      act('Show in Explorer', '', () => { PyCmd.call('disk.reveal', { path: entry.path }); PyCmd.closeSheet(); }),
+      act('Copy', '', () => {
+        diskClip = { path: entry.path, name: entry.name, op: 'copy' };
+        PyCmd.closeSheet();
+        PyCmd.toast('Copied. Open a folder and press Paste.');
+        go('files');
+      }),
+      act('Cut', '', () => {
+        diskClip = { path: entry.path, name: entry.name, op: 'move' };
+        PyCmd.closeSheet();
+        PyCmd.toast('Cut. Open a folder and press Move.');
+        go('files');
+      }),
+      act('Copy into the workspace', '', async () => {
+        const done = await PyCmd.call('file.import', { source: entry.path, into: '' });
+        PyCmd.closeSheet();
+        PyCmd.toast(done.ok ? (done.name + ' is in the workspace') : (done.error || 'that would not copy'));
+      }),
+      act('Rename', '', () => { PyCmd.closeSheet(); diskRename(entry); }),
+      act('Delete', 'danger', () => { PyCmd.closeSheet(); diskDelete(entry); }),
+    )));
+}
+
+async function diskPaste(into) {
+  if (!diskClip) return;
+  const name = diskClip.op === 'move' ? 'disk.move' : 'disk.copy';
+  const done = await PyCmd.call(name, { source: diskClip.path, into });
+  if (!done.ok) { PyCmd.toast(done.error || 'that would not work'); return; }
+  PyCmd.toast(diskClip.name + (diskClip.op === 'move' ? ' moved' : ' copied'));
+  diskClip = null;
+  go('files');
+}
+
+function diskRename(entry) {
+  const name = el('input', { spellcheck: 'false' });
+  name.value = entry.name;
+  PyCmd.sheet('Rename', el('div', {},
+    el('label', { class: 'field' }, el('span', { text: 'New name' }), name),
+    el('button', {
+      class: 'small primary', text: 'Rename',
+      onclick: async () => {
+        const done = await PyCmd.call('disk.rename', { path: entry.path, name: name.value.trim() });
+        if (done.ok) { PyCmd.closeSheet(); go('files'); }
+        else PyCmd.toast(done.error || 'that would not rename');
+      },
+    })));
+  setTimeout(() => name.focus(), 60);
+}
+
+function diskDelete(entry) {
+  PyCmd.sheet('Delete ' + entry.name + '?', el('div', {},
+    el('p', { class: 'muted', text: entry.folder
+      ? 'This is a real folder on your disk, not a copy inside PyCmd. It and '
+        + 'everything in it go, and they do not go to the Recycle Bin.'
+      : 'This is a real file on your disk. It does not go to the Recycle Bin.' }),
+    el('p', { class: 'muted mono', style: 'font-size:11px', text: entry.path }),
+    el('div', { class: 'row', style: 'margin-top:12px' },
+      el('button', {
+        class: 'small danger', text: 'Delete it',
+        onclick: async () => {
+          const done = await PyCmd.call('disk.remove', { path: entry.path, recursive: !!entry.folder });
+          if (done.ok) { PyCmd.closeSheet(); go('files'); }
+          else PyCmd.toast(done.error || 'that would not delete');
+        },
+      }),
+      el('button', { class: 'small', text: 'Keep it', onclick: PyCmd.closeSheet }))));
+}
+
+function diskNewFile(where) {
+  const name = el('input', { placeholder: 'notes.md', spellcheck: 'false' });
+  const pick = el('select', {});
+  pick.appendChild(el('option', { value: '', text: 'Empty file' }));
+  (PyCmd.state.languages || [])
+    .filter((row) => row.creatable !== false && row.mode !== 'media')
+    .forEach((row) => pick.appendChild(
+      el('option', { value: row.id, text: row.name + '  (' + row.extension + ')' })));
+  pick.addEventListener('change', () => {
+    const row = (PyCmd.state.languages || []).find((l) => l.id === pick.value);
+    if (row && !name.value.includes('.')) name.value = (name.value || 'untitled') + row.extension;
+  });
+
+  PyCmd.sheet('A new file', el('div', {},
+    el('p', { class: 'muted mono', style: 'font-size:11px', text: where }),
+    el('label', { class: 'field' }, el('span', { text: 'Name' }), name),
+    el('label', { class: 'field' }, el('span', { text: 'Start it as' }), pick),
+    el('button', {
+      class: 'small primary', text: 'Create',
+      onclick: async () => {
+        const wanted = name.value.trim();
+        if (!wanted) return PyCmd.toast('It needs a name.');
+        const row = (PyCmd.state.languages || []).find((l) => l.id === pick.value);
+        const done = await PyCmd.call('disk.write', {
+          path: diskJoin(where, wanted), text: (row && row.template) || '',
+        });
+        if (done.ok) { PyCmd.closeSheet(); go('files'); }
+        else PyCmd.toast(done.error || 'that would not work');
+      },
+    })));
+  setTimeout(() => name.focus(), 60);
+}
+
+function diskNewFolder(where) {
+  const name = el('input', { placeholder: 'my-project', spellcheck: 'false' });
+  PyCmd.sheet('A new folder', el('div', {},
+    el('p', { class: 'muted mono', style: 'font-size:11px', text: where }),
+    el('label', { class: 'field' }, el('span', { text: 'Name' }), name),
+    el('button', {
+      class: 'small primary', text: 'Create',
+      onclick: async () => {
+        const wanted = name.value.trim();
+        if (!wanted) return PyCmd.toast('It needs a name.');
+        const done = await PyCmd.call('disk.folder', { path: diskJoin(where, wanted) });
+        if (done.ok) { PyCmd.closeSheet(); go('files'); }
+        else PyCmd.toast(done.error || 'that would not work');
+      },
+    })));
+  setTimeout(() => name.focus(), 60);
+}
+
+function diskRoot(screen, reply) {
+  const places = reply.places || [];
+  if (places.length) {
+    screen.appendChild(el('h2', { text: 'Your folders' }));
+    const grid = el('div', { class: 'grid' });
+    places.forEach((place) => {
+      grid.appendChild(el('button', {
+        class: 'card', style: 'text-align:left;cursor:pointer',
+        onclick: () => { diskAt = place.path; go('files'); },
+      },
+        el('b', { text: place.name }),
+        el('div', { class: 'muted mono', style: 'font-size:11px', text: place.path })));
+    });
+    screen.appendChild(grid);
+  }
+
+  screen.appendChild(el('h2', { text: 'Drives' }));
+  const drives = el('div', { class: 'grid' });
+  (reply.drives || []).forEach((drive) => {
+    const used = drive.total ? Math.round(((drive.total - drive.free) / drive.total) * 100) : 0;
+    drives.appendChild(el('button', {
+      class: 'card', style: 'text-align:left;cursor:pointer',
+      onclick: () => { if (drive.ready) { diskAt = drive.path; go('files'); } },
+    },
+      el('b', { text: drive.name }),
+      el('div', { class: 'muted', text: drive.ready
+        ? PyCmd.bytes(drive.free) + ' free of ' + PyCmd.bytes(drive.total) + ' · ' + used + '% used'
+        : 'not ready' }),
+      drive.ready ? el('div', { class: 'progress' }, el('div', { class: 'fill', style: 'width:' + used + '%' })) : null));
+  });
+  screen.appendChild(drives);
 }
 
 window.Screens = {

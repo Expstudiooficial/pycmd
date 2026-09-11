@@ -400,24 +400,65 @@ function edNew() {
   });
 }
 
+/*
+ * Open: the workspace, or anywhere on this PC.
+ *
+ * Two roots and one list. The workspace half walks `files`, which is
+ * relative-path country; the PC half walks `disk`, which is absolute. The
+ * only thing the list needs to remember is which it is in, because that is
+ * what `edOpenPath` needs to be told.
+ */
 async function edOpen() {
-  const reply = await PyCmd.call('files', { path: '' });
   const body = PyCmd.el('div', {});
   const list = PyCmd.el('div', { class: 'list' });
-
+  let onDisk = false;
   let at = '';
+
+  const tabs = PyCmd.el('div', { class: 'row', style: 'margin-bottom:8px' });
+  const source = (disk, label) => {
+    const button = PyCmd.el('button', {
+      class: 'small' + (onDisk === disk ? ' primary' : ''), text: label,
+      onclick: () => { onDisk = disk; at = ''; redrawTabs(); draw(''); },
+    });
+    return button;
+  };
+  function redrawTabs() {
+    PyCmd.clear(tabs);
+    tabs.appendChild(source(false, 'Workspace'));
+    tabs.appendChild(source(true, 'This PC'));
+  }
+  redrawTabs();
+
   async function draw(path) {
     at = path;
-    const here = await PyCmd.call('files', { path });
+    PyCmd.clear(list);
+    list.appendChild(PyCmd.el('div', { class: 'empty', text: 'Looking…' }));
+    const here = onDisk
+      ? await PyCmd.call('disk', { path })
+      : await PyCmd.call('files', { path });
     PyCmd.clear(list);
     if (!here.ok) {
       list.appendChild(PyCmd.el('div', { class: 'empty', text: here.error }));
       return;
     }
+
+    // At the top of "This PC" there are no entries, only drives and folders.
+    if (onDisk && here.atRoot) {
+      (here.places || []).concat(here.drives || []).forEach((place) => {
+        list.appendChild(PyCmd.el('button', {
+          class: 'row-item', text: '📁  ' + place.name,
+          onclick: () => draw(place.path),
+        }));
+      });
+      return;
+    }
+
+    const up = onDisk
+      ? (here.parent !== undefined ? here.parent : '')
+      : (path ? path.split('/').slice(0, -1).join('/') : null);
     if (path) {
-      const up = path.split('/').slice(0, -1).join('/');
       list.appendChild(PyCmd.el('button', {
-        class: 'row-item', text: '.. back', onclick: () => draw(up),
+        class: 'row-item', text: '..  back', onclick: () => draw(up || ''),
       }));
     }
     (here.entries || []).filter((row) => row.folder).forEach((row) => {
@@ -428,7 +469,7 @@ async function edOpen() {
     });
     (here.entries || []).filter((row) => !row.folder).forEach((row) => {
       list.appendChild(PyCmd.el('button', {
-        class: 'row-item', onclick: () => edOpenPath(row.path),
+        class: 'row-item', onclick: () => edOpenPath(row.path, onDisk),
       },
         PyCmd.el('span', { text: row.name, class: 'grow' }),
         PyCmd.el('span', { class: 'muted', text: PyCmd.bytes(row.bytes) })));
@@ -438,22 +479,38 @@ async function edOpen() {
     }
   }
 
+  body.appendChild(tabs);
   body.appendChild(list);
   PyCmd.sheet('Open a file', body);
   draw('');
-  if (!reply.ok) list.appendChild(PyCmd.el('div', { class: 'empty', text: reply.error }));
 }
 
-async function edOpenPath(path) {
-  const reply = await PyCmd.call('file.read', { path });
-  if (!reply.ok) { PyCmd.toast(reply.error || 'could not open that'); return; }
+/*
+ * `onDisk` picks which half of the world the path is in: false for a
+ * workspace-relative path, true for an absolute one anywhere on the PC. The
+ * flag rides along on the open file so that saving goes back out the same
+ * door it came in - a file opened from C:\\Users\\you\\notes.md is saved
+ * to C:\\Users\\you\\notes.md, not copied into the workspace.
+ *
+ * Returns whether it opened, so the caller knows whether to switch tabs.
+ */
+async function edOpenPath(path, onDisk) {
+  const reply = await PyCmd.call(onDisk ? 'disk.read' : 'file.read', { path });
+  if (!reply.ok) {
+    // A binary or an enormous file is refused by name, and the reason is
+    // worth reading: "PyCmd will not open it - saving would corrupt it" is
+    // the difference between a bug and a decision.
+    PyCmd.toast(reply.error || 'could not open that');
+    return false;
+  }
   PyCmd.closeSheet();
-  const name = path.split('/').pop();
+  const name = path.split(/[\\/]/).pop();
   edAdd({
-    path, name,
+    path, name, disk: !!onDisk,
     language: edLanguageId(reply.language, name),
     text: reply.text || '', saved: reply.text || '', dirty: false,
   });
+  return true;
 }
 
 /** Pulls what is on screen into the file record, then writes it. */
@@ -463,7 +520,8 @@ async function edSave(which) {
   if (file === edCurrent()) file.text = edText();
   if (!file.path) return edSaveAs(file);
 
-  const reply = await PyCmd.call('file.write', { path: file.path, text: file.text });
+  const reply = await PyCmd.call(file.disk ? 'disk.write' : 'file.write',
+                                 { path: file.path, text: file.text });
   if (!reply.ok) { PyCmd.toast(reply.error || 'could not save'); return false; }
   file.saved = file.text;
   file.dirty = false;
@@ -478,16 +536,25 @@ function edSaveAs(which) {
   if (!file) { PyCmd.toast('Nothing to save.'); return Promise.resolve(false); }
   return new Promise((resolve) => {
     const name = PyCmd.el('input', { value: file.name, spellcheck: 'false' });
+    // A file that came from the disk saves back to the disk, in the folder it
+    // was in; one from the workspace stays in the workspace. Offering "Save
+    // as" and then silently changing which of the two you are in would be the
+    // worst kind of surprise.
+    const onDisk = !!file.disk;
     const folder = PyCmd.el('input', {
-      value: file.path ? file.path.split('/').slice(0, -1).join('/') : '',
-      placeholder: 'workspace root', spellcheck: 'false',
+      value: file.path ? file.path.split(/[\\/]/).slice(0, -1).join(onDisk ? '\\' : '/') : '',
+      placeholder: onDisk ? 'a folder on this PC' : 'workspace root',
+      spellcheck: 'false',
     });
     const save = async () => {
       const wanted = (name.value || '').trim();
       if (!wanted) { PyCmd.toast('It needs a name.'); return; }
       const at = (folder.value || '').trim();
-      const path = at ? at.replace(/\/+$/, '') + '/' + wanted : wanted;
-      const reply = await PyCmd.call('file.write', { path, text: file.text });
+      const slash = onDisk ? '\\' : '/';
+      const path = at ? at.replace(/[\\/]+$/, '') + slash + wanted : wanted;
+      if (onDisk && !at) { PyCmd.toast('A file on this PC needs a folder.'); return; }
+      const reply = await PyCmd.call(onDisk ? 'disk.write' : 'file.write',
+                                     { path, text: file.text });
       if (!reply.ok) { PyCmd.toast(reply.error || 'could not save'); return; }
       file.path = path;
       file.name = wanted;
@@ -502,7 +569,7 @@ function edSaveAs(which) {
     };
     PyCmd.sheet('Save as', PyCmd.el('div', {},
       PyCmd.el('label', { text: 'Name' }), name,
-      PyCmd.el('label', { text: 'Folder in the workspace' }), folder,
+      PyCmd.el('label', { text: onDisk ? 'Folder on this PC' : 'Folder in the workspace' }), folder,
       PyCmd.el('div', { class: 'row' },
         PyCmd.el('button', { class: 'primary', text: 'Save', onclick: save }),
         PyCmd.el('button', { text: 'Cancel', onclick: () => { PyCmd.closeSheet(); resolve(false); } }))));
@@ -514,9 +581,9 @@ async function edRun() {
   if (!file) { PyCmd.toast('Nothing to run.'); return; }
   const saved = await edSave(file);
   if (!saved) return;
+  go('console');
   const reply = await PyCmd.call('run.file', { path: file.path });
   if (!reply.ok) { PyCmd.toast(reply.error || 'that would not run'); return; }
-  go('console');
 }
 
 function edGoToLine() {

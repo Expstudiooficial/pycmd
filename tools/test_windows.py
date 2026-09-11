@@ -833,10 +833,19 @@ try:
     check("dot-dot inside the workspace is fine",
           host_module._find_for_run("../outer.py")
           == os.path.join(_root_dir, "outer.py"))
-    for _escape in ("../../../../etc/passwd", "/etc/passwd", "..\\..\\Windows"):
+    # A relative path is resolved by PyCmd, so it stays inside the workspace.
+    for _escape in ("../../../../etc/passwd", "..\\..\\Windows"):
         check(f"but {_escape!r} is not found here",
               host_module._find_for_run(_escape) == "",
               host_module._find_for_run(_escape))
+    # An absolute path is named by the person typing it, and since 3.0 the
+    # editor and the Files screen open the whole disk, so the console runs what
+    # is there rather than pretending it is not.
+    check("an absolute path anywhere is run, as at any Windows prompt",
+          host_module._find_for_run(os.path.join(_root_dir, "outer.py"))
+          == os.path.join(_root_dir, "outer.py"))
+    check("and an absolute path to nothing is still nothing",
+          host_module._find_for_run("/definitely/not/here.py") == "")
     check("and neither is something that is simply not there",
           host_module._find_for_run("nope.py") == "")
 finally:
@@ -941,6 +950,123 @@ check("every step says what it is for and what it costs",
       _plan["steps"])
 check("asking what is here does not start anything",
       not android_lab.job_state().get("everStarted"), android_lab.job_state())
+
+say("\n== the whole disk, not just the workspace ==")
+from pycmd_win import disk  # noqa: E402
+
+_sand = tempfile.mkdtemp(prefix="pycmd-disk-")
+os.makedirs(os.path.join(_sand, "project", "src"))
+with open(os.path.join(_sand, "project", "src", "main.py"), "w") as _f:
+    _f.write("print('hi')\n")
+with open(os.path.join(_sand, "project", "notes.txt"), "w") as _f:
+    _f.write("plain\n")
+with open(os.path.join(_sand, "project", "picture.bin"), "wb") as _f:
+    _f.write(b"\x89PNG\x00\x00binary")
+
+# An empty path used to mean "the current directory", because that is what
+# abspath("") returns. It deleted the working directory once; it never will
+# again.
+for _name, _call in (
+    ("read", lambda: disk.read("")),
+    ("write", lambda: disk.write("", "x")),
+    ("a new folder", lambda: disk.make_folder("")),
+    ("rename", lambda: disk.rename("", "x")),
+    ("remove", lambda: disk.remove("")),
+    ("copy", lambda: disk.copy("", "")),
+    ("move", lambda: disk.move("", "")),
+    ("reveal", lambda: disk.reveal("")),
+    ("open", lambda: disk.open_with_system("")),
+    ("find runnable", lambda: disk.find_runnable("")),
+):
+    _answer = _call()
+    check(f"an empty path is refused by {_name}",
+          _answer.get("ok") is False and "no path" in _answer.get("error", ""),
+          _answer)
+
+_here = os.getcwd()
+check("and the working directory is still there afterwards",
+      os.path.isdir(_here), _here)
+
+_listed = disk.listing(os.path.join(_sand, "project"))
+check("a folder lists", _listed["ok"], _listed.get("error"))
+check("folders sort before files",
+      _listed["entries"][0]["folder"], [r["name"] for r in _listed["entries"]])
+check("a file is told what language it is",
+      any(r.get("languageId") == "python" for r in disk.listing(
+          os.path.join(_sand, "project", "src"))["entries"]))
+check("and whether PyCmd can run it",
+      disk.listing(os.path.join(_sand, "project", "src"))["entries"][0]["runs"])
+check("the crumbs walk back to the root",
+      _listed["crumbs"][0]["path"] in ("/", "C:\\") or
+      _listed["crumbs"][0]["path"].startswith(os.sep),
+      _listed["crumbs"][:1])
+check("the parent is one step up",
+      _listed["parent"] == os.path.abspath(_sand), _listed["parent"])
+
+check("nothing is the root listing, which has drives on it",
+      disk.listing("")["atRoot"] and disk.listing("")["drives"])
+
+_read = disk.read(os.path.join(_sand, "project", "notes.txt"))
+check("a text file reads", _read["ok"] and _read["text"] == "plain\n", _read)
+_binary = disk.read(os.path.join(_sand, "project", "picture.bin"))
+check("a binary one is refused rather than mangled",
+      not _binary["ok"] and _binary.get("reason") == "binary", _binary)
+
+_wrote = disk.write(os.path.join(_sand, "project", "notes.txt"), "changed\n")
+check("writing in place works", _wrote["ok"], _wrote)
+check("and it really changed",
+      disk.read(os.path.join(_sand, "project", "notes.txt"))["text"] == "changed\n")
+
+check("a folder can be made",
+      disk.make_folder(os.path.join(_sand, "new"))["ok"])
+check("copying keeps the original",
+      disk.copy(os.path.join(_sand, "project", "notes.txt"),
+                os.path.join(_sand, "new"))["ok"]
+      and os.path.isfile(os.path.join(_sand, "project", "notes.txt")))
+_second = disk.copy(os.path.join(_sand, "project", "notes.txt"),
+                    os.path.join(_sand, "new"))
+check("and a second copy is named the way Windows names it",
+      _second["ok"] and _second["path"].endswith("notes (1).txt"), _second)
+check("a folder will not be copied into itself",
+      not disk.copy(os.path.join(_sand, "project"),
+                    os.path.join(_sand, "project", "src"))["ok"])
+
+check("moving takes it with it",
+      disk.move(os.path.join(_sand, "new", "notes (1).txt"),
+                os.path.join(_sand, "project", "src"))["ok"]
+      and os.path.isfile(os.path.join(_sand, "project", "src", "notes (1).txt")))
+
+check("renaming to a name Windows forbids is refused",
+      not disk.rename(os.path.join(_sand, "project", "notes.txt"), "a/b")["ok"])
+check("and renaming onto something that exists is refused",
+      not disk.rename(os.path.join(_sand, "project", "notes.txt"),
+                      "picture.bin")["ok"])
+
+check("a folder with things in it is not deleted by accident",
+      disk.remove(os.path.join(_sand, "project")).get("reason") == "not-empty")
+check("but it goes when asked properly",
+      disk.remove(os.path.join(_sand, "new"), recursive=True)["ok"])
+
+_runnable = disk.find_runnable(_sand)
+check("runnable files are found by walking",
+      _runnable["ok"] and any(r["name"] == "main.py" for r in _runnable["files"]),
+      _runnable)
+check("and each one says what would run it",
+      all(r["language"] for r in _runnable["files"]), _runnable["files"][:2])
+check("plain text is not offered as runnable",
+      not any(r["name"] == "notes.txt" for r in _runnable["files"]))
+
+os.makedirs(os.path.join(_sand, "noisy", "node_modules", "pkg"))
+with open(os.path.join(_sand, "noisy", "node_modules", "pkg", "x.js"), "w") as _f:
+    _f.write("1\n")
+check("and node_modules is not walked",
+      not any("node_modules" in r["path"]
+              for r in disk.find_runnable(_sand)["files"]))
+
+check("Windows' own folders are refused for writing",
+      bool(disk._is_forbidden(r"C:\Windows\System32\x.dll")) is disk.WINDOWS)
+
+shutil.rmtree(_sand, ignore_errors=True)
 
 say("\n== older copies of PyCmd ==")
 

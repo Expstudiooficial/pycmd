@@ -34,10 +34,10 @@ import threading
 import time
 import traceback
 
-from . import (android, builtins, bundle, copies, files, install, known,
+from . import (android, builtins, bundle, copies, disk, files, install, known,
                langs, runner, setup_all, store, toolchains)
-VERSION = "2.0.7"
-BUILD = 4
+VERSION = "3.0"
+BUILD = 5
 
 _engine_ready = False
 
@@ -273,18 +273,24 @@ def _find_for_run(wanted: str) -> str:
     workspace root would make the console's own `cd` a lie. The workspace root
     second, so `run app.py` works from anywhere without hunting.
 
-    Both are checked against the workspace boundary. A path that escapes it is
-    not run, and not explained away either - it simply is not found here, and
-    the engine gets to answer.
+    A *relative* path is checked against the workspace boundary, because a
+    relative path is resolved by PyCmd rather than named by the person typing
+    it: `run ../../../../etc/passwd` is somebody finding out whether the walk
+    can be escaped, and the answer stays no.
+
+    An *absolute* path is run if it is a file. 3.0 opens the whole disk to the
+    Files screen and the editor, and a console that refused to run the very
+    file you were just editing - because it lives in Documents rather than in
+    PyCmd's workspace - would be enforcing a boundary the rest of the app no
+    longer has. `python C:\\Users\\you\\thing.py` works at any Windows
+    prompt; there is nothing for PyCmd to protect by being stricter than the
+    shell it is standing in for.
     """
     if not wanted:
         return ""
     if os.path.isabs(wanted):
-        try:
-            inside = files.resolve(wanted)
-        except Exception:  # noqa: BLE001
-            return ""
-        return inside if os.path.isfile(inside) else ""
+        full = os.path.abspath(os.path.expanduser(wanted))
+        return full if os.path.isfile(full) else ""
 
     root = os.path.abspath(store.folder("workspace"))
     here = os.path.abspath(os.getcwd())
@@ -643,6 +649,55 @@ def _h_file_remove(host, payload):
 
 def _h_file_import(host, payload):
     return files.bring_in(str(payload.get("source", "")), str(payload.get("into", "")))
+
+
+def _h_disk(host, payload):
+    return disk.listing(str(payload.get("path", "")),
+                        bool(payload.get("hidden")))
+
+
+def _h_disk_read(host, payload):
+    return disk.read(str(payload.get("path", "")))
+
+
+def _h_disk_write(host, payload):
+    return disk.write(str(payload.get("path", "")), str(payload.get("text", "")))
+
+
+def _h_disk_folder(host, payload):
+    return disk.make_folder(str(payload.get("path", "")))
+
+
+def _h_disk_rename(host, payload):
+    return disk.rename(str(payload.get("path", "")), str(payload.get("name", "")))
+
+
+def _h_disk_remove(host, payload):
+    return disk.remove(str(payload.get("path", "")),
+                       bool(payload.get("recursive")))
+
+
+def _h_disk_copy(host, payload):
+    return disk.copy(str(payload.get("source", "")),
+                     str(payload.get("into", "")))
+
+
+def _h_disk_move(host, payload):
+    return disk.move(str(payload.get("source", "")),
+                     str(payload.get("into", "")))
+
+
+def _h_disk_reveal(host, payload):
+    return disk.reveal(str(payload.get("path", "")))
+
+
+def _h_disk_open(host, payload):
+    return disk.open_with_system(str(payload.get("path", "")))
+
+
+def _h_disk_runnable(host, payload):
+    root = str(payload.get("root", "")) or files.root()
+    return disk.find_runnable(root)
 
 
 def _h_folders(host, payload):
@@ -1080,6 +1135,17 @@ HANDLERS = {
     "file.rename": _h_file_rename,
     "file.remove": _h_file_remove,
     "file.import": _h_file_import,
+    "disk": _h_disk,
+    "disk.read": _h_disk_read,
+    "disk.write": _h_disk_write,
+    "disk.folder": _h_disk_folder,
+    "disk.rename": _h_disk_rename,
+    "disk.remove": _h_disk_remove,
+    "disk.copy": _h_disk_copy,
+    "disk.move": _h_disk_move,
+    "disk.reveal": _h_disk_reveal,
+    "disk.open": _h_disk_open,
+    "disk.runnable": _h_disk_runnable,
     "folders": _h_folders,
     "servers": _h_servers,
     "server.start": _h_server_start,

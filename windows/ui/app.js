@@ -198,9 +198,38 @@ const TABS = [
   { id: 'system', name: 'System', key: '⌘' },
 ];
 
+/*
+ * Every plugin with a panel gets a tab, under a heading of its own.
+ *
+ * They used to live inside the Plugins tab, each behind an Open button that
+ * put the panel in a modal sheet. So a plugin you use all day - a database
+ * client, a REST console - took two clicks to reach and then covered the
+ * app, and closing it lost whatever you had typed in it. Meanwhile the
+ * fourteen screens PyCmd ships with are one click away in the rail.
+ *
+ * A plugin panel is a screen. It goes in the rail with the others, and its
+ * id is `panel:<plugin id>` so `go` can tell it from a built-in screen.
+ */
+function pluginTabs() {
+  const installed = ((PyCmd.state.plugins || {}).installed) || [];
+  return installed
+    .filter((plugin) => plugin.panel && !plugin.broken)
+    .map((plugin) => ({
+      id: 'panel:' + plugin.id,
+      name: plugin.name || plugin.id,
+      key: '◈',
+      plugin,
+    }));
+}
+
 function drawTabs() {
   const rail = PyCmd.clear(document.getElementById('tabs'));
-  TABS.forEach((entry) => {
+  const panels = pluginTabs();
+  const entries = panels.length
+    ? TABS.concat([{ group: 'Plugins' }], panels)
+    : TABS;
+
+  entries.forEach((entry) => {
     if (entry.group) {
       rail.appendChild(PyCmd.el('div', { class: 'rail-head', text: entry.group }));
       return;
@@ -212,6 +241,7 @@ function drawTabs() {
         : '';
     rail.appendChild(PyCmd.el('button', {
       class: 'tab' + (PyCmd.state.tab === entry.id ? ' on' : ''),
+      title: entry.plugin ? (entry.plugin.description || '').slice(0, 160) : '',
       onclick: () => go(entry.id),
     },
       PyCmd.el('span', { class: 'k', text: entry.key }),
@@ -227,6 +257,23 @@ function go(id) {
   const screen = document.getElementById('screen');
   screen.classList.remove('flush');
   PyCmd.clear(screen);
+
+  // A plugin panel is a screen like any other; it just is not in the table,
+  // because which ones exist depends on what is installed.
+  if (String(id).startsWith('panel:')) {
+    const wanted = String(id).slice(6);
+    const found = pluginTabs().find((entry) => entry.plugin.id === wanted);
+    if (!found) {
+      screen.appendChild(PyCmd.el('div', { class: 'empty',
+        text: 'That plugin is not loaded any more.' }));
+      return;
+    }
+    Promise.resolve(window.drawPanelScreen(screen, found.plugin)).catch((error) => {
+      screen.appendChild(PyCmd.el('div', { class: 'empty', text: String(error) }));
+    });
+    return;
+  }
+
   const draw = window.Screens && window.Screens[id];
   if (!draw) {
     screen.appendChild(PyCmd.el('div', { class: 'empty', text: 'That screen is not in this build.' }));

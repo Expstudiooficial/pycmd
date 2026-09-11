@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Version | 2.0.7 |
+| Version | 3.0 |
 | Works on | Windows 10 and newer, 64-bit |
 | Runtime | Edge WebView2, which Windows 10 and 11 already have |
 | Installer | none — it is one exe |
@@ -23,7 +23,7 @@ To make one:
 
 - **On your own machine:**
   `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`
-- **Or push a tag** `windows-v2.0.7` and let the workflow do it — it builds on
+- **Or push a tag** `windows-v3.0` and let the workflow do it — it builds on
   a Windows runner, proves the exe starts, writes this manifest with the real
   hash, and attaches the exe to a release.
 
@@ -36,6 +36,45 @@ release for the tag that built it, which is what `latest.json` points at.
 describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
+
+## What is new in 3.0
+
+**The whole PC, not just a workspace.** Files has two halves now: the
+workspace, which is still where new projects land and what the console's `cd`
+and `run` mean, and **This PC** — every drive, your Desktop, Documents and
+Downloads, and every folder under them. Open a file there and you are editing
+the file itself, in place, not a copy that has to be exported back out
+afterwards. Copy, cut, paste, rename, delete, make folders, show something in
+Explorer, open something with whatever Windows uses for it.
+
+The phone's model is "bring a file in, send a file out", and it has to be:
+Android hands an app a private folder and a document picker. Windows hands you
+the disk. PyCmd now behaves like a Windows program.
+
+**Clicking a file opens the Editor.** There used to be a second, much worse
+editor — a textarea in a sheet — that appeared when you clicked a row. It had
+no highlighting, no real undo, and no second file open beside it. It is gone.
+One file, one editor, the good one. The Editor's Open dialog browses This PC
+too, and saves back where the file came from.
+
+**Run shows you what can be run.** No more typing `hello.go` and guessing at
+the path and the extension. PyCmd walks the folder, lists everything it knows
+how to run with its language beside it, and you pick one. Point it at the
+workspace or at any folder on the PC.
+
+**Run always lands on the Console.** If the program calls `input()`, the
+prompt is on the screen you are looking at. So are installs.
+
+**Plugin panels are tabs.** A plugin with a panel gets its own entry in the
+sidebar, under Plugins, beside the fourteen screens PyCmd ships with. They
+used to be two clicks deep inside the Plugins tab and then opened in a modal
+sheet that covered the app and lost your work when it closed.
+
+**Fixed along the way.** Running a file from a subfolder of the workspace ran
+the wrong path. Messages a plugin sent to its own panel never arrived, because
+the code looking for the panels looked for the wrong kind of frame. The
+console refused to run a file by absolute path even when you were looking at
+it in the editor.
 
 ## What is new in 2.0
 
