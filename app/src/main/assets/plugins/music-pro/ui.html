@@ -171,7 +171,9 @@
         + '<button data-load="a:' + escapeHtml(row.id) + '">A</button> '
         + '<button data-load="b:' + escapeHtml(row.id) + '">B</button> '
         + escapeHtml(row.title)
-        + (row.artist ? ' <span class="muted">' + escapeHtml(row.artist) + '</span>' : '')
+        + (row.artist
+          ? ' <span class="muted">\u2014 ' + escapeHtml(row.artist) + '</span>'
+          : '')
         + '</p>';
     }).join('');
   }

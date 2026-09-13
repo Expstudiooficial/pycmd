@@ -63,6 +63,7 @@ node tools/test_js.js
 node tools/test_editor.js
 node tools/test_bridge.js
 node tools/test_creator_ui.js
+node tools/test_music_pro_ui.js
 
 echo
 echo "== Panels, laid out at a phone's size =="
