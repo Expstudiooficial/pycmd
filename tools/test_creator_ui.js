@@ -57,6 +57,13 @@ sys.stdout.write(json.dumps({
 }))
 `);
 
+
+/** How many blocks a language really has, so the checks below cannot go stale. */
+function blockCount(language) {
+  const found = fixtures.languages.languages.find((row) => row.id === language);
+  return found ? found.blocks : -1;
+}
+
 function build(project) {
   return python(`
 project = json.loads(${JSON.stringify(JSON.stringify(project))})
@@ -194,6 +201,20 @@ function makeSandbox() {
       return found;
     }
     if (name === 'starter') {
+      // Every language has one since 2.6.0, and the panel asks for the one
+      // it is in. The real plugin reads its STARTERS table; here a small
+      // stand-in for the two the checks actually use.
+      if (body.language && body.language !== 'python') {
+        const made = {
+          css: { name: 'style', language: 'css', blocks: [
+            { block: 'css.rule', values: { selector: 'body' }, children: [
+              { block: 'css.padding', values: { value: '20px' } },
+            ] },
+          ] },
+        }[body.language];
+        if (!made) return { ok: false, error: `no example for ${body.language}` };
+        return { ok: true, folder: '', project: made };
+      }
       return {
         ok: true,
         folder: '',
@@ -317,8 +338,9 @@ async function main() {
         el(sandbox, 'trouble').children.map((c) => c.textContent));
   check('the starter script is on screen', scriptRows(sandbox).length === 3,
         scriptRows(sandbox).map((row) => row.textContent));
-  check('and the palette is full', palette(sandbox).length === 154,
-        palette(sandbox).length);
+  check('and the palette is full',
+        palette(sandbox).length === blockCount('python'),
+        palette(sandbox).length + ' of ' + blockCount('python'));
   check('the language chooser has every language there are blocks for',
         el(sandbox, 'lang').children.length === fixtures.languages.languages.length,
         el(sandbox, 'lang').children.length + ' of '
@@ -332,8 +354,9 @@ async function main() {
   check('and the Add a block button opens it',
         el(sandbox, 'addSheet').classList.contains('open'),
         el(sandbox, 'addSheet').className);
-  check('with the whole palette in it', palette(sandbox).length === 154,
-        palette(sandbox).length);
+  check('with the whole palette in it',
+        palette(sandbox).length === blockCount('python'),
+        palette(sandbox).length + ' of ' + blockCount('python'));
   check('and a line saying where the next one lands',
         el(sandbox, 'where').innerHTML.indexOf('at the end') > 0,
         el(sandbox, 'where').innerHTML);
@@ -393,7 +416,9 @@ async function main() {
   el(sandbox, 'lang').value = 'css';
   el(sandbox, 'lang').dispatch('change');
   for (let i = 0; i < 6; i += 1) { await flush(); settle(sandbox); }
-  check('the CSS blocks arrived', palette(sandbox).length === 42, palette(sandbox).length);
+  check('the CSS blocks arrived',
+        palette(sandbox).length === blockCount('css'),
+        palette(sandbox).length + ' of ' + blockCount('css'));
   check('no error card', el(sandbox, 'trouble').children.length === 0,
         el(sandbox, 'trouble').children.map((c) => c.textContent));
   check('the CSS script starts empty', scriptRows(sandbox).length === 0,
@@ -403,8 +428,47 @@ async function main() {
         Object.keys(sandbox.window.__creator.drafts));
   check('no question was asked to get here', sandbox.toasts.length === 0, sandbox.toasts);
 
+  console.log('\n== the language line and the example button ==');
+  check('the chooser says how many blocks and whether it runs here',
+        el(sandbox, 'lang').children.some((option) =>
+          option.textContent.includes('Rust') && option.textContent.includes('runs here')),
+        el(sandbox, 'lang').children.map((o) => o.textContent).slice(0, 3));
+  check('and a language that only gets served does not claim to run',
+        el(sandbox, 'lang').children.some((option) =>
+          option.textContent.includes('CSS') && !option.textContent.includes('runs here')),
+        el(sandbox, 'lang').children.map((o) => o.textContent));
+  check('the line under it says what the language is for',
+        el(sandbox, 'about').textContent.length > 10,
+        el(sandbox, 'about').textContent);
+
+  // Still in CSS, with an empty script, so Example fills it without asking.
+  el(sandbox, 'example-load').dispatch('click');
+  for (let i = 0; i < 6; i += 1) { await flush(); settle(sandbox); }
+  check('Example fills an empty script with something that works',
+        scriptRows(sandbox).length === 2, scriptRows(sandbox).length);
+  check('and says so', sandbox.toasts.some((text) => text.includes('example')),
+        sandbox.toasts);
+
+  // With blocks in it, it asks first rather than throwing work away.
+  sandbox.toasts.length = 0;
+  el(sandbox, 'example-load').dispatch('click');
+  await flush();
+  check('a second press asks before replacing what is there',
+        el(sandbox, 'askSheet').className.includes('open'),
+        el(sandbox, 'askSheet').className);
+  el(sandbox, 'askCancel').dispatch('click');
+  for (let i = 0; i < 4; i += 1) { await flush(); settle(sandbox); }
+  check('and saying no leaves the script alone', scriptRows(sandbox).length === 2,
+        scriptRows(sandbox).length);
+
+  el(sandbox, 'lang').value = 'python';
+  el(sandbox, 'lang').dispatch('change');
+  for (let i = 0; i < 6; i += 1) { await flush(); settle(sandbox); }
+
   console.log('\n== every language loads its own blocks ==');
-  const counts = { javascript: 98, html: 49, markdown: 20, python: 154 };
+  const counts = {};
+  ['javascript', 'html', 'markdown', 'python', 'c', 'go', 'rust', 'shell', 'json']
+    .forEach((language) => { counts[language] = blockCount(language); });
   for (const [language, expected] of Object.entries(counts)) {
     el(sandbox, 'lang').value = language;
     el(sandbox, 'lang').dispatch('change');

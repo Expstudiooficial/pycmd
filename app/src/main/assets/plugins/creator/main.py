@@ -336,4 +336,95 @@ STARTERS = {
             {"block": "md.text", "values": {"text": "Written by stacking blocks."}},
         ],
     },
+    # The five added in 2.6.0. Each one is a whole program rather than a
+    # fragment, because the first thing anybody does with a starter is press
+    # Run, and a starter that does not run teaches the wrong lesson about
+    # whether any of this works.
+    "c": {
+        "name": "hello",
+        "language": "c",
+        "blocks": [
+            {"block": "c.include", "values": {"name": "stdio.h"}},
+            {"block": "c.blank"},
+            {"block": "c.main", "children": [
+                {"block": "c.print", "values": {"text": "Hello from PyCmd"}},
+                {"block": "c.int", "values": {"name": "total", "value": "0"}},
+                {"block": "c.for", "values": {"name": "i", "from": "1", "to": "4"},
+                 "children": [
+                     {"block": "c.increase", "values": {"name": "total", "amount": "i"}},
+                 ]},
+                {"block": "c.print_labelled",
+                 "values": {"label": "total:", "value": "total"}},
+                {"block": "c.return_zero"},
+            ]},
+        ],
+    },
+    "go": {
+        "name": "hello",
+        "language": "go",
+        "blocks": [
+            {"block": "go.package"},
+            {"block": "go.blank"},
+            {"block": "go.import", "values": {"name": "fmt"}},
+            {"block": "go.blank"},
+            {"block": "go.main", "children": [
+                {"block": "go.print", "values": {"text": "Hello from PyCmd"}},
+                {"block": "go.short_number", "values": {"name": "total", "value": "0"}},
+                {"block": "go.for", "values": {"name": "i", "from": "1", "to": "4"},
+                 "children": [
+                     {"block": "go.increase", "values": {"name": "total", "amount": "i"}},
+                 ]},
+                {"block": "go.print_labelled",
+                 "values": {"label": "total:", "value": "total"}},
+            ]},
+        ],
+    },
+    "rust": {
+        "name": "hello",
+        "language": "rust",
+        "blocks": [
+            {"block": "rs.main", "children": [
+                {"block": "rs.print", "values": {"text": "Hello from PyCmd"}},
+                {"block": "rs.let_mut", "values": {"name": "total", "value": "0"}},
+                {"block": "rs.for_range_inclusive",
+                 "values": {"name": "i", "from": "1", "to": "3"},
+                 "children": [
+                     {"block": "rs.increase", "values": {"name": "total", "amount": "i"}},
+                 ]},
+                {"block": "rs.print_labelled",
+                 "values": {"label": "total:", "value": "total"}},
+            ]},
+        ],
+    },
+    "shell": {
+        "name": "hello",
+        "language": "shell",
+        "blocks": [
+            {"block": "sh.shebang"},
+            {"block": "sh.blank"},
+            {"block": "sh.set", "values": {"name": "who", "value": "PyCmd"}},
+            {"block": "sh.echo_labelled", "values": {"label": "Hello from", "name": "who"}},
+            {"block": "sh.set_number", "values": {"name": "count", "value": "0"}},
+            {"block": "sh.for_list", "values": {"name": "item", "items": "one two three"},
+             "children": [
+                 {"block": "sh.increase", "values": {"name": "count", "amount": "1"}},
+             ]},
+            {"block": "sh.echo_labelled", "values": {"label": "counted", "name": "count"}},
+        ],
+    },
+    "json": {
+        "name": "settings",
+        "language": "json",
+        "blocks": [
+            {"block": "json.object", "children": [
+                {"block": "json.text", "values": {"name": "name", "value": "My settings"}},
+                {"block": "json.number", "values": {"name": "version", "value": "1"}},
+                {"block": "json.bool", "values": {"name": "enabled", "value": "true"}},
+                {"block": "json.named_array", "values": {"name": "tags"}, "children": [
+                    {"block": "json.item_text", "values": {"value": "one"}},
+                    {"block": "json.item_text", "values": {"value": "two"}},
+                ]},
+            ]},
+        ],
+    },
 }

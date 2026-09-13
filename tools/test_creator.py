@@ -99,6 +99,26 @@ no_close = [row["id"] for rows in blocks.BLOCKS.values() for row in rows
 check("every Python container can be left empty without breaking",
       not no_close, no_close[:5])
 
+# `runs` is written out in creator_blocks rather than asked of the app, so
+# that the module stays importable on a laptop. This is the check that keeps
+# the two in step.
+from pycmd_langs import registry as _registry  # noqa: E402
+
+_wrong = []
+_app_languages = {row["id"]: row for row in _registry.catalogue()}
+for _row in blocks.LANGUAGES:
+    _found = _app_languages.get(_row["id"])
+    if _found is None:
+        _wrong.append((_row["id"], "the app has no such language"))
+        continue
+    if bool(_row["runs"]) != (_found["mode"] == "run"):
+        _wrong.append((_row["id"], f"says runs={_row['runs']}, app says {_found['mode']}"))
+check("every language's 'runs on the phone' flag matches the app",
+      not _wrong, _wrong)
+check("and six of the ten do run",
+      sum(1 for row in blocks.LANGUAGES if row["runs"]) == 6,
+      [row["id"] for row in blocks.LANGUAGES if row["runs"]])
+
 say()
 say("== the catalogue is served the way the panel asks for it ==")
 everything = blocks.catalogue()
@@ -182,6 +202,7 @@ AROUND = {
     "py.finally": ("try:\n    pass\n", 0, ""),
     "py.try": ("", 0, "except Exception:\n    pass\n"),
     "py.flask_route": ("", 0, "def view():\n    pass\n"),
+    "py.dataclass_marker": ("", 0, "class C:\n    pass\n"),
     "py.return": ("def f():\n", 1, ""),
     "py.return_none": ("def f():\n", 1, ""),
     "py.global": ("def f():\n", 1, ""),

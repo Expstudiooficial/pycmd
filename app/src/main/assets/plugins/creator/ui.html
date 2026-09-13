@@ -122,6 +122,17 @@
   }
   .pick .what { font-size: 14px; color: #F1F5FA; }
   .pick .code { color: #6FB3FF; font-size: 12px; margin-top: 3px; display: block; }
+  /* The heading over each group of blocks. Sticky, because a list of two
+     hundred is scrolled a long way and "which group am I in" is the question
+     it raises. */
+  .palgroup {
+    position: sticky; top: 0; z-index: 1;
+    background: #0B0F14; color: #8FA3BC;
+    font-size: 11.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+    padding: 10px 2px 4px;
+  }
+  .palgroup:first-child { padding-top: 2px; }
 
   /* -- overlays ------------------------------------------------------ */
   /*
@@ -166,8 +177,10 @@
   </div>
   <div class="row" style="margin-top:8px">
     <select id="lang" class="field-input grow" aria-label="Language"></select>
+    <button class="small" id="example-load" title="Fill this language's script with a working example">Example</button>
   </div>
-  <div class="muted" id="count" style="margin-top:7px">&nbsp;</div>
+  <div class="muted" id="about" style="margin-top:7px">&nbsp;</div>
+  <div class="muted" id="count" style="margin-top:4px">&nbsp;</div>
 </div>
 
 <div class="actions">
@@ -704,9 +717,17 @@
 
     groups.forEach(function (group) {
       if (state.category && group.name !== state.category) return;
+      var here = 0;
+      var mark = parts.length;
+      // A heading per group, written before its blocks and taken back out
+      // again if the search left none of them. Twenty-one groups of Python
+      // blocks in one flat list is a wall; the same list with its headings
+      // in it can be scanned.
+      parts.push('<div class="palgroup">' + escapeHtml(group.name) + '</div>');
       group.blocks.forEach(function (spec) {
         if (needle && (spec.hay || '').indexOf(needle) < 0) return;
         shown += 1;
+        here += 1;
         parts.push(
           '<button class="pick" type="button" data-block="' +
           escapeAttr(spec.id) + '">' +
@@ -716,6 +737,7 @@
           '</button>'
         );
       });
+      if (!here) parts.splice(mark, 1);
     });
 
     if (!shown) {
@@ -1002,10 +1024,29 @@
     state.languages.forEach(function (row) {
       var option = document.createElement('option');
       option.value = row.id;
-      option.textContent = row.name + '  -  ' + row.blocks + ' blocks';
+      option.textContent = row.name + '  -  ' + row.blocks + ' blocks' +
+        (row.runs ? '  -  runs here' : '');
       if (row.id === state.language) option.selected = true;
       host.appendChild(option);
     });
+  }
+
+  /*
+   * What the chosen language is, in a sentence.
+   *
+   * With five languages a name was enough. With ten - four of which most
+   * people have never written a line of - the difference between "runs on
+   * this phone" and "is a file you serve" is the first thing worth knowing,
+   * so it is on screen rather than in a guide.
+   */
+  function drawAbout() {
+    var row = null;
+    state.languages.forEach(function (each) {
+      if (each.id === state.language) row = each;
+    });
+    if (!row) { $('about').textContent = ''; return; }
+    $('about').textContent = row.about +
+      (row.runs ? '  Press Run on the saved file and it runs on this phone.' : '');
   }
 
   /** Switches to a language and makes sure its blocks are loaded. */
@@ -1017,6 +1058,7 @@
     state.outline = {};
     state.closings = {};
     var wasUntouched = state.untouched;
+    drawAbout();
     return loadCatalogue(id).then(function () {
       drawCategories();
       drawPalette();
@@ -1121,6 +1163,49 @@
           $('name').value = 'untitled';
           refresh();
         });
+  });
+
+  /*
+   * Every language gets an example, and this is the way back to it.
+   *
+   * The starter used to arrive once, at boot, in whichever language the
+   * setting named - so anybody who switched to Rust got an empty script and
+   * a hundred and two blocks with no idea which two go at the top. An empty
+   * page is the worst place to start learning a language, and it is exactly
+   * where switching left you.
+   */
+  $('example-load').addEventListener('click', function () {
+    var language = state.language;
+    var apply = function () {
+      pycmd.call('starter', { language: language }).then(function (result) {
+        if (!result || !result.ok || !result.project) {
+          pycmd.toast('There is no example for ' + language + ' yet.');
+          return;
+        }
+        var start = JSON.parse(JSON.stringify(result.project));
+        if (start.language !== language) {
+          pycmd.toast('There is no example for ' + language + ' yet.');
+          return;
+        }
+        state.ids[language] = '';
+        state.drafts[language] = { name: start.name, blocks: start.blocks, file: '' };
+        stampUids(state.drafts[language].blocks);
+        state.selected = null;
+        $('name').value = start.name;
+        refresh();
+        state.untouched = true;
+        drawScript();
+        pycmd.toast('An example ' + language + ' script, ready to change.');
+      }).catch(function (error) {
+        trouble('The example did not load: ' + (error.message || error));
+      });
+    };
+    if (draft().blocks.length) {
+      ask('Replace this script?', 'The blocks in this ' + language +
+          ' script go, and an example takes their place.', apply);
+    } else {
+      apply();
+    }
   });
 
   $('askOk').addEventListener('click', function () {
