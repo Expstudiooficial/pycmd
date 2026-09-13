@@ -276,6 +276,22 @@ data class MusicPlaylist(
  * outlives this view model and every screen it draws, and comes back through
  * [MainViewModel.playback].
  */
+/** One of the smart lists - recently added, most played - and how many it holds. */
+data class MusicCollection(val id: String, val name: String, val count: Int)
+
+/** The numbers the statistics card shows. */
+data class MusicNumbers(
+    val tracks: Int = 0,
+    val playlists: Int = 0,
+    val bytes: Long = 0,
+    val duration: Long = 0,
+    val plays: Int = 0,
+    val artists: Int = 0,
+    val topArtist: String = "",
+    val videos: Int = 0,
+    val neverPlayed: Int = 0,
+)
+
 data class MusicState(
     val tracks: List<MusicTrack> = emptyList(),
     val playlists: List<MusicPlaylist> = emptyList(),
@@ -286,16 +302,46 @@ data class MusicState(
     val maxPlaylists: Int = 200,
     val busy: String = "",
     val importing: Boolean = false,
+    // What the list is narrowed to. Searching and sorting are done in Python
+    // rather than here, so that the order the screen shows and the order the
+    // player is handed are worked out by the same code - a list sorted one
+    // way and played another is the oldest bug in music players.
+    val search: String = "",
+    val sort: String = "added",
+    val collection: String = "",
+    val shown: List<MusicTrack> = emptyList(),
+    val collections: List<MusicCollection> = emptyList(),
+    val numbers: MusicNumbers = MusicNumbers(),
+    val speed: Double = 1.0,
+    val sleepMinutes: Int = 0,
+    val detail: MusicTrack? = null,
+    val detailPlaylists: List<String> = emptyList(),
 ) {
     /** The playlist the screen has open, or null when it is showing everything. */
     val current: MusicPlaylist? get() = playlists.firstOrNull { it.id == openPlaylist }
 
-    /** What the list shows: one playlist in order, or the whole library. */
+    /** True when something is narrowing the list. */
+    val filtered: Boolean get() = search.isNotBlank() || collection.isNotEmpty()
+
+    /**
+     * What the list shows.
+     *
+     * `shown` is Python's answer - searched, sorted, narrowed - and it is
+     * used whenever there is one. The fallback is the plain view, so the
+     * first frame after opening the tab has the library on it rather than
+     * nothing while a call is in flight.
+     */
     val visible: List<MusicTrack>
-        get() = current?.let { playlist ->
-            val byId = tracks.associateBy { it.id }
-            playlist.trackIds.mapNotNull { byId[it] }
-        } ?: tracks
+        get() = shown.ifEmpty {
+            if (filtered) {
+                emptyList()
+            } else {
+                current?.let { playlist ->
+                    val byId = tracks.associateBy { it.id }
+                    playlist.trackIds.mapNotNull { byId[it] }
+                } ?: tracks
+            }
+        }
 }
 
 data class PackagesState(
@@ -2687,8 +2733,138 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 hub.connect()
                 hub.setLoop(state.optString("loop", "off"))
                 hub.setShuffle(state.optBoolean("shuffle"))
+                val speed = state.optDouble("speed", 1.0)
+                _music.value = _music.value.copy(speed = speed)
+                hub.setSpeed(speed.toFloat())
             }
+
+            refreshMusicView()
+            refreshMusicNumbers()
         }
+    }
+
+    /**
+     * Asks Python for the list as it should be shown.
+     *
+     * Every narrowing - the search, the sort, the smart list, the open
+     * playlist - is decided in one place so that the order on screen and the
+     * order handed to the player cannot disagree.
+     */
+    fun refreshMusicView() {
+        viewModelScope.launch {
+            val here = _music.value
+            val reply = engine.browseMusic(
+                here.search, here.sort, here.openPlaylist, here.collection,
+            )
+            if (!reply.optBoolean("ok")) {
+                // A collection or playlist that has gone: fall back to the
+                // whole library rather than showing an empty screen with no
+                // way to explain itself.
+                _music.value = _music.value.copy(collection = "", shown = emptyList())
+                return@launch
+            }
+            _music.value = _music.value.copy(
+                shown = reply.optJSONArray("tracks").rows().map(::readTrack),
+            )
+        }
+    }
+
+    private fun refreshMusicNumbers() {
+        viewModelScope.launch {
+            val chips = engine.musicCollections()
+            val numbers = engine.musicStats()
+            _music.value = _music.value.copy(
+                collections = chips.optJSONArray("collections").rows().map { row ->
+                    MusicCollection(
+                        id = row.optString("id"),
+                        name = row.optString("name"),
+                        count = row.optInt("count"),
+                    )
+                },
+                numbers = MusicNumbers(
+                    tracks = numbers.optInt("tracks"),
+                    playlists = numbers.optInt("playlists"),
+                    bytes = numbers.optLong("bytes"),
+                    duration = numbers.optLong("duration"),
+                    plays = numbers.optInt("plays"),
+                    artists = numbers.optInt("artists"),
+                    topArtist = numbers.optString("top_artist"),
+                    videos = numbers.optInt("videos"),
+                    neverPlayed = numbers.optInt("never_played"),
+                ),
+            )
+        }
+    }
+
+    /** Types into the search box. Nothing is stored; this is a view. */
+    fun searchMusic(text: String) {
+        _music.value = _music.value.copy(search = text)
+        refreshMusicView()
+    }
+
+    fun sortMusic(sort: String) {
+        _music.value = _music.value.copy(sort = sort)
+        refreshMusicView()
+    }
+
+    /** Opens a smart list, or closes the one that is open by naming it again. */
+    fun showCollection(id: String) {
+        val wanted = if (_music.value.collection == id) "" else id
+        _music.value = _music.value.copy(collection = wanted, openPlaylist = "")
+        refreshMusicView()
+    }
+
+    /** How fast to play. Half to double; the player clamps it too. */
+    fun setMusicSpeed(speed: Double) {
+        val wanted = speed.coerceIn(0.5, 2.0)
+        _music.value = _music.value.copy(speed = wanted)
+        hub.setSpeed(wanted.toFloat())
+        viewModelScope.launch {
+            engine.rememberMusic(
+                playback.value.loop, playback.value.shuffle, playback.value.trackId,
+                _music.value.openPlaylist, wanted, _music.value.sleepMinutes,
+            )
+        }
+    }
+
+    /** Stops the music in so many minutes. Zero cancels it. */
+    fun setSleepTimer(minutes: Int) {
+        val wanted = minutes.coerceIn(0, 600)
+        _music.value = _music.value.copy(sleepMinutes = wanted)
+        hub.sleepAfter(wanted)
+        viewModelScope.launch {
+            engine.rememberMusic(
+                playback.value.loop, playback.value.shuffle, playback.value.trackId,
+                _music.value.openPlaylist, _music.value.speed, wanted,
+            )
+        }
+    }
+
+    /** Opens the sheet that shows everything about one track. */
+    fun openTrackDetail(trackId: String) {
+        viewModelScope.launch {
+            val reply = engine.describeTrack(trackId)
+            if (!reply.optBoolean("ok")) {
+                showToast(reply.optString("error", "That track is not there any more."))
+                return@launch
+            }
+            _music.value = _music.value.copy(
+                detail = readTrack(reply.optJSONObject("track") ?: JSONObject()),
+                detailPlaylists = reply.optJSONArray("playlists").strings(),
+            )
+        }
+    }
+
+    fun closeTrackDetail() {
+        _music.value = _music.value.copy(detail = null, detailPlaylists = emptyList())
+    }
+
+    /** Corrects what a track says it is. A blank field is left alone. */
+    fun setTrackDetails(trackId: String, title: String, artist: String, album: String) {
+        musicAction("Saving", { "Saved." }) {
+            engine.setTrackDetails(trackId, title, artist, album)
+        }
+        closeTrackDetail()
     }
 
     private fun readTrack(row: JSONObject) = MusicTrack(
@@ -2701,6 +2877,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         added = row.optLong("added"),
         video = row.optBoolean("video"),
         missing = row.optBoolean("missing"),
+        album = row.optString("album"),
+        plays = row.optInt("plays"),
+        lastPlayed = row.optLong("last_played"),
     )
 
     /**
@@ -2711,6 +2890,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * rewriting the library on each one would be a file write per tap.
      */
     private fun rememberPlayback(state: Playback) {
+        countIfListened(state)
+
         val key = "${state.loop}|${state.shuffle}|${state.trackId}"
         if (key == lastRemembered) return
         lastRemembered = key
@@ -2720,7 +2901,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 state.shuffle,
                 state.trackId,
                 _music.value.openPlaylist,
+                _music.value.speed,
+                _music.value.sleepMinutes,
             )
+        }
+    }
+
+    /** The track a play is being counted for, and whether it has been. */
+    private var countingTrack = ""
+    private var counted = false
+
+    /**
+     * Counts a play once the track has actually been listened to.
+     *
+     * "Played" has to mean something, or the most-played list is a list of
+     * whatever was skipped past most. Thirty seconds is the line the streaming
+     * services draw and it is a reasonable one; anything shorter than a minute
+     * counts at halfway instead, so a twenty-second clip is not unplayable.
+     *
+     * The position comes from the player rather than from a timer here, so
+     * pausing does not count and seeking to the end does not either - the
+     * check is on where the playhead is, not how long the screen has been up.
+     */
+    private fun countIfListened(state: Playback) {
+        if (state.trackId != countingTrack) {
+            countingTrack = state.trackId
+            counted = false
+        }
+        if (counted || state.trackId.isEmpty() || !state.playing) return
+
+        val enough = if (state.duration in 1 until 60_000) {
+            state.duration / 2
+        } else {
+            30_000L
+        }
+        if (state.position < enough) return
+
+        counted = true
+        val id = state.trackId
+        viewModelScope.launch {
+            engine.countPlay(id)
+            refreshMusicNumbers()
         }
     }
 
@@ -2870,7 +3091,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleShuffle() = hub.setShuffle(!playback.value.shuffle)
 
     fun openPlaylist(id: String) {
-        _music.value = _music.value.copy(openPlaylist = id)
+        // Opening a playlist puts away whichever smart list was showing:
+        // "the most played, inside Evening" is a thing nobody meant to ask
+        // for and a screen that showed it would be lying about both.
+        _music.value = _music.value.copy(openPlaylist = id, collection = "")
+        refreshMusicView()
     }
 
     fun renameTrack(id: String, title: String) {

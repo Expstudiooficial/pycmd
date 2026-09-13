@@ -651,6 +651,16 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                     },
                     onMove = { id, track, delta -> viewModel.moveInPlaylist(id, track.id, delta) },
                     onTidy = viewModel::tidyMusic,
+                    onSearch = viewModel::searchMusic,
+                    onSort = viewModel::sortMusic,
+                    onCollection = viewModel::showCollection,
+                    onOpenDetail = { track -> viewModel.openTrackDetail(track.id) },
+                    onCloseDetail = viewModel::closeTrackDetail,
+                    onSaveDetails = { track, title, artist, album ->
+                        viewModel.setTrackDetails(track.id, title, artist, album)
+                    },
+                    onSpeed = viewModel::setMusicSpeed,
+                    onSleep = viewModel::setSleepTimer,
                     pluginSections = {
                         PluginSections(
                             sectionsFor(Tab.MUSIC, installedPlugins, installedEnabled),

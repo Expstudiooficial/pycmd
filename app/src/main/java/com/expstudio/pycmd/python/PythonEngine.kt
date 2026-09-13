@@ -741,7 +741,17 @@ object PythonEngine {
                         1 -> music.callAttr(name, args[0])
                         2 -> music.callAttr(name, args[0], args[1])
                         3 -> music.callAttr(name, args[0], args[1], args[2])
-                        else -> music.callAttr(name, args[0], args[1], args[2], args[3])
+                        4 -> music.callAttr(name, args[0], args[1], args[2], args[3])
+                        5 -> music.callAttr(
+                            name, args[0], args[1], args[2], args[3], args[4],
+                        )
+                        // `remember` takes six since 2.6.0. The list used to
+                        // stop at four and silently drop everything past it,
+                        // which is the kind of limit that is fine until the
+                        // day a call quietly loses its last argument.
+                        else -> music.callAttr(
+                            name, args[0], args[1], args[2], args[3], args[4], args[5],
+                        )
                     }.toString(),
                 )
             }.getOrElse { failed(it.message.orEmpty()) }
@@ -771,13 +781,47 @@ object PythonEngine {
     suspend fun moveInPlaylist(playlistId: String, trackId: String, delta: Int): JSONObject =
         musicCall("move_in_playlist", playlistId, trackId, delta)
 
-    /** Keeps the loop and shuffle choice, and what was playing. */
+    /** Keeps the loop and shuffle choice, the speed, the timer, and what was playing. */
     suspend fun rememberMusic(
         loop: String,
         shuffle: Boolean,
         trackId: String,
         playlistId: String,
-    ): JSONObject = musicCall("remember", loop, shuffle, trackId, playlistId)
+        speed: Double = 1.0,
+        sleepMinutes: Int = 0,
+    ): JSONObject =
+        musicCall("remember", loop, shuffle, trackId, playlistId, speed, sleepMinutes)
+
+    /** The library, searched, sorted and narrowed to a smart list. */
+    suspend fun browseMusic(
+        search: String,
+        sort: String,
+        playlistId: String,
+        collection: String,
+    ): JSONObject = musicCall("browse", search, sort, playlistId, collection)
+
+    /** The smart lists that have anything in them. */
+    suspend fun musicCollections(): JSONObject = musicCall("collections")
+
+    /** Counts a play. Called once a track has been going long enough to count. */
+    suspend fun countPlay(trackId: String): JSONObject = musicCall("played", trackId)
+
+    /** What was played, most recent first. */
+    suspend fun musicHistory(limit: Int = 25): JSONObject = musicCall("history", limit)
+
+    /** Everything known about one track. */
+    suspend fun describeTrack(trackId: String): JSONObject = musicCall("describe", trackId)
+
+    /** Corrects a track's title, artist or album. Blank leaves one alone. */
+    suspend fun setTrackDetails(
+        trackId: String,
+        title: String,
+        artist: String,
+        album: String,
+    ): JSONObject = musicCall("set_details", trackId, title, artist, album)
+
+    /** The numbers: how many, how long, how often, and by whom. */
+    suspend fun musicStats(): JSONObject = musicCall("stats")
 
     /** Drops rows whose file has gone, and files no row points at. */
     suspend fun tidyMusic(): JSONObject = musicCall("tidy")

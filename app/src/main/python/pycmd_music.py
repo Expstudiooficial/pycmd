@@ -51,6 +51,13 @@ __all__ = [
     "remember",
     "tidy",
     "stats",
+    "browse",
+    "played",
+    "history",
+    "collections",
+    "describe",
+    "set_details",
+    "SORTS",
     "MAX_TRACKS",
     "MAX_PLAYLISTS",
     "MAX_PLAYLIST_TRACKS",
@@ -188,6 +195,17 @@ def _decorate(row: dict) -> dict:
         "duration": int(row.get("duration", 0) or 0),
         "added": row.get("added", 0),
         "video": bool(row.get("video", False)),
+        "album": row.get("album", ""),
+        # How a library stops being a list and starts being *yours*: the app
+        # can offer what you actually listen to rather than what you happened
+        # to import last. Both default to zero, so a library written by an
+        # older build reads as "never played" rather than breaking.
+        "plays": int(row.get("plays", 0) or 0),
+        # Milliseconds since 1970, or 0 for never. See `played`.
+        "last_played": int(row.get("last_played", 0) or 0),
+        # Which play this was, counting from the first ever. Orders a history
+        # that a timestamp cannot. See `played`.
+        "play_order": int(row.get("play_order", 0) or 0),
         # A file can still go missing - a delete that half worked, storage
         # cleared under the app - and saying so is better than a row that
         # fails the moment somebody presses it.
@@ -236,6 +254,14 @@ def library() -> dict:
     if state.get("loop") not in LOOP_MODES:
         state["loop"] = "off"
     state["shuffle"] = bool(state.get("shuffle", False))
+    try:
+        state["speed"] = min(2.0, max(0.5, float(state.get("speed", 1.0))))
+    except (TypeError, ValueError):
+        state["speed"] = 1.0
+    try:
+        state["sleep_minutes"] = max(0, min(600, int(state.get("sleep_minutes", 0))))
+    except (TypeError, ValueError):
+        state["sleep_minutes"] = 0
 
     return {
         "ok": True,
@@ -252,13 +278,249 @@ def library() -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Finding things in it
+# ---------------------------------------------------------------------------
+#
+# A library of eight tracks is a list. A library of four hundred is a thing
+# you search, and the difference is not cosmetic: without a way in, the only
+# track anybody ever plays is one of the six at the top. Everything here is
+# a *view* of the same rows - nothing is copied, nothing is stored twice -
+# and it is Python rather than Kotlin so that it can be tested.
+
+SORTS = ("added", "title", "artist", "album", "longest", "shortest",
+         "plays", "recent")
+
+# Smart collections. Each is a name, a rule, and how many to show. They are
+# worked out every time rather than stored, because a stored "most played"
+# is wrong the moment you play something.
+COLLECTIONS = ("recent", "most_played", "never_played", "longest", "videos")
+
+
+def _matches(track: dict, needle: str) -> bool:
+    if not needle:
+        return True
+    hay = " ".join((track.get("title", ""), track.get("artist", ""),
+                    track.get("album", ""), track.get("name", ""))).lower()
+    # Every word has to appear somewhere, in any order: "ada blue" finds
+    # "Blue Monday" by Ada as readily as typing it the other way round.
+    return all(word in hay for word in needle.lower().split())
+
+
+def _ordered(tracks: list, sort: str) -> list:
+    sort = sort if sort in SORTS else "added"
+    if sort == "title":
+        return sorted(tracks, key=lambda t: (t["title"].lower(), t["added"]))
+    if sort == "artist":
+        return sorted(tracks, key=lambda t: (t["artist"].lower() or "\uffff",
+                                             t["title"].lower()))
+    if sort == "album":
+        return sorted(tracks, key=lambda t: (t["album"].lower() or "\uffff",
+                                             t["title"].lower()))
+    if sort == "longest":
+        return sorted(tracks, key=lambda t: -t["duration"])
+    if sort == "shortest":
+        return sorted(tracks, key=lambda t: (t["duration"] or 1 << 30))
+    if sort == "plays":
+        return sorted(tracks, key=lambda t: (-t["plays"], t["title"].lower()))
+    if sort == "recent":
+        return sorted(tracks, key=lambda t: (-t["play_order"], -t["last_played"]))
+    return sorted(tracks, key=lambda t: -t["added"])
+
+
+def browse(search: str = "", sort: str = "added", playlist_id: str = "",
+           collection: str = "") -> dict:
+    """One screenful of the library: searched, sorted, and said out loud.
+
+    `collection` is a smart list - the recently added, the most played, the
+    ones never played, the long ones, the videos - and it narrows before the
+    search does, so "most played, with 'blue' in it" means what it says.
+    """
+    everything = library()
+    if not everything.get("ok"):
+        return {"ok": False, "error": "the library is not ready", "tracks": []}
+
+    tracks = list(everything["tracks"])
+    name = "Everything"
+
+    if playlist_id:
+        found = next((p for p in everything["playlists"] if p["id"] == playlist_id), None)
+        if found is None:
+            return {"ok": False, "error": "no such playlist", "tracks": []}
+        by_id = {track["id"]: track for track in tracks}
+        tracks = [by_id[key] for key in found["tracks"] if key in by_id]
+        name = found["name"]
+
+    collection = str(collection or "").strip().lower()
+    if collection == "recent":
+        tracks = _ordered(tracks, "added")[:50]
+        name = "Recently added"
+    elif collection == "most_played":
+        tracks = [t for t in tracks if t["plays"] > 0]
+        tracks = _ordered(tracks, "plays")[:50]
+        name = "Most played"
+    elif collection == "never_played":
+        tracks = [t for t in tracks if t["plays"] == 0]
+        name = "Never played"
+    elif collection == "longest":
+        tracks = _ordered(tracks, "longest")[:50]
+        name = "The long ones"
+    elif collection == "videos":
+        tracks = [t for t in tracks if t["video"]]
+        name = "Video files"
+    elif collection:
+        return {"ok": False, "error": f"no collection called {collection}",
+                "tracks": []}
+
+    needle = str(search or "").strip()
+    if needle:
+        tracks = [t for t in tracks if _matches(t, needle)]
+
+    # A collection has already decided its own order; a plain list has not.
+    if collection not in ("recent", "most_played", "longest"):
+        tracks = _ordered(tracks, sort)
+
+    return {
+        "ok": True,
+        "name": name,
+        "tracks": tracks,
+        "count": len(tracks),
+        "of": len(everything["tracks"]),
+        "search": needle,
+        "sort": sort if sort in SORTS else "added",
+        "collection": collection,
+        "playlist": playlist_id,
+        "sorts": list(SORTS),
+        "collections": list(COLLECTIONS),
+    }
+
+
+def collections() -> dict:
+    """What each smart list would hold, for the row of chips above the list."""
+    everything = library()
+    if not everything.get("ok"):
+        return {"ok": False, "collections": []}
+    tracks = everything["tracks"]
+    rows = [
+        {"id": "recent", "name": "Recently added",
+         "count": min(len(tracks), 50)},
+        {"id": "most_played", "name": "Most played",
+         "count": min(sum(1 for t in tracks if t["plays"] > 0), 50)},
+        {"id": "never_played", "name": "Never played",
+         "count": sum(1 for t in tracks if t["plays"] == 0)},
+        {"id": "longest", "name": "The long ones",
+         "count": min(len(tracks), 50)},
+        {"id": "videos", "name": "Video files",
+         "count": sum(1 for t in tracks if t["video"])},
+    ]
+    return {"ok": True, "collections": [row for row in rows if row["count"]]}
+
+
+def played(track_id: str) -> dict:
+    """Counts one play, and says when.
+
+    Called by the player when a track has been going long enough to count as
+    listened to rather than skipped past - that judgement is Kotlin's, because
+    only Kotlin knows how long it has been playing.
+    """
+    data = _read()
+    row = _find(data["tracks"], str(track_id or ""))
+    if row is None:
+        return {"ok": False, "error": "no such track"}
+    row["plays"] = int(row.get("plays", 0) or 0) + 1
+    # Milliseconds, where `added` is seconds, because a timestamp is what a
+    # screen shows a person.
+    row["last_played"] = int(time.time() * 1000)
+
+    # And a counter, because a timestamp is not enough to *order* by. Skipping
+    # through a queue plays four things well inside one millisecond - the test
+    # suite does exactly that - and then "recently played" comes back in
+    # whatever order the list happened to be in. A number that only ever goes
+    # up cannot tie, cannot be confused by the clock being put back, and costs
+    # one integer.
+    state = data["state"] if isinstance(data.get("state"), dict) else {}
+    nth = int(state.get("play_order", 0) or 0) + 1
+    state["play_order"] = nth
+    data["state"] = state
+    row["play_order"] = nth
+
+    _write(data)
+    return {"ok": True, "id": row["id"], "plays": row["plays"],
+            "last_played": row["last_played"], "play_order": nth}
+
+
+def history(limit: int = 25) -> dict:
+    """What was played, most recent first."""
+    everything = library()
+    if not everything.get("ok"):
+        return {"ok": False, "tracks": []}
+    played_tracks = [t for t in everything["tracks"] if t["last_played"]]
+    played_tracks.sort(key=lambda t: (-t["play_order"], -t["last_played"]))
+    return {"ok": True, "tracks": played_tracks[:max(1, int(limit or 25))]}
+
+
+def describe(track_id: str) -> dict:
+    """Everything known about one track, for the screen that shows one."""
+    everything = library()
+    if not everything.get("ok"):
+        return {"ok": False, "error": "the library is not ready"}
+    track = next((t for t in everything["tracks"] if t["id"] == track_id), None)
+    if track is None:
+        return {"ok": False, "error": "no such track"}
+    holding = [p["name"] for p in everything["playlists"]
+               if track_id in p["tracks"]]
+    return {"ok": True, "track": track, "playlists": holding,
+            "extension": os.path.splitext(track["name"])[1].lower()}
+
+
+def set_details(track_id: str, title: str = "", artist: str = "",
+                album: str = "") -> dict:
+    """Corrects what a track says it is.
+
+    A file picked out of Downloads is called `track_03_final_v2.mp3` and there
+    is nothing the app can do about that except let somebody fix it. Blank
+    means "leave this one alone" rather than "clear it", because a screen that
+    wipes the artist when you only meant to fix the title is a screen nobody
+    uses twice.
+    """
+    data = _read()
+    row = _find(data["tracks"], str(track_id or ""))
+    if row is None:
+        return {"ok": False, "error": "no such track"}
+    if str(title).strip():
+        row["title"] = _clean(str(title))
+    if str(artist).strip():
+        row["artist"] = _clean(str(artist), 70)
+    if str(album).strip():
+        row["album"] = _clean(str(album), 70)
+    _write(data)
+    return {"ok": True, "track": _decorate(row)}
+
+
 def stats() -> dict:
     """The counts alone, for a screen that only wants a badge."""
     data = _read()
+    tracks = data["tracks"]
+    durations = [int(row.get("duration", 0) or 0) for row in tracks]
+    plays = [int(row.get("plays", 0) or 0) for row in tracks]
+
+    artists = {}
+    for row in tracks:
+        who = (row.get("artist") or "").strip()
+        if who:
+            artists[who] = artists.get(who, 0) + 1
+    top_artist = max(artists.items(), key=lambda kv: kv[1])[0] if artists else ""
+
     return {
-        "tracks": len(data["tracks"]),
+        "tracks": len(tracks),
         "playlists": len(data["playlists"]),
-        "bytes": sum(_size(row.get("file", "")) for row in data["tracks"]),
+        "bytes": sum(_size(row.get("file", "")) for row in tracks),
+        "duration": sum(durations),
+        "plays": sum(plays),
+        "artists": len(artists),
+        "top_artist": top_artist,
+        "videos": sum(1 for row in tracks if row.get("video")),
+        "never_played": sum(1 for count in plays if not count),
     }
 
 
@@ -486,7 +748,8 @@ def move_in_playlist(playlist_id: str, track_id: str, delta: int) -> dict:
 
 
 def remember(loop: str = "off", shuffle: bool = False,
-             track_id: str = "", playlist_id: str = "") -> dict:
+             track_id: str = "", playlist_id: str = "",
+             speed: float = 1.0, sleep_minutes: int = 0) -> dict:
     """Keeps what was playing, so opening the tab again picks it up.
 
     Only the choice is remembered, never the position: resuming a song from
@@ -499,6 +762,13 @@ def remember(loop: str = "off", shuffle: bool = False,
         "shuffle": bool(shuffle),
         "track": str(track_id or ""),
         "playlist": str(playlist_id or ""),
+        # Half speed to double, and nothing outside it: a player stuck at 0.05
+        # sounds broken rather than slow, and there is no way back from a
+        # setting you cannot hear the effect of.
+        "speed": min(2.0, max(0.5, float(speed or 1.0))),
+        # Minutes from now, not a clock time: a stored deadline that passed
+        # while the app was closed would stop the music the moment it opened.
+        "sleep_minutes": max(0, min(600, int(sleep_minutes or 0))),
         "at": int(time.time()),
     }
     _write(data)

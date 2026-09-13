@@ -34,6 +34,10 @@ data class MusicTrack(
     val added: Long = 0,
     val video: Boolean = false,
     val missing: Boolean = false,
+    val album: String = "",
+    val plays: Int = 0,
+    /** Milliseconds since 1970, or 0 for never. */
+    val lastPlayed: Long = 0,
 )
 
 /** What is playing right now, as much of it as a screen needs to draw. */
@@ -73,6 +77,10 @@ data class Playback(
  * a player in the notification shade of somebody who never opened the tab.
  */
 class MusicHub(context: Context) {
+    /** The sleep timer, and when it goes off. See [sleepAfter]. */
+    private var sleepJob: Job? = null
+    private var sleepEndsAt: Long = 0
+
 
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
@@ -231,6 +239,43 @@ class MusicHub(context: Context) {
     }
 
     /** Clears the queue, which is also what takes the notification away. */
+    /**
+     * How fast to play, with the pitch corrected.
+     *
+     * Media3 does this properly: `setPlaybackSpeed` time-stretches rather
+     * than resampling, so a podcast at 1.5x is faster and not a chipmunk.
+     * Clamped here as well as in Python because this is the call that reaches
+     * the audio, and a speed of zero is a stall that looks like a crash.
+     */
+    fun setSpeed(speed: Float) = withController { player ->
+        player.setPlaybackSpeed(speed.coerceIn(0.5f, 2.0f))
+    }
+
+    /**
+     * Stops the music after so many minutes. Zero cancels a timer that is set.
+     *
+     * A coroutine rather than an alarm: the service is already alive while
+     * something is playing, and a sleep timer that survives the player being
+     * killed would turn the music off during the next session instead.
+     */
+    fun sleepAfter(minutes: Int) {
+        sleepJob?.cancel()
+        sleepJob = null
+        sleepEndsAt = 0
+        if (minutes <= 0) return
+        val wait = minutes.coerceAtMost(600) * 60_000L
+        sleepEndsAt = System.currentTimeMillis() + wait
+        sleepJob = scope.launch {
+            delay(wait)
+            if (!isActive) return@launch
+            sleepEndsAt = 0
+            withController { player -> player.pause() }
+        }
+    }
+
+    /** When the sleep timer will fire, or 0 when none is set. */
+    fun sleepEndsAt(): Long = sleepEndsAt
+
     fun stop() {
         queue = emptyList()
         queueName = ""
@@ -252,6 +297,9 @@ class MusicHub(context: Context) {
     }
 
     fun release() {
+        sleepJob?.cancel()
+        sleepJob = null
+        sleepEndsAt = 0
         stopTicking()
         controller?.let { live ->
             live.removeListener(listener)

@@ -15,6 +15,7 @@ check that a rename works would be testing the wrong thing.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
 
@@ -214,6 +215,171 @@ check("a corrupt registry reads as an empty library, not a crash",
       broken["ok"] and broken["tracks"] == [], broken)
 recovered = pycmd_music.create_playlist("After The Storm")
 check("and it can be written again", recovered.get("ok"), recovered)
+
+say()
+say("== searching, sorting and the smart lists ==")
+# A fresh library, so the counts below are the ones written here rather than
+# whatever the checks above left behind.
+_root2 = tempfile.mkdtemp(prefix="pycmd-browse-")
+_folder2 = pycmd_music.configure(_root2)
+
+
+def _put2(name: str, size: int = 2048) -> str:
+    path = os.path.join(_folder2, name)
+    with open(path, "wb") as handle:
+        handle.write(b"\0" * size)
+    return path
+
+
+_blue = pycmd_music.adopt(_put2("a.mp3"), "Blue Monday", "New Order", 270000)["id"]
+_ada = pycmd_music.adopt(_put2("b.mp3"), "Ada's Waltz", "Ada Lovelace", 95000)["id"]
+_long = pycmd_music.adopt(_put2("c.mp3"), "The Long One", "Somebody", 900000)["id"]
+_clip = pycmd_music.adopt(_put2("d.mp4"), "A Clip", "Nobody", 30000)["id"]
+
+_all = pycmd_music.browse()
+check("browsing with nothing set shows everything",
+      _all["ok"] and _all["count"] == 4, _all.get("count"))
+check("and says what it is looking at", _all["name"] == "Everything", _all["name"])
+
+check("searching by title finds it",
+      [t["id"] for t in pycmd_music.browse("monday")["tracks"]] == [_blue],
+      pycmd_music.browse("monday")["tracks"])
+check("searching by artist finds it",
+      [t["id"] for t in pycmd_music.browse("lovelace")["tracks"]] == [_ada])
+check("two words in any order still find it",
+      [t["id"] for t in pycmd_music.browse("order blue")["tracks"]] == [_blue],
+      pycmd_music.browse("order blue")["tracks"])
+check("and a word that is nowhere finds nothing",
+      pycmd_music.browse("zzz")["count"] == 0)
+
+check("sorting by title",
+      [t["title"] for t in pycmd_music.browse(sort="title")["tracks"]][0]
+      == "A Clip",
+      [t["title"] for t in pycmd_music.browse(sort="title")["tracks"]])
+check("sorting by artist",
+      [t["artist"] for t in pycmd_music.browse(sort="artist")["tracks"]][0]
+      == "Ada Lovelace")
+check("sorting by longest first",
+      [t["id"] for t in pycmd_music.browse(sort="longest")["tracks"]][0] == _long)
+check("sorting by shortest first",
+      [t["id"] for t in pycmd_music.browse(sort="shortest")["tracks"]][0] == _clip)
+check("a sort nobody has heard of falls back rather than failing",
+      pycmd_music.browse(sort="sideways")["sort"] == "added")
+
+check("nothing has been played yet",
+      pycmd_music.browse(collection="never_played")["count"] == 4)
+_first_play = pycmd_music.played(_blue)
+check("playing one counts", _first_play["ok"] and _first_play["plays"] == 1, _first_play)
+pycmd_music.played(_blue)
+pycmd_music.played(_ada)
+check("and counts again", pycmd_music.browse(sort="plays")["tracks"][0]["id"] == _blue,
+      [(t["title"], t["plays"]) for t in pycmd_music.browse(sort="plays")["tracks"]])
+check("the most played list holds only what was played",
+      pycmd_music.browse(collection="most_played")["count"] == 2)
+check("and never played holds the rest",
+      pycmd_music.browse(collection="never_played")["count"] == 2)
+check("a play recorded is a play remembered after a reload",
+      pycmd_music.describe(_blue)["track"]["plays"] == 2,
+      pycmd_music.describe(_blue)["track"])
+check("playing something that is not there is refused",
+      not pycmd_music.played("nope")["ok"])
+
+check("videos are their own list",
+      [t["id"] for t in pycmd_music.browse(collection="videos")["tracks"]] == [_clip])
+check("a collection nobody has heard of is refused",
+      not pycmd_music.browse(collection="sideways")["ok"])
+check("a collection can be searched inside",
+      pycmd_music.browse("blue", collection="most_played")["count"] == 1)
+
+check("history is most recent first",
+      [t["id"] for t in pycmd_music.history()["tracks"]][0] == _ada,
+      [t["title"] for t in pycmd_music.history()["tracks"]])
+# Three plays inside one millisecond, which is what skipping through a queue
+# looks like. A timestamp cannot order these; the counter can.
+_fast_a = pycmd_music.played(_long)
+_fast_b = pycmd_music.played(_clip)
+_fast_c = pycmd_music.played(_long)
+check("plays inside the same millisecond still come back in order",
+      [t["id"] for t in pycmd_music.history()["tracks"]][:2] == [_long, _clip],
+      [(t["title"], t["last_played"], t["play_order"])
+       for t in pycmd_music.history()["tracks"]])
+check("and the counter only ever goes up",
+      _fast_a["play_order"] < _fast_b["play_order"] < _fast_c["play_order"],
+      [_fast_a["play_order"], _fast_b["play_order"], _fast_c["play_order"]])
+check("and holds only what was played",
+      len(pycmd_music.history()["tracks"]) == 4,
+      [t["title"] for t in pycmd_music.history()["tracks"]])
+
+_told = pycmd_music.describe(_blue)
+check("one track can be described",
+      _told["ok"] and _told["track"]["title"] == "Blue Monday", _told)
+check("and it says which file it is", _told["extension"] == ".mp3", _told.get("extension"))
+check("describing something that is not there is refused",
+      not pycmd_music.describe("nope")["ok"])
+
+_fixed = pycmd_music.set_details(_clip, title="A Better Name", album="Odds and Ends")
+check("details can be corrected",
+      _fixed["ok"] and _fixed["track"]["title"] == "A Better Name", _fixed)
+check("and the album sticks", _fixed["track"]["album"] == "Odds and Ends")
+check("a blank field leaves the old one alone",
+      pycmd_music.set_details(_clip, title="")["track"]["title"] == "A Better Name")
+check("and the artist was not wiped on the way past",
+      pycmd_music.describe(_clip)["track"]["artist"] == "Nobody")
+
+_playlist = pycmd_music.create_playlist("Evening")["id"]
+pycmd_music.add_to_playlist(_playlist, [_blue, _long])
+check("a playlist can be browsed",
+      pycmd_music.browse(playlist_id=_playlist)["count"] == 2)
+check("and searched inside",
+      pycmd_music.browse("long", playlist_id=_playlist)["count"] == 1)
+check("describing a track says which playlists hold it",
+      pycmd_music.describe(_blue)["playlists"] == ["Evening"])
+check("a playlist that is not there is refused",
+      not pycmd_music.browse(playlist_id="nope")["ok"])
+
+_numbers = pycmd_music.stats()
+check("statistics add up the playing time",
+      _numbers["duration"] == 270000 + 95000 + 900000 + 30000, _numbers)
+check("and count the plays", _numbers["plays"] == 6, _numbers)
+check("and name the artist with the most",
+      _numbers["artists"] == 4 and _numbers["top_artist"], _numbers)
+
+say()
+say("== speed and the sleep timer ==")
+_kept = pycmd_music.remember(loop="all", speed=1.5, sleep_minutes=30)
+check("both are remembered",
+      _kept["state"]["speed"] == 1.5 and _kept["state"]["sleep_minutes"] == 30, _kept)
+check("a speed nobody could hear is pulled back into range",
+      pycmd_music.remember(speed=0.01)["state"]["speed"] == 0.5)
+check("and one nobody could follow is too",
+      pycmd_music.remember(speed=9)["state"]["speed"] == 2.0)
+check("a sleep timer of days is not a sleep timer",
+      pycmd_music.remember(sleep_minutes=99999)["state"]["sleep_minutes"] == 600)
+pycmd_music.remember(loop="one", shuffle=True, speed=1.25, sleep_minutes=15)
+check("the library reads them back",
+      pycmd_music.library()["state"]["speed"] == 1.25
+      and pycmd_music.library()["state"]["sleep_minutes"] == 15
+      and pycmd_music.library()["state"]["loop"] == "one",
+      pycmd_music.library()["state"])
+
+# Back to the library the checks below expect.
+pycmd_music.configure(root)
+
+say()
+say("== the screen and the library agree on the sorts ==")
+# The Music screen names its sorts in Kotlin so it can order them and give
+# them words. The ids have to be ones this module knows, or a chip does
+# nothing and nobody finds out until somebody presses it.
+_screen = os.path.join(ROOT, "app", "src", "main", "java", "com", "expstudio",
+                       "pycmd", "ui", "MusicScreen.kt")
+with open(_screen, encoding="utf-8") as _handle:
+    _kotlin = _handle.read()
+_block = _kotlin.split("private val SORT_LABELS = listOf(", 1)[-1].split(")", 1)[0]
+_ids = re.findall(r'"([a-z_]+)" to "', _block)
+check("the screen offers some sorts", len(_ids) >= 6, _ids)
+check("and every one of them is a sort this module knows",
+      all(sort in pycmd_music.SORTS for sort in _ids),
+      [sort for sort in _ids if sort not in pycmd_music.SORTS])
 
 say()
 say("== limits ==")

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +35,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.expstudio.pycmd.music.MusicTrack
@@ -58,6 +63,27 @@ import com.expstudio.pycmd.music.Playback
  * they want to hear, and the player is told to ignore the picture rather than
  * anything being converted at import time.
  */
+
+/**
+ * The sorts, and what to call them.
+ *
+ * Named here rather than taken from Python's `SORTS` so the screen can put
+ * them in a sensible order and give them words instead of keys - "Longest"
+ * reads better than "longest", and the order they are offered in is a design
+ * decision rather than a data one. The ids are Python's; `tools/test_music.py`
+ * checks that every one of them is a sort Python knows.
+ */
+private val SORT_LABELS = listOf(
+    "added" to "Newest",
+    "title" to "Title",
+    "artist" to "Artist",
+    "album" to "Album",
+    "plays" to "Most played",
+    "recent" to "Recently played",
+    "longest" to "Longest",
+    "shortest" to "Shortest",
+)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MusicScreen(
@@ -84,6 +110,14 @@ fun MusicScreen(
     onRemoveFromPlaylist: (String, MusicTrack) -> Unit,
     onMove: (String, MusicTrack, Int) -> Unit,
     onTidy: () -> Unit,
+    onSearch: (String) -> Unit = {},
+    onSort: (String) -> Unit = {},
+    onCollection: (String) -> Unit = {},
+    onOpenDetail: (MusicTrack) -> Unit = {},
+    onCloseDetail: () -> Unit = {},
+    onSaveDetails: (MusicTrack, String, String, String) -> Unit = { _, _, _, _ -> },
+    onSpeed: (Double) -> Unit = {},
+    onSleep: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
     /** Sections plugins have added to this screen; empty when none are on. */
     pluginSections: @Composable () -> Unit = {},
@@ -174,6 +208,85 @@ fun MusicScreen(
             }
         }
 
+        if (state.tracks.size >= 6) {
+            item {
+                PyCard {
+                    OutlinedTextField(
+                        value = state.search,
+                        onValueChange = onSearch,
+                        label = { Text("Search this library") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        leadingIcon = {
+                            Icon(
+                                PyIcons.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        trailingIcon = {
+                            if (state.search.isNotEmpty()) {
+                                IconButton(onClick = { onSearch("") }) {
+                                    Icon(
+                                        PyIcons.Clear,
+                                        contentDescription = "Clear the search",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Sort by",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    FlowRow(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        SORT_LABELS.forEach { (id, label) ->
+                            PlaylistChip(label, state.sort == id) { onSort(id) }
+                        }
+                    }
+
+                    if (state.collections.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Or look at",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        FlowRow(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            state.collections.forEach { row ->
+                                PlaylistChip(
+                                    "${row.name}  ${row.count}",
+                                    state.collection == row.id,
+                                ) { onCollection(row.id) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (state.playlists.isNotEmpty()) {
             item { SectionTitle("Playlists") }
             item {
@@ -239,7 +352,32 @@ fun MusicScreen(
         item { pluginSections() }
 
         item {
-            SectionTitle(if (open != null) "In ${open.name}" else "Tracks")
+            SectionTitle(
+                when {
+                    state.collection.isNotEmpty() ->
+                        state.collections.firstOrNull { it.id == state.collection }?.name
+                            ?: "Tracks"
+                    open != null -> "In ${open.name}"
+                    else -> "Tracks"
+                },
+            )
+        }
+
+        if (state.filtered || state.search.isNotEmpty()) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${visible.size} of ${state.tracks.size}" +
+                            if (state.search.isNotEmpty()) " matching \"${state.search}\"" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { onSearch(""); onCollection("") }) {
+                        Text("Show everything")
+                    }
+                }
+            }
         }
 
         if (visible.isEmpty()) {
@@ -271,13 +409,113 @@ fun MusicScreen(
                 onExpand = { expanded = if (expanded == track.id) "" else track.id },
                 onAdd = { addingTo = track },
                 onRename = { renamingTrack = track },
+                onDetails = { onOpenDetail(track) },
                 onRemove = { removingTrack = track },
                 onTakeOut = { open?.let { onRemoveFromPlaylist(it.id, track) } },
                 onMove = { delta -> open?.let { onMove(it.id, track, delta) } },
             )
         }
 
+        if (state.tracks.isNotEmpty()) {
+            item { SectionTitle("Listening") }
+            item {
+                PyCard {
+                    Text(
+                        "Speed  ${"%.2f".format(state.speed)}x",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "The pitch is corrected, so faster is faster and not higher.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    FlowRow(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(0.5, 0.75, 1.0, 1.25, 1.5, 2.0).forEach { rate ->
+                            PlaylistChip(
+                                if (rate == 1.0) "Normal" else "${rate}x",
+                                kotlin.math.abs(state.speed - rate) < 0.01,
+                            ) { onSpeed(rate) }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        if (state.sleepMinutes > 0) {
+                            "Stopping in ${state.sleepMinutes} minutes"
+                        } else {
+                            "Sleep timer"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "Counted from now, not from a clock time: a timer set last " +
+                            "night should not stop the music this morning.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    FlowRow(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(0, 15, 30, 45, 60, 90).forEach { minutes ->
+                            PlaylistChip(
+                                if (minutes == 0) "Off" else "$minutes min",
+                                state.sleepMinutes == minutes,
+                            ) { onSleep(minutes) }
+                        }
+                    }
+                }
+            }
+
+            item { SectionTitle("This library") }
+            item {
+                PyCard {
+                    val numbers = state.numbers
+                    LibraryFact("Tracks", "${numbers.tracks}")
+                    LibraryFact("Playing time", readableLength(numbers.duration))
+                    LibraryFact("On disk", readableSize(numbers.bytes))
+                    LibraryFact("Plays counted", "${numbers.plays}")
+                    if (numbers.artists > 0) {
+                        LibraryFact("Artists", "${numbers.artists}")
+                    }
+                    if (numbers.topArtist.isNotEmpty()) {
+                        LibraryFact("Most of anyone", numbers.topArtist)
+                    }
+                    if (numbers.videos > 0) {
+                        LibraryFact("Video files", "${numbers.videos}")
+                    }
+                    if (numbers.neverPlayed > 0) {
+                        LibraryFact("Never played", "${numbers.neverPlayed}")
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "A play is counted once a track has been going for thirty " +
+                            "seconds, so skipping past something does not make it " +
+                            "your most played.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
         item { Spacer(Modifier.height(20.dp)) }
+    }
+
+    state.detail?.let { track ->
+        TrackDetailDialog(
+            track = track,
+            playlists = state.detailPlaylists,
+            onDismiss = onCloseDetail,
+            onSave = { title, artist, album -> onSaveDetails(track, title, artist, album) },
+        )
     }
 
     if (naming) {
@@ -615,6 +853,7 @@ private fun TrackRow(
     onExpand: () -> Unit,
     onAdd: () -> Unit,
     onRename: () -> Unit,
+    onDetails: () -> Unit,
     onRemove: () -> Unit,
     onTakeOut: () -> Unit,
     onMove: (Int) -> Unit,
@@ -706,6 +945,7 @@ private fun TrackRow(
                 }
                 TextButton(onClick = onAdd) { Text("Add to playlist") }
                 TextButton(onClick = onRename) { Text("Rename") }
+                TextButton(onClick = onDetails) { Text("Details") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (inPlaylist != null) {
@@ -717,6 +957,99 @@ private fun TrackRow(
             }
         }
     }
+}
+
+/** One line of the statistics card: a label on the left, a number on the right. */
+@Composable
+private fun LibraryFact(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+    Spacer(Modifier.height(4.dp))
+}
+
+/**
+ * Everything about one track, and the three fields worth correcting.
+ *
+ * A file picked out of Downloads is called `track_03_final_v2.mp3`, and the
+ * only thing an app can do about that is let somebody fix it. A blank field
+ * leaves the old value alone rather than clearing it - a dialog that wipes
+ * the artist because you only meant to fix the title is one nobody opens
+ * twice.
+ */
+@Composable
+private fun TrackDetailDialog(
+    track: MusicTrack,
+    playlists: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit,
+) {
+    var title by remember(track.id) { mutableStateOf(track.title) }
+    var artist by remember(track.id) { mutableStateOf(track.artist) }
+    var album by remember(track.id) { mutableStateOf(track.album) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(18.dp),
+        title = { Text("Track details", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column {
+                DetailField("Title", title) { title = it }
+                Spacer(Modifier.height(8.dp))
+                DetailField("Artist", artist) { artist = it }
+                Spacer(Modifier.height(8.dp))
+                DetailField("Album", album) { album = it }
+                Spacer(Modifier.height(12.dp))
+                LibraryFact("File", track.file.substringAfterLast('/'))
+                LibraryFact("Length", readableLength(track.duration))
+                LibraryFact("Size", readableSize(track.bytes))
+                LibraryFact(
+                    "Played",
+                    if (track.plays == 0) "never" else "${track.plays} time(s)",
+                )
+                if (track.video) LibraryFact("Kind", "a video, played for its sound")
+                if (playlists.isNotEmpty()) {
+                    LibraryFact("In playlists", playlists.joinToString(", "))
+                }
+                if (track.missing) {
+                    Text(
+                        "The file behind this track has gone. Tidy up will remove it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(title.trim(), artist.trim(), album.trim()) }) {
+                Text("Save")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun DetailField(label: String, value: String, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label) },
+        singleLine = true,
+        shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** `3:07`, or `1:02:11` when it needs the hour. */
