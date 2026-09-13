@@ -1440,12 +1440,31 @@ BRIDGE = """
   // panel can mark anything else with `data-pycmd-drag`.
   function grabsDrag(node) {
     while (node && node.nodeType === 1 && node !== document.body) {
-      var tag = (node.tagName || '').toLowerCase();
-      var type = (node.getAttribute('type') || '').toLowerCase();
-      if (tag === 'input' && (type === 'range' || type === 'color')) return true;
-      if (node.hasAttribute && node.hasAttribute('data-pycmd-drag')) return true;
-      var style = window.getComputedStyle(node);
-      if (style && style.touchAction === 'none') return true;
+      // Every one of these is guarded. A node that does not answer one of
+      // them - and there are more of those about than you would think: SVG
+      // elements, a shadow host, whatever a library put in the tree - used to
+      // throw, and the throw took the *other* signal down with it, so a panel
+      // with one odd element in it silently lost its scrolling as well.
+      var tag = '';
+      try { tag = String(node.tagName || '').toLowerCase(); } catch (error) { tag = ''; }
+
+      if (tag === 'input' && typeof node.getAttribute === 'function') {
+        var type = '';
+        try { type = String(node.getAttribute('type') || '').toLowerCase(); } catch (e1) { type = ''; }
+        if (type === 'range' || type === 'color') return true;
+      }
+
+      if (typeof node.hasAttribute === 'function') {
+        try {
+          if (node.hasAttribute('data-pycmd-drag')) return true;
+        } catch (e2) { /* not a node that answers; keep walking */ }
+      }
+
+      try {
+        var style = window.getComputedStyle(node);
+        if (style && style.touchAction === 'none') return true;
+      } catch (e3) { /* no style for this node; keep walking */ }
+
       node = node.parentNode;
     }
     return false;
@@ -1455,18 +1474,25 @@ BRIDGE = """
     document.addEventListener('touchstart', function (event) {
       var panel = window.__pycmd_panel;
       if (!panel) return;
+
+      // Worked out separately, so that one of them failing cannot take the
+      // other with it. Both default to false, which is what the app assumed
+      // before either of them existed.
+      var scrolls = false;
+      var grabs = false;
+      try { scrolls = scrollableUnder(event.target); } catch (error) { scrolls = false; }
+      try { grabs = grabsDrag(event.target); } catch (error) { grabs = false; }
+
       try {
-        var scrolls = scrollableUnder(event.target);
-        var grabs = grabsDrag(event.target);
-        if (panel.ownsGesture) {
+        if (typeof panel.ownsGesture === 'function') {
           panel.ownsGesture(scrolls, grabs);
-        } else if (panel.innerScroll) {
+        } else if (typeof panel.innerScroll === 'function') {
           // An older host, which has one answer rather than two. A control
           // that owns the drag is the more important of the two to report.
           panel.innerScroll(scrolls || grabs);
         }
       } catch (error) {
-        // An older host without either; the app keeps its old guess.
+        // A host without either; the app keeps its old guess.
       }
     }, { passive: true });
   }

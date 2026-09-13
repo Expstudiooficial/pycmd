@@ -275,6 +275,93 @@ async function main() {
     check('nor does the body itself', said[said.length - 1] === false, said);
   }
 
+  console.log('\n== the page says when a finger lands on something that owns drags ==');
+  {
+    // The 2.6.0 bug: a slider is dragged sideways, the app behind the panel
+    // is a list that scrolls up and down, and the list took the gesture a few
+    // pixels in. The app decides that, but it cannot decide it well without
+    // being told what the finger landed on - so the page says.
+    const listeners = {};
+    const context = vm.createContext({ console, Promise, JSON, String, Error, RegExp });
+    vm.runInContext('globalThis.window = globalThis;', context);
+    context.setTimeout = () => 1;
+    context.clearTimeout = () => {};
+    context.addEventListener = () => {};
+
+    const node = (extra) => Object.assign({
+      nodeType: 1, parentNode: null, overflowY: 'visible',
+      scrollHeight: 0, clientHeight: 0, touchAction: 'auto',
+      tagName: 'DIV',
+      attributes: {},
+      getAttribute(name) { return this.attributes[name] || null; },
+      hasAttribute(name) { return name in this.attributes; },
+    }, extra);
+
+    const body = node({ tagName: 'BODY' });
+    const slider = node({ tagName: 'INPUT', attributes: { type: 'range' }, parentNode: body });
+    const colour = node({ tagName: 'INPUT', attributes: { type: 'color' }, parentNode: body });
+    const text = node({ tagName: 'INPUT', attributes: { type: 'text' }, parentNode: body });
+    const marked = node({ attributes: { 'data-pycmd-drag': '' }, parentNode: body });
+    const noTouch = node({ touchAction: 'none', parentNode: body });
+    const inside = node({ parentNode: slider });
+    const plain = node({ tagName: 'P', parentNode: body });
+    // A node that answers none of the DOM questions. There are more of these
+    // about than you would think - SVG elements, a shadow host, whatever a
+    // library put in the tree - and one of them throwing used to take the
+    // *other* signal down with it.
+    const awkward = {
+      nodeType: 1, parentNode: body,
+      get tagName() { throw new Error('no tagName here'); },
+    };
+
+    context.document = { body, addEventListener(name, handler) { listeners[name] = handler; } };
+    context.window.getComputedStyle = (target) => {
+      if (target === awkward) throw new Error('no style for this one');
+      return { overflowY: target.overflowY, touchAction: target.touchAction };
+    };
+
+    const told = [];
+    context.__pycmd_panel = {
+      call() {}, toast() {}, log() {}, close() {},
+      ownsGesture(scrolls, grabs) { told.push({ scrolls, grabs }); },
+      innerScroll() { told.push('the old method, which should not be used here'); },
+      manifest() { return JSON.stringify({ id: 'test.plugin' }); },
+    };
+    vm.runInContext(bridgeSource(), context);
+
+    const last = () => told[told.length - 1];
+
+    listeners.touchstart({ target: slider });
+    check('a slider owns the drag', last().grabs === true, told);
+
+    listeners.touchstart({ target: colour });
+    check('so does a colour picker', last().grabs === true, told);
+
+    listeners.touchstart({ target: inside });
+    check('and so does anything inside one', last().grabs === true, told);
+
+    listeners.touchstart({ target: text });
+    check('a text box does not', last().grabs === false, told);
+
+    listeners.touchstart({ target: plain });
+    check('nor does ordinary text', last().grabs === false, told);
+
+    listeners.touchstart({ target: marked });
+    check('a panel can mark anything else itself', last().grabs === true, told);
+
+    listeners.touchstart({ target: noTouch });
+    check('and touch-action none says the same thing', last().grabs === true, told);
+
+    told.length = 0;
+    listeners.touchstart({ target: awkward });
+    check('a node that answers nothing is not a crash', told.length === 1, told);
+    check('and it reports both signals as false rather than neither',
+          last() && last().scrolls === false && last().grabs === false, told);
+
+    check('the new method is used when the host has it',
+          told.every((row) => typeof row === 'object'), told);
+  }
+
   console.log('\n== a host without that method is not a crash ==');
   {
     // The bridge ships inside the app, but a panel can be open across an

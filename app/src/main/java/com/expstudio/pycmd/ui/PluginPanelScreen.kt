@@ -151,6 +151,11 @@ private fun newPanelView(
     plugin: InstalledPlugin,
 ): WebView {
     run {
+        // The distance at which a drag has a direction worth believing. Read
+        // once: it is a property of the device, not of the gesture, and this
+        // used to be looked up on every touch event.
+        val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+
         /*
          * Where the gesture started, and what has been decided about it.
          *
@@ -223,9 +228,6 @@ private fun newPanelView(
              * sloppy diagonal drag still moves the thumb.
              */
             setOnTouchListener { view, event ->
-                // The distance at which a drag has a direction worth believing.
-                val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
-
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         view.parent?.requestDisallowInterceptTouchEvent(true)
@@ -233,6 +235,14 @@ private fun newPanelView(
                         down[1] = event.y
                         down[2] = 0f
                         down[3] = 0f
+                        // What the page said about the *last* gesture is not
+                        // about this one. Leaving it would mean that touching
+                        // a slider once made every drag afterwards behave
+                        // like a slider, and the panel could never be
+                        // scrolled again. The page answers for this gesture
+                        // within a frame or two, and nothing is decided until
+                        // the finger has travelled a slop's worth anyway.
+                        bridge.forgetGesture()
                     }
 
                     MotionEvent.ACTION_MOVE -> {
@@ -507,6 +517,17 @@ class PanelBridge(private val plugin: InstalledPlugin) {
     @JavascriptInterface
     fun innerScroll(on: Boolean) {
         pageScrollsItself = on
+        pageGrabsGesture = false
+    }
+
+    /**
+     * Clears what the page said, at the start of a new gesture.
+     *
+     * Not a `@JavascriptInterface`: this is the app tidying up after itself,
+     * not something a page asks for.
+     */
+    fun forgetGesture() {
+        pageScrollsItself = false
         pageGrabsGesture = false
     }
 
