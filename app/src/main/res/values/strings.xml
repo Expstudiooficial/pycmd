@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PyCmd</string>
+    <!-- What Android shows beside the notification-access switch. -->
+    <string name="session_access_label">PyCmd music controls</string>
     <string name="server_channel_name">Running servers</string>
     <string name="server_channel_desc">Keeps Python servers alive in the background</string>
     <string name="update_channel_name">Updates</string>

@@ -997,6 +997,30 @@ class Api:
         """Tells the app something it is showing has changed underneath it."""
         return self._ask("refresh", what=str(what).strip().lower())
 
+    def request(self, action: str, **detail) -> bool:
+        """Asks the app for something by name, for the things with no method.
+
+        The named methods above cover what most plugins need. Some things the
+        app can do are too specific to deserve one - two DJ decks, a
+        crossfader, the transport controls of whatever else is playing on this
+        phone - and a method each would be a plugin API that grew a limb every
+        time a plugin wanted something.
+
+        This is the same channel with the name passed in. Everything the
+        methods promise still holds: it is a *request*, it is delivered rather
+        than done, nothing waits on it, and an action the app has never heard
+        of is written to the debug log and ignored. A plugin cannot invent a
+        capability with it - it can only ask for one the app already has.
+
+        The answer, when there is one, comes back as an event: ask for
+        `mixer.state` and the app fires `mixer_state` at everything listening.
+        """
+        name = str(action or "").strip().lower()
+        if not name or not all(ch.isalnum() or ch in "._-" for ch in name):
+            _report("warn", f"[{self.name}] {action!r} is not an action name")
+            return False
+        return self._ask(name, **detail)
+
     # -- settings the user can change ---------------------------------------
 
     def setting(self, name: str, default=None):

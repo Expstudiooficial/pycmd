@@ -17,6 +17,22 @@
       keeps every file. The user still confirms it in the system installer.
     -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- The equaliser, bass boost, widener and reverb the DJ decks attach to
+         their own audio sessions. Not a runtime permission; Android wants it
+         declared before it hands out an AudioEffect. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!--
+      Since Android 11 an app cannot see what else is installed unless it says
+      what it is looking for. Music Pro's "hand this search to another app"
+      needs to know which apps answer the play-from-search intent, so that is
+      exactly what is asked for - not a list of everything on the phone.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+        </intent>
+    </queries>
 
     <application
         android:name=".PyCmdApp"
@@ -52,6 +68,22 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!--
+          Declared so that Android will offer the notification-access switch,
+          which is the only way to read the media sessions of other apps. The
+          class overrides nothing: it never reads a notification. Nothing in
+          PyCmd turns this on - the switch is in Android's own settings.
+        -->
+        <service
+            android:name=".music.SessionAccess"
+            android:exported="false"
+            android:label="@string/session_access_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".python.ServerService"

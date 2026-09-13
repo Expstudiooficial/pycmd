@@ -1,0 +1,445 @@
+<h1>Music Pro</h1>
+
+<!--
+  Four sections, and the order is the order somebody reaches for them.
+
+  The decks are first because they are the reason to open this. Then the
+  effects that hang off them. Then whatever else on the phone is playing,
+  which is a different kind of thing and is kept apart from the decks so
+  nobody thinks the crossfader reaches it. Then the free catalogues, which is
+  where new music comes from.
+
+  Nothing here polls. The app reports the mixer's state whenever it changes,
+  through `pycmd.on('message')`, and a panel that asked every half second
+  would be a timer running behind a screen nobody is looking at.
+-->
+
+<div class="card">
+  <p id="note">Loading the decks…</p>
+</div>
+
+<div class="card">
+  <h2>Decks</h2>
+  <div id="decks"></div>
+
+  <p style="margin-top:14px">
+    <label for="fader">Crossfader — <span id="faderAt">middle</span></label>
+    <input id="fader" type="range" min="0" max="100" value="50" style="width:100%">
+  </p>
+  <p class="muted" style="font-size:12px">
+    Equal power, not a straight line: at the middle both decks are at 0.71
+    rather than 0.5, which is where two signals add up to the same loudness
+    as one. A linear fader dips in the middle and every mixer ever built
+    avoids it the same way.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Put something on a deck</h2>
+  <p>
+    <input id="search" placeholder="Search your library" style="width:100%">
+  </p>
+  <div id="library"></div>
+</div>
+
+<div class="card">
+  <h2>What else is playing</h2>
+  <p id="appsNote">Looking…</p>
+  <div id="apps"></div>
+  <p style="margin-top:10px">
+    <input id="appQuery" placeholder="Search in another app" style="width:100%">
+  </p>
+  <div id="appList"></div>
+  <p class="muted" style="font-size:12px">
+    PyCmd drives another app's transport — play, pause, skip — through the same
+    media session that puts its track on your lock screen, and hands it a
+    search through the intent every Android music app answers. It cannot read
+    their library, stream from their service, or sign in to one for you.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Music you are allowed to keep</h2>
+  <p><input id="findQuery" placeholder="Search Jamendo and the Internet Archive" style="width:100%"></p>
+  <p><button id="findGo">Search</button></p>
+  <div id="found"></div>
+  <p class="muted" style="font-size:12px">
+    Jamendo is Creative Commons music its artists published for this. The
+    Internet Archive holds live recordings the bands allow, and the public
+    domain. Both are searched because both are meant to be.
+  </p>
+</div>
+
+<script>
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { mixer: {}, apps: {}, appList: {}, tracks: [] };
+  var deckNames = ['a', 'b'];
+  var effects = [];
+
+  function escapeHtml(text) {
+    return String(text === undefined || text === null ? '' : text)
+      .replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+      });
+  }
+
+  function clock(ms) {
+    var seconds = Math.max(0, Math.floor((ms || 0) / 1000));
+    var minutes = Math.floor(seconds / 60);
+    var rest = seconds % 60;
+    return minutes + ':' + (rest < 10 ? '0' : '') + rest;
+  }
+
+  // ------------------------------------------------------------- the decks
+
+  function drawDecks() {
+    var mixer = state.mixer || {};
+    $('decks').innerHTML = deckNames.map(function (name) {
+      var deck = mixer[name] || {};
+      var title = deck.loaded ? escapeHtml(deck.title) : 'empty';
+      var bands = (deck.bands || []).map(function (band, index) {
+        return '<label style="display:block;font-size:12px;margin-top:4px">'
+          + Math.round(band.hz) + ' Hz'
+          + '<input type="range" min="-100" max="100" value="' + (band.level || 0)
+          + '" data-band="' + name + ':' + index + '" style="width:100%"></label>';
+      }).join('');
+
+      return '<div class="card" style="margin:8px 0">'
+        + '<p><strong>Deck ' + name.toUpperCase() + '</strong> — ' + title + '</p>'
+        + (deck.loaded
+          ? '<p>' + clock(deck.position) + ' / ' + clock(deck.duration)
+            + (deck.looping ? ' · looping' : '')
+            + ' · cue ' + clock(deck.cue) + '</p>'
+          : '<p class="muted">Pick something from your library below.</p>')
+        + '<p>'
+        + '<button data-do="' + name + ':play">Play</button> '
+        + '<button data-do="' + name + ':pause">Pause</button> '
+        + '<button data-do="' + name + ':cue">Cue</button> '
+        + '<button data-do="' + name + ':eject">Eject</button>'
+        + '</p>'
+        + '<label style="display:block;font-size:12px">Tempo '
+        + (deck.tempo || 1).toFixed(2) + 'x'
+        + '<input type="range" min="50" max="200" value="'
+        + Math.round((deck.tempo || 1) * 100) + '" data-tempo="' + name
+        + '" style="width:100%"></label>'
+        + '<label style="display:block;font-size:12px">Level'
+        + '<input type="range" min="0" max="100" value="'
+        + Math.round((deck.gain === undefined ? 1 : deck.gain) * 100)
+        + '" data-gain="' + name + '" style="width:100%"></label>'
+        + '<p style="margin-top:8px">'
+        + '<button data-loop="' + name + ':in">Loop in</button> '
+        + '<button data-loop="' + name + ':out">Loop out</button> '
+        + '<button data-loop="' + name + ':off">Loop off</button>'
+        + '</p>'
+        + effectRow(name, deck)
+        + (bands
+          ? '<p style="margin-top:8px"><strong>Equaliser</strong> '
+            + '<button data-flat="' + name + '">Flat</button></p>' + bands
+          : '<p class="muted" style="font-size:12px">This phone gave deck '
+            + name.toUpperCase() + ' no equaliser.</p>')
+        + '</div>';
+    }).join('');
+  }
+
+  function effectRow(name, deck) {
+    var has = deck.effects || [];
+    var rows = effects.filter(function (row) {
+      return has.indexOf(row.id) >= 0;
+    }).map(function (row) {
+      return '<label style="display:block;font-size:12px;margin-top:4px">'
+        + escapeHtml(row.name)
+        + '<input type="range" min="0" max="100" value="0" data-fx="'
+        + name + ':' + row.id + '" style="width:100%"></label>';
+    }).join('');
+    if (!rows) return '';
+    return '<p style="margin-top:8px"><strong>Effects</strong></p>' + rows;
+  }
+
+  // ----------------------------------------------------------- the library
+
+  function drawLibrary() {
+    var rows = state.tracks || [];
+    if (!rows.length) {
+      $('library').innerHTML = '<p class="muted">Nothing in the library matches. '
+        + 'Import music in the Music tab first.</p>';
+      return;
+    }
+    $('library').innerHTML = rows.slice(0, 40).map(function (row) {
+      return '<p style="margin:5px 0">'
+        + '<button data-load="a:' + escapeHtml(row.id) + '">A</button> '
+        + '<button data-load="b:' + escapeHtml(row.id) + '">B</button> '
+        + escapeHtml(row.title)
+        + (row.artist ? ' <span class="muted">' + escapeHtml(row.artist) + '</span>' : '')
+        + '</p>';
+    }).join('');
+  }
+
+  // ------------------------------------------------------- the other apps
+
+  function drawApps() {
+    var playing = state.apps || {};
+    if (!playing.ok) { $('appsNote').textContent = 'Looking…'; return; }
+    if (!playing.allowed) {
+      $('appsNote').innerHTML = 'PyCmd cannot see the other apps on this phone yet. '
+        + 'Android keeps that behind notification access, and only you can '
+        + 'switch it on. <button id="ask">Open that screen</button>';
+      var button = $('ask');
+      if (button) {
+        button.addEventListener('click', function () {
+          pycmd.call('ask_permission', {});
+        });
+      }
+      $('apps').innerHTML = '';
+      return;
+    }
+    var rows = playing.sessions || [];
+    $('appsNote').textContent = rows.length
+      ? rows.length + ' app(s) with something loaded'
+      : 'Nothing else on this phone is playing.';
+    $('apps').innerHTML = rows.map(function (row) {
+      return '<div class="card" style="margin:8px 0">'
+        + '<p><strong>' + escapeHtml(row.app) + '</strong> — '
+        + (row.playing ? 'playing' : 'paused') + '</p>'
+        + '<p>' + escapeHtml(row.title || '(untitled)')
+        + (row.artist ? ' <span class="muted">' + escapeHtml(row.artist) + '</span>' : '')
+        + '</p>'
+        + '<p>'
+        + '<button data-app="' + escapeHtml(row['package']) + ':previous">Back</button> '
+        + '<button data-app="' + escapeHtml(row['package']) + ':toggle">Play / pause</button> '
+        + '<button data-app="' + escapeHtml(row['package']) + ':next">Next</button> '
+        + '<button data-open="' + escapeHtml(row['package']) + '">Open it</button>'
+        + '</p>'
+        + '</div>';
+    }).join('');
+  }
+
+  function drawAppList() {
+    var apps = (state.appList || {}).apps || [];
+    if (!apps.length) {
+      $('appList').innerHTML = '<p class="muted">No music app on this phone '
+        + 'offered to take a search.</p>';
+      return;
+    }
+    $('appList').innerHTML = '<p>' + apps.map(function (row) {
+      return '<button data-search="' + escapeHtml(row['package']) + '">'
+        + escapeHtml(row.app) + '</button>';
+    }).join(' ') + '</p>';
+  }
+
+  // ------------------------------------------------------- free catalogues
+
+  function drawFound(answer) {
+    var rows = (answer && answer.results) || [];
+    var notes = ((answer && answer.notes) || []).map(function (text) {
+      return '<p class="muted" style="font-size:12px">' + escapeHtml(text) + '</p>';
+    }).join('');
+    if (!rows.length) {
+      $('found').innerHTML = notes
+        + '<p class="muted">Nothing found. Both catalogues are searched by '
+        + 'words in the title and the artist.</p>';
+      return;
+    }
+    $('found').innerHTML = notes + rows.map(function (row) {
+      return '<div class="card" style="margin:8px 0">'
+        + '<p><strong>' + escapeHtml(row.title) + '</strong>'
+        + (row.artist ? ' — ' + escapeHtml(row.artist) : '') + '</p>'
+        + '<p class="muted" style="font-size:12px">' + escapeHtml(row.source)
+        + ' · ' + escapeHtml(row.licence) + '</p>'
+        + '<p>'
+        + (row.url
+          ? '<button data-get="' + escapeHtml(row.url) + '">Download it</button> '
+          : '')
+        + (row.page
+          ? '<button data-page="' + escapeHtml(row.page) + '">Open the page</button>'
+          : '')
+        + '</p>'
+        + '</div>';
+    }).join('');
+  }
+
+  // ----------------------------------------------------------------- wiring
+
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    if (!target || target.tagName !== 'BUTTON') return;
+
+    var act = target.getAttribute('data-do');
+    if (act) {
+      var parts = act.split(':');
+      pycmd.call('deck_action', { deck: parts[0], what: parts[1] });
+      return;
+    }
+
+    var load = target.getAttribute('data-load');
+    if (load) {
+      var at = load.indexOf(':');
+      var deck = load.slice(0, at);
+      var id = load.slice(at + 1);
+      var track = (state.tracks || []).filter(function (row) {
+        return row.id === id;
+      })[0];
+      if (track) {
+        pycmd.call('load', { deck: deck, file: track.file, title: track.title });
+        pycmd.toast('Deck ' + deck.toUpperCase() + ': ' + track.title);
+      }
+      return;
+    }
+
+    var loop = target.getAttribute('data-loop');
+    if (loop) {
+      var side = loop.split(':')[0];
+      var which = loop.split(':')[1];
+      var deckState = (state.mixer || {})[side] || {};
+      if (which === 'in') {
+        pycmd.call('deck_set', {
+          deck: side, loopStart: deckState.position || 0, loopEnd: 0,
+        });
+        pycmd.toast('Loop starts at ' + clock(deckState.position));
+      } else if (which === 'out') {
+        pycmd.call('deck_set', {
+          deck: side,
+          loopStart: deckState.loopStart || 0,
+          loopEnd: deckState.position || 0,
+        });
+      } else {
+        pycmd.call('deck_set', { deck: side, loopStart: 0, loopEnd: 0 });
+      }
+      return;
+    }
+
+    var flat = target.getAttribute('data-flat');
+    if (flat) { pycmd.call('flatten', { deck: flat }); return; }
+
+    var app = target.getAttribute('data-app');
+    if (app) {
+      var cut = app.lastIndexOf(':');
+      pycmd.call('app_control', {
+        'package': app.slice(0, cut), what: app.slice(cut + 1),
+      });
+      return;
+    }
+
+    var open = target.getAttribute('data-open');
+    if (open) { pycmd.call('app_open', { 'package': open }); return; }
+
+    var searchIn = target.getAttribute('data-search');
+    if (searchIn) {
+      var query = ($('appQuery').value || '').trim();
+      if (!query) { pycmd.toast('Type what you are looking for first.'); return; }
+      pycmd.call('app_search', { 'package': searchIn, query: query });
+      return;
+    }
+
+    var get = target.getAttribute('data-get');
+    if (get) {
+      pycmd.call('fetch', { url: get }).then(function (answer) {
+        pycmd.toast(answer && answer.ok
+          ? 'Downloading. It lands in Downloads.'
+          : ((answer && answer.error) || 'that would not download'));
+      });
+      return;
+    }
+
+    var page = target.getAttribute('data-page');
+    if (page) { pycmd.call('open_link', { url: page }); return; }
+  });
+
+  document.addEventListener('input', function (event) {
+    var target = event.target;
+    if (!target) return;
+
+    var tempo = target.getAttribute('data-tempo');
+    if (tempo) {
+      pycmd.call('deck_set', { deck: tempo, rate: Number(target.value) / 100 });
+      return;
+    }
+    var gain = target.getAttribute('data-gain');
+    if (gain) {
+      pycmd.call('deck_set', { deck: gain, level: Number(target.value) / 100 });
+      return;
+    }
+    var fx = target.getAttribute('data-fx');
+    if (fx) {
+      var bits = fx.split(':');
+      pycmd.call('effect', {
+        deck: bits[0], name: bits[1], level: Number(target.value) / 100,
+      });
+      return;
+    }
+    var band = target.getAttribute('data-band');
+    if (band) {
+      var where = band.split(':');
+      pycmd.call('band', {
+        deck: where[0], index: Number(where[1]), level: Number(target.value) / 100,
+      });
+    }
+  });
+
+  $('fader').addEventListener('input', function () {
+    var at = Number($('fader').value);
+    $('faderAt').textContent = at === 50 ? 'middle'
+      : (at < 50 ? 'towards A' : 'towards B');
+    pycmd.call('fader', { position: at / 100 });
+  });
+
+  var searchTimer = null;
+  $('search').addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(loadLibrary, 250);
+  });
+
+  $('findGo').addEventListener('click', function () {
+    var query = ($('findQuery').value || '').trim();
+    if (!query) { pycmd.toast('Type something to look for.'); return; }
+    $('found').innerHTML = '<p class="muted">Searching…</p>';
+    pycmd.call('find', { query: query }).then(function (answer) {
+      if (!answer || !answer.ok) {
+        $('found').innerHTML = '<p class="muted">'
+          + escapeHtml((answer && answer.error) || 'that search did not work')
+          + '</p>';
+        return;
+      }
+      drawFound(answer);
+    });
+  });
+
+  // The app pushes the mixer's state whenever it changes, rather than this
+  // asking on a timer. See the plugin's docstring for the way round it goes.
+  pycmd.on('message', function (body) {
+    if (!body || !body.kind) return;
+    if (body.kind === 'mixer') { state.mixer = body.state || {}; drawDecks(); }
+    if (body.kind === 'apps') { state.apps = body.state || {}; drawApps(); }
+    if (body.kind === 'apps_list') { state.appList = body.state || {}; drawAppList(); }
+  });
+
+  function loadLibrary() {
+    pycmd.call('tracks', { search: ($('search').value || '').trim() })
+      .then(function (answer) {
+        state.tracks = (answer && answer.tracks) || [];
+        drawLibrary();
+      });
+  }
+
+  pycmd.call('mixer', {}).then(function (answer) {
+    if (answer && answer.ok) {
+      state.mixer = answer.state || {};
+      effects = answer.effects || [];
+      deckNames = answer.decks || deckNames;
+    }
+    $('note').textContent = 'Two decks, the phone’s own effects, and the '
+      + 'rest of this phone’s music.';
+    drawDecks();
+  });
+
+  loadLibrary();
+  pycmd.call('apps', {}).then(function (answer) {
+    if (answer && answer.ok) {
+      state.apps = answer.playing || {};
+      state.appList = answer.apps || {};
+    }
+    drawApps();
+    drawAppList();
+  });
+</script>

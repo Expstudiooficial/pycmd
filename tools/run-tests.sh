@@ -42,6 +42,10 @@ echo "== Creator: the blocks and what they compile to =="
 "$PYTHON" tools/test_creator.py
 
 echo
+echo "== Music Pro: what it asks the app for, and what it refuses =="
+"$PYTHON" tools/test_music_pro.py
+
+echo
 echo "== Plugins, doctor, preview, cloud, bundled =="
 "$PYTHON" tools/test_plugins.py
 "$PYTHON" tools/test_doctor.py

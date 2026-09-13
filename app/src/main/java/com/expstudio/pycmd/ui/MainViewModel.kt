@@ -19,7 +19,9 @@ import com.expstudio.pycmd.python.PythonEngine
 import com.expstudio.pycmd.python.RunPlan
 import com.expstudio.pycmd.python.RunningServer
 import com.expstudio.pycmd.python.ServerService
+import com.expstudio.pycmd.music.MixerHub
 import com.expstudio.pycmd.music.MusicHub
+import com.expstudio.pycmd.music.Neighbours
 import com.expstudio.pycmd.music.MusicImport
 import com.expstudio.pycmd.music.MusicTrack
 import com.expstudio.pycmd.music.Playback
@@ -630,6 +632,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     override fun onCleared() {
         hub.release()
+        // The decks are two ExoPlayers and up to ten audio effects; leaving
+        // them behind would keep an audio session and its DSP alive for as
+        // long as the process is.
+        mixer.release()
         PanelViews.clear()
         super.onCleared()
     }
@@ -1331,10 +1337,105 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 else -> refreshFiles(_files.value.directory ?: workspace.root)
             }
 
+            // -- the decks -------------------------------------------------
+            //
+            // Everything Music Pro's panel does to the mixer arrives here.
+            // Fire and forget, like every other plugin action: the answer
+            // comes back as a `mixer_state` event rather than as a return
+            // value, because a plugin is on whatever thread it is on and
+            // nothing here can be waited for.
+            "mixer.load" -> mixer.load(
+                detail.optString("deck", "a"),
+                detail.optString("path"),
+                detail.optString("title"),
+            )
+
+            "mixer.play" -> mixer.play(detail.optString("deck", "a"))
+            "mixer.pause" -> mixer.pause(detail.optString("deck", "a"))
+            "mixer.cue" -> mixer.cue(detail.optString("deck", "a"))
+            "mixer.eject" -> mixer.eject(detail.optString("deck", "a"))
+            "mixer.seek" -> mixer.seek(
+                detail.optString("deck", "a"), detail.optLong("position"),
+            )
+            "mixer.loop" -> mixer.loop(
+                detail.optString("deck", "a"),
+                detail.optLong("start"),
+                detail.optLong("end"),
+            )
+            "mixer.tempo" -> mixer.tempo(
+                detail.optString("deck", "a"), detail.optDouble("rate", 1.0),
+            )
+            "mixer.gain" -> mixer.gain(
+                detail.optString("deck", "a"), detail.optDouble("level", 1.0),
+            )
+            "mixer.fader" -> mixer.fader(detail.optDouble("position", 0.5))
+            "mixer.effect" -> mixer.effect(
+                detail.optString("deck", "a"),
+                detail.optString("name"),
+                detail.optDouble("level", 0.0),
+            )
+            "mixer.band" -> mixer.band(
+                detail.optString("deck", "a"),
+                detail.optInt("index"),
+                detail.optDouble("level", 0.0),
+            )
+            "mixer.flatten" -> mixer.flatten(detail.optString("deck", "a"))
+            "mixer.state" -> tellMixerStateAlways()
+            "mixer.release" -> {
+                mixer.release()
+                tellMixerStateAlways()
+            }
+
+            // -- the other apps on this phone --------------------------------
+            "apps.state" -> viewModelScope.launch {
+                engine.firePluginEvent("apps_state", neighbours.playing().toString())
+            }
+            "apps.list" -> viewModelScope.launch {
+                engine.firePluginEvent("apps_list", neighbours.searchApps().toString())
+            }
+            "apps.control" -> {
+                val done = neighbours.control(
+                    detail.optString("package"), detail.optString("what", "toggle"),
+                )
+                if (!done) showToast("Nothing is playing that PyCmd can reach.")
+                viewModelScope.launch {
+                    engine.firePluginEvent("apps_state", neighbours.playing().toString())
+                }
+            }
+            "apps.seek" -> neighbours.seek(
+                detail.optString("package"), detail.optLong("position"),
+            )
+            "apps.search" -> {
+                if (!neighbours.searchIn(detail.optString("package"), detail.optString("query"))) {
+                    showToast("No app on this phone took that search.")
+                }
+            }
+            "apps.open" -> {
+                if (!neighbours.openApp(detail.optString("package"))) {
+                    showToast("That app is not installed any more.")
+                }
+            }
+            "apps.link" -> {
+                if (!neighbours.openLink(detail.optString("url"))) {
+                    showToast("That link would not open.")
+                }
+            }
+            "apps.permission" -> runCatching {
+                getApplication<Application>().startActivity(neighbours.permissionIntent())
+            }.onFailure {
+                showToast("This phone has no notification-access screen.")
+            }
+
             else -> DebugLog.warn(
                 TAG_VIEW, "a plugin asked for something unknown", request.action,
             )
         }
+    }
+
+    /** Sends the mixer state whether or not it changed, for a panel just opened. */
+    private fun tellMixerStateAlways() {
+        lastMixerState = ""
+        tellMixerState(mixer.state())
     }
 
     /** The screen a plugin named, or null if there is no such screen. */
@@ -2676,6 +2777,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     private val hub = MusicHub(application).also { live ->
         live.onChanged = { state -> rememberPlayback(state) }
+    }
+
+    /**
+     * The DJ decks, and whatever else on this phone is making a noise.
+     *
+     * Both are driven by Music Pro's panel through the plugin action channel
+     * rather than by a screen in this app, because both are that plugin's
+     * whole reason to exist. They are made here because they need the
+     * application context and have to outlive the panel being scrolled away.
+     */
+    private val mixer = MixerHub(application).also { desk ->
+        desk.onChanged = { state -> tellMixerState(state) }
+    }
+
+    private val neighbours = Neighbours(application)
+
+    /** The last mixer state sent to the plugin, so identical ones are dropped. */
+    private var lastMixerState = ""
+
+    private fun tellMixerState(state: JSONObject) {
+        val text = state.toString()
+        if (text == lastMixerState) return
+        lastMixerState = text
+        viewModelScope.launch { engine.firePluginEvent("mixer_state", text) }
     }
 
     val playback: StateFlow<Playback> = hub.playback
