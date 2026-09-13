@@ -1,15 +1,68 @@
 # Prebuilt APK
 
-`PyCmd-2.6.0.apk` — ready to install, nothing else needed.
+`PyCmd-2.6.1.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 2.6.0 |
+| Version | 2.6.1 |
 | Size | 20 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a** (every phone since about 2016) |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
+
+## What is new in 2.6.1
+
+**The sliders in plugin panels work.** In 2.6.0 they did not move at all, and
+that was my mistake. It is the only thing changed here.
+
+**What went wrong.** A panel is a web page in a WebView, and that WebView sits
+inside one of the app's own scrolling lists. Something has to decide, on each
+drag, which of the two owns it - and the thing deciding was looking at one
+move at a time: *did the finger go up or down since the last event, and has
+the page run out of room that way?*
+
+Two things follow from asking it that way, and the second is the one everybody
+hit.
+
+A finger dragged sideways still wobbles a pixel or two up and down, so the
+answer flipped on almost every move. And a panel shorter than the screen is
+**both** at the top and at the bottom — there is nothing above it and nothing
+below it — so the answer was "the list may have the drag" whichever way the
+wobble went, on the very first move of every gesture.
+
+Dragging a slider is a sideways gesture, usually on a panel that is short or
+scrolled to one end. The list took the drag a few pixels in, and the thumb
+stopped following the finger.
+
+**What it does now.** The direction is measured from where the finger landed
+rather than from the previous event, nothing is decided until the gesture is
+big enough to have a direction at all, and once decided it stays decided until
+the finger lifts:
+
+- **Sideways** — the page keeps it. A list that scrolls up and down has no
+  business with a horizontal drag.
+- **Up and down** — the old rule, which was the right one: the page scrolls
+  until it runs out, then the list takes over, so flicking past a panel still
+  works.
+
+And the page now tells the app when a finger lands on something that owns
+drags outright — a slider, a colour picker, anything with `touch-action: none`
+or marked `data-pycmd-drag` — so even a sloppy diagonal drag moves the thumb.
+
+**Two more found while fixing it.** A node in the page that answers none of
+the usual DOM questions used to throw, and the throw cost that panel its
+scrolling as well as its sliders. And what the page said about one gesture was
+still there at the start of the next, so touching a slider once would have
+made every drag afterwards behave like a slider.
+
+**How it is checked now, so it cannot come back.** The rule is arithmetic and
+nothing else, so it lives in `PanelGesture` with thirteen JVM unit tests
+driving it directly — the wobble, the short panel, the exact diagonal — every
+one of which fails against the 2.6.0 rule. On top of that,
+`tools/test_panel_sliders.js` builds every bundled panel with its real bridge
+and drags every slider in it with real touch events, and fails if no panel had
+a slider to drag.
 
 ## What is new in 2.6.0
 
