@@ -690,17 +690,25 @@ loop, and both the picker and the line beside "Your script" always say where
 the next block will land.
 
 Switching language does not throw anything away: Creator keeps one script per
-language, so the chooser moves between five drafts.
+language, so the chooser moves between ten drafts. Each has an **Example** you
+can load and press Run on.
 
-Three hundred and sixty-three blocks, in five languages:
+Nine hundred and four blocks, in ten languages. The six marked *runs here*
+have an engine in the app, so a program built out of blocks can be saved and
+then run on the phone:
 
-| Language | Blocks | Some of what is in there |
-|---|---|---|
-| Python | 154 | print, input, loops, functions, files, JSON, requests, Flask, classes |
-| JavaScript | 98 | the page, events, fetch, arrays, objects, timers |
-| HTML | 49 | the whole document, forms, tables, media |
-| CSS | 42 | rules, flexbox, grid, colours, transitions, media queries |
-| Markdown | 20 | headings, lists, tables, code fences |
+| Language | Blocks | | Some of what is in there |
+|---|---|---|---|
+| Python | 202 | runs here | print, input, loops, sets, comprehensions, dates, files, JSON, Flask, classes |
+| Go | 108 | runs here | slices, maps, structs, errors, goroutines and channels |
+| Rust | 102 | runs here | Vec, HashMap, Option, Result, structs, enums, iterators |
+| C | 100 | runs here | arrays, grids, structs, pointers, malloc, string.h, math.h |
+| JavaScript | 138 | runs here | the page, events, fetch, promises, classes, storage, timers |
+| Shell | 67 | runs here | POSIX sh, which is what Android gives you |
+| HTML | 70 | | the whole document, forms, tables, media |
+| CSS | 68 | | rules, flex, grid, custom properties, animation, screen sizes |
+| Markdown | 29 | | headings, lists, tables, checklists, footnotes |
+| JSON | 20 | | objects, lists, and the commas put in for you |
 
 **See the code** shows the whole file, before anything is saved. **Save as a
 file** asks for a name and a folder and writes a real file into the

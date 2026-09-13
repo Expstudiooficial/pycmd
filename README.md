@@ -85,9 +85,11 @@ connected, a page deploys to **Cloudflare Pages** instead - a real `pages.dev`
 address that stays up when the phone is off, and takes your own domain.
 
 **Creator** — a tab where code is built out of blocks instead of typed, added
-by a plugin that ships in the app. Three hundred and sixty-three blocks across
-Python, JavaScript, HTML, CSS and Markdown: pick one, fill in its holes, stack
-it, nest it inside a loop. Build shows the source before anything is saved;
+by a plugin that ships in the app. Nine hundred and four blocks across ten
+languages — Python, Go, Rust, C, JavaScript, Shell, HTML, CSS, Markdown and
+JSON — six of which the phone can then run. Pick a block, fill in its holes,
+stack it, nest it inside a loop; every language has an example to start
+from. Build shows the source before anything is saved;
 Save puts a real file in your workspace, which the editor opens, the Servers
 tab runs and the Pages tab serves like anything you wrote by hand. It gets the
 shape right - the colons, the braces, the indentation, the closing tags - which

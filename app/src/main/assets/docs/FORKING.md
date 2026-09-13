@@ -42,7 +42,7 @@ app/src/main/
   assets/
     web/                       the console and editor pages (HTML, CSS, JS)
     plugins/                   the plugins that ship inside the APK
-      creator/creator_blocks.py  the 363 blocks, and what they compile to
+      creator/creator_blocks.py  the 904 blocks, and what they compile to
     examples/                  what lands in a new workspace
 tools/                         the test suites, and make_latest.py
 dist/                          the built APK, its hash, and latest.json

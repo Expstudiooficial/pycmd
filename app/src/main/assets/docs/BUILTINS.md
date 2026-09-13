@@ -173,21 +173,87 @@ alive later, so nothing here claims a schedule that survives being closed.
 
 ---
 
+### Music Pro
+
+Two DJ decks with a crossfader, the effects your phone already has, and a way
+to reach the music you keep somewhere else.
+
+**The decks** are two players of their own, deliberately not the Music tab's -
+a deck is something you use while looking at it, two things play at once on
+purpose, and neither belongs on your lock screen. **Cue** marks the point when
+the deck is stopped and jumps back to it when it is playing, which is the
+whole of how you line one track up against another that is already going.
+**Loop in / Loop out** set a loop as the track passes them. **Tempo** runs
+from half speed to double with the pitch corrected.
+
+**The crossfader is equal-power.** Sliding one volume down while the other
+comes up sounds like a dip in the middle - at halfway both are at 0.5, and two
+half-volume signals are quieter than one full one. This uses the quarter-turn
+of a circle instead, where both sides sit at 0.71 and the loudness stays put
+across the whole sweep.
+
+**The effects are Android's own** - a five-band equaliser, bass boost, stereo
+widener, reverb and loudness enhancer - hung off each deck's audio session. A
+phone can refuse any of them; a missing one is not drawn rather than pretended
+at.
+
+**Whatever else is playing** can be seen and driven: play, pause, skip, and
+which app it is in. Every well-behaved Android music app publishes a media
+session - it is what puts the track on your lock screen - so this is one
+mechanism that works for all of them rather than a plugin per service. It
+needs **notification access**, which only you can grant, and PyCmd opens the
+Android screen where the switch is rather than asking for it itself.
+
+It cannot read another app's library, search their catalogue from here, stream
+from their service, or hold your password to one. What it can do is hand your
+search *to* them, through the intent every music app answers: your words,
+their catalogue, the account you already have with them.
+
+**Free music** comes from two catalogues that exist to be searched by programs
+and license their music to be kept - **Jamendo** (Creative Commons; needs a
+free client id, and says so when there isn't one) and the **Internet Archive**
+(live recordings the bands allow, and the public domain).
+
+| Command | What it does |
+|---|---|
+| `deck a <words>` | Load the first matching track onto a deck |
+| `mix 0-100` | Where the crossfader sits |
+| `nowplaying` | What every app on this phone is playing |
+| `findmusic <words>` | Search the free catalogues |
+
+---
+
 ### Creator
 
 A tab of its own where code is **built out of blocks** instead of typed - and
 then saved as an ordinary file.
 
-Three hundred and sixty-three blocks across five languages: **Python** (154),
-**JavaScript** (98), **HTML** (49), **CSS** (42) and **Markdown** (20). Pick
-one, fill in its holes, stack it, nest it inside a loop. Every row - in the
-palette and in your script - is the line that block actually writes, so the
-screen is the code rather than a description of it. **See the code** shows the
-whole file before anything is saved; **Save as a file** puts a real `.py`,
-`.js`, `.html`, `.css` or `.md` in your workspace, and from there the editor
-opens it, the Servers tab runs it and the Pages tab serves it like anything
-else. Each language keeps its own script, so the chooser never throws work
-away.
+Nine hundred and four blocks across ten languages: **Python** (202),
+**Go** (108), **Rust** (102), **C** (100),
+**JavaScript** (138), **HTML** (70), **CSS**
+(68), **Shell** (67), **Markdown**
+(29) and **JSON** (20). Pick one, fill in its
+holes, stack it, nest it inside a loop. Every row - in the palette and in your
+script - is the line that block actually writes, so the screen is the code
+rather than a description of it.
+
+**Six of the ten run on this phone.** Python, JavaScript, C, Go, Rust and
+Shell all have an engine in the app, so a program you built out of blocks can
+be saved and then run. The other four are files you keep, serve or read.
+
+Every language has an **example** you can start from - a whole program, not a
+fragment - and the **Example** button loads it. An empty page is the worst
+place to start learning a language.
+
+**See the code** shows the whole file before anything is saved; **Save as a
+file** puts a real `.py`, `.go`, `.rs`, `.c`, `.js`, `.html`, `.css`, `.sh`,
+`.md` or `.json` in your workspace, and from there the editor opens it, the
+Servers tab runs it and the Pages tab serves it like anything else. Each
+language keeps its own script, so the chooser never throws work away.
+
+JSON blocks carry no commas at all - the compiler puts them in - so the two
+mistakes everybody makes writing JSON by hand cannot be made here, and a
+project that is not valid JSON yet says so rather than saving quietly.
 
 | Command | What it does |
 |---|---|
