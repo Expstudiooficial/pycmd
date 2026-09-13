@@ -151,11 +151,18 @@ private fun newPanelView(
     plugin: InstalledPlugin,
 ): WebView {
     run {
-        // Where the finger was on the previous move, so the direction of a
-        // drag is known before deciding who should own it. A one-element array
-        // rather than a captured var: it belongs to this WebView, and there is
-        // one of these per panel.
-        val lastTouchY = floatArrayOf(0f)
+        /*
+         * Where the gesture started, and what has been decided about it.
+         *
+         * Arrays rather than captured vars because these belong to this
+         * WebView, and there is one of these per panel.
+         *
+         *   [0] x where the finger landed
+         *   [1] y where the finger landed
+         *   [2] 1 once this gesture has been settled, 0 while it is undecided
+         *   [3] 1 if the page keeps the gesture, 0 if the list may have it
+         */
+        val down = floatArrayOf(0f, 0f, 0f, 0f)
 
         return WebView(context).apply {
             settings.javaScriptEnabled = true
@@ -174,34 +181,93 @@ private fun newPanelView(
             // drag to the page; letting go of the claim when the page has
             // nothing left to scroll gives it back to the list, so flicking
             // past a section still works.
+            /*
+             * Who owns this drag: the page, or the app's list behind it.
+             *
+             * ## The bug this replaces
+             *
+             * The old version looked at one move at a time - "did the finger
+             * go up or down since the last event?" - and let the list have the
+             * gesture whenever the page had nothing left to scroll that way.
+             * Two things follow from that, and the second is the one people
+             * hit:
+             *
+             * 1. A finger dragged sideways still wobbles a pixel or two up and
+             *    down, so the answer flipped on almost every move.
+             * 2. A panel shorter than the screen is *both* at the top and at
+             *    the bottom - `scrollY` is 0 and `canScrollVertically(1)` is
+             *    false - so the condition was true whichever way the wobble
+             *    went, and the claim was dropped on the very first move of
+             *    every gesture.
+             *
+             * The result was that dragging a slider handed the gesture to the
+             * list a few pixels in, and the slider stopped receiving moves.
+             * Every plugin panel has sliders, so every plugin's sliders were
+             * broken.
+             *
+             * ## What it does now
+             *
+             * The direction is measured from where the finger *landed*, not
+             * from the previous event, and nothing is decided until the
+             * gesture has travelled far enough to have a direction at all.
+             * Once decided it stays decided for the rest of the gesture:
+             *
+             * * mostly sideways - the page keeps it. A vertical list has no
+             *   business with a horizontal drag, and this is what a slider is.
+             * * mostly up and down - the old rule, which is the right one: the
+             *   page scrolls until it runs out, then the list takes over so a
+             *   flick past a panel still works.
+             *
+             * And a finger that landed on something the page says owns drags -
+             * a slider, or anything a panel marked - keeps it either way, so a
+             * sloppy diagonal drag still moves the thumb.
+             */
             setOnTouchListener { view, event ->
+                // The distance at which a drag has a direction worth believing.
+                val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         view.parent?.requestDisallowInterceptTouchEvent(true)
-                        lastTouchY[0] = event.y
+                        down[0] = event.x
+                        down[1] = event.y
+                        down[2] = 0f
+                        down[3] = 0f
                     }
 
                     MotionEvent.ACTION_MOVE -> {
                         val page = view as WebView
-                        val goingUp = event.y > lastTouchY[0]
-                        val atTop = page.scrollY <= 0
-                        val atBottom = !page.canScrollVertically(1)
-                        // A page that scrolls an element of its own rather
-                        // than the document answers "nowhere left to go" to
-                        // both of those, every time - so without this the
-                        // list would take the drag away on the first move and
-                        // the panel's own list could not be scrolled at all.
-                        // The page says which it is when the finger lands.
-                        val inner = bridge.pageScrollsItself
-                        // At either end, the page has nothing more to give.
-                        if (!inner && ((goingUp && atTop) || (!goingUp && atBottom))) {
-                            view.parent?.requestDisallowInterceptTouchEvent(false)
+
+                        // Settled once, and it stays settled: a gesture that
+                        // changed hands halfway through is how a slider loses
+                        // the finger that is dragging it.
+                        if (down[2] == 0f) {
+                            val owner = PanelGesture.owner(
+                                dx = event.x - down[0],
+                                dy = event.y - down[1],
+                                slop = slop,
+                                grabs = bridge.pageGrabsGesture,
+                                pageScrolls = bridge.pageScrollsItself,
+                                atTop = page.scrollY <= 0,
+                                atBottom = !page.canScrollVertically(1),
+                            )
+                            if (owner == PanelGesture.Owner.UNDECIDED) {
+                                // Too small to have a direction. Hold on to
+                                // it rather than guess.
+                                return@setOnTouchListener false
+                            }
+                            down[2] = 1f
+                            down[3] = if (owner == PanelGesture.Owner.PAGE) 1f else 0f
                         }
-                        lastTouchY[0] = event.y
+
+                        view.parent?.requestDisallowInterceptTouchEvent(down[3] == 1f)
                     }
 
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         view.parent?.requestDisallowInterceptTouchEvent(false)
+                        down[2] = 0f
+                        down[3] = 0f
+                    }
                 }
                 false
             }
@@ -411,9 +477,37 @@ class PanelBridge(private val plugin: InstalledPlugin) {
     var pageScrollsItself: Boolean = false
         private set
 
+    /**
+     * Whether the finger came down on something that owns drags outright.
+     *
+     * A slider is the case that matters: dragging one is a gesture the page
+     * has to see every move of, in whichever direction the finger wanders,
+     * and handing it to a scrolling list halfway through is the difference
+     * between a slider that works and one that does not.
+     */
+    @Volatile
+    var pageGrabsGesture: Boolean = false
+        private set
+
+    /**
+     * What the page makes of where the finger landed.
+     *
+     * Called by the bridge on every `touchstart` and read by the touch
+     * listener a moment later on the same gesture. Volatile because those are
+     * two different threads: the bridge's methods arrive on the WebView's own
+     * bridge thread, the touch listener runs on the main one.
+     */
+    @JavascriptInterface
+    fun ownsGesture(scrolls: Boolean, grabs: Boolean) {
+        pageScrollsItself = scrolls
+        pageGrabsGesture = grabs
+    }
+
+    /** The older name, kept because a panel may call it directly. */
     @JavascriptInterface
     fun innerScroll(on: Boolean) {
         pageScrollsItself = on
+        pageGrabsGesture = false
     }
 
     @JavascriptInterface

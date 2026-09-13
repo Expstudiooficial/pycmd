@@ -64,6 +64,7 @@ node tools/test_editor.js
 node tools/test_bridge.js
 node tools/test_creator_ui.js
 node tools/test_music_pro_ui.js
+node tools/test_panel_sliders.js
 
 echo
 echo "== Panels, laid out at a phone's size =="
@@ -75,8 +76,11 @@ echo
 echo "== Build and lint =="
 # The release build too, because that is what is published: R8 runs there and
 # nowhere else, and a keep rule that stopped being right would otherwise only
-# show up on somebody's phone.
-./gradlew :app:assembleDebug :app:assembleRelease :app:lintDebug --console=plain
+# show up on somebody's phone. And the JVM unit tests, which is where the
+# rules that are pure arithmetic live - who owns a drag inside a panel, for
+# one, which took every plugin's sliders with it when it was wrong.
+./gradlew :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest \
+    :app:lintDebug --console=plain
 
 echo
 echo "All checks passed."

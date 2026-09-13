@@ -1428,13 +1428,45 @@ BRIDGE = """
     return false;
   }
 
+  // Whether the finger came down on something that owns the whole drag.
+  //
+  // A slider is the case that matters. Dragging one is sideways, and the app
+  // behind the panel is a list that scrolls up and down - so the app has to
+  // be told to keep its hands off before the first move arrives, or the drag
+  // is taken away a few pixels in and the thumb stops following the finger.
+  //
+  // `touch-action: none` is the standard way a page says "this element
+  // handles its own gestures", so anything carrying it counts too, and a
+  // panel can mark anything else with `data-pycmd-drag`.
+  function grabsDrag(node) {
+    while (node && node.nodeType === 1 && node !== document.body) {
+      var tag = (node.tagName || '').toLowerCase();
+      var type = (node.getAttribute('type') || '').toLowerCase();
+      if (tag === 'input' && (type === 'range' || type === 'color')) return true;
+      if (node.hasAttribute && node.hasAttribute('data-pycmd-drag')) return true;
+      var style = window.getComputedStyle(node);
+      if (style && style.touchAction === 'none') return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('touchstart', function (event) {
-      if (!window.__pycmd_panel || !window.__pycmd_panel.innerScroll) return;
+      var panel = window.__pycmd_panel;
+      if (!panel) return;
       try {
-        window.__pycmd_panel.innerScroll(scrollableUnder(event.target));
+        var scrolls = scrollableUnder(event.target);
+        var grabs = grabsDrag(event.target);
+        if (panel.ownsGesture) {
+          panel.ownsGesture(scrolls, grabs);
+        } else if (panel.innerScroll) {
+          // An older host, which has one answer rather than two. A control
+          // that owns the drag is the more important of the two to report.
+          panel.innerScroll(scrolls || grabs);
+        }
       } catch (error) {
-        // An older host without this method; the app keeps its old guess.
+        // An older host without either; the app keeps its old guess.
       }
     }, { passive: true });
   }
