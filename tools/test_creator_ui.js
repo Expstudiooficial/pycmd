@@ -319,8 +319,10 @@ async function main() {
         scriptRows(sandbox).map((row) => row.textContent));
   check('and the palette is full', palette(sandbox).length === 154,
         palette(sandbox).length);
-  check('the language chooser has all five',
-        el(sandbox, 'lang').children.length === 5, el(sandbox, 'lang').children.length);
+  check('the language chooser has every language there are blocks for',
+        el(sandbox, 'lang').children.length === fixtures.languages.languages.length,
+        el(sandbox, 'lang').children.length + ' of '
+          + fixtures.languages.languages.length);
 
   console.log('\n== the blocks are on a screen of their own ==');
   check('the picker starts closed',

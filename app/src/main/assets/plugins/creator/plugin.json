@@ -1,9 +1,9 @@
 {
   "id": "pycmd.creator",
   "name": "Creator",
-  "version": "2.5.9",
+  "version": "2.6.0",
   "author": "PyCmd",
-  "description": "A tab of its own where code is built out of blocks instead of typed. Over three hundred and sixty blocks across Python, JavaScript, HTML, CSS and Markdown, and every row - in the palette and in your script - is the line that block actually writes, so the screen is the code rather than a description of it. Each language keeps its own script. Press See the code for the whole file, and Save as a file to put it in your workspace, where the editor opens it, the Servers tab runs it and the Pages tab serves it.",
+  "description": "A tab of its own where code is built out of blocks instead of typed. Over seven hundred and fifty blocks across ten languages - Python, JavaScript, C, Go, Rust, Shell, HTML, CSS, Markdown and JSON - and every row, in the palette and in your script, is the line that block actually writes, so the screen is the code rather than a description of it. Six of the ten run on the phone, so a program you built out of blocks can be run from the file it saves. Each language keeps its own script. Press See the code for the whole file, and Save as a file to put it in your workspace, where the editor opens it, the Servers tab runs it and the Pages tab serves it.",
   "entry": "main.py",
   "panel": "ui.html",
   "tab": {
@@ -28,9 +28,14 @@
       "options": [
         "python",
         "javascript",
+        "c",
+        "go",
+        "rust",
+        "shell",
         "html",
         "css",
-        "markdown"
+        "markdown",
+        "json"
       ],
       "default": "python"
     },

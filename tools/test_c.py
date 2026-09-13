@@ -625,6 +625,80 @@ int main() {
 }
 ''', "3 0 -1\n")
 
+print("\n== arrays with more than one dimension ==")
+# A C array is one flat run of memory and `grid[r][c]` is arithmetic on it.
+# Decaying `grid` to a pointer used to forget how wide a row was, so the
+# second `[` had nothing to work with and said grid was not an array at all.
+check("a grid is indexed by row and column", """
+#include <stdio.h>
+int main(void) {
+    int grid[3][4] = {{1,2,3,4},{5,6,7,8},{9,10,11,12}};
+    printf("%d %d %d", grid[0][0], grid[1][2], grid[2][3]);
+    return 0;
+}
+""", "1 7 12")
+
+check("writing to one cell leaves the others alone", """
+#include <stdio.h>
+int main(void) {
+    int grid[2][3];
+    for (int r = 0; r < 2; r++) for (int c = 0; c < 3; c++) grid[r][c] = r * 10 + c;
+    printf("%d %d %d", grid[0][0], grid[1][1], grid[1][2]);
+    return 0;
+}
+""", "0 11 12")
+
+check("a row can be handed to a function", """
+#include <stdio.h>
+int total(int *row, int n) { int t = 0; for (int i = 0; i < n; i++) t += row[i]; return t; }
+int main(void) {
+    int grid[2][3] = {{1,2,3},{4,5,6}};
+    printf("%d %d", total(grid[0], 3), total(grid[1], 3));
+    return 0;
+}
+""", "6 15")
+
+check("three dimensions work the same way", """
+#include <stdio.h>
+int main(void) {
+    int cube[2][2][2] = {{{1,2},{3,4}},{{5,6},{7,8}}};
+    printf("%d %d", cube[0][1][0], cube[1][0][1]);
+    return 0;
+}
+""", "3 6")
+
+check("a row of text is copied in, not pointed at", """
+#include <stdio.h>
+int main(void) {
+    char names[3][8] = {"Ada", "Grace"};
+    printf("%s %s %d", names[0], names[1], (int)names[2][0]);
+    return 0;
+}
+""", "Ada Grace 0")
+
+check("a short initialiser leaves the rest zero", """
+#include <stdio.h>
+int main(void) {
+    int grid[3][2] = {{1,2}};
+    printf("%d %d %d", grid[0][1], grid[1][0], grid[2][1]);
+    return 0;
+}
+""", "2 0 0")
+
+check("an ordinary one-dimensional array is unchanged", """
+#include <stdio.h>
+int main(void) {
+    int flat[4] = {1,2,3,4};
+    int *p = flat;
+    printf("%d %d", flat[3], p[2]);
+    return 0;
+}
+""", "4 3")
+
+check_error("too many rows is still refused", """
+int main(void) { int grid[1][2] = {{1,2},{3,4}}; return grid[0][0]; }
+""", "too many initialisers")
+
 print("\n== errors are reported, not crashed on ==")
 check_error("missing semicolon", 'int main() { int x = 1 return 0; }', "expected")
 check_error("unknown variable", '''

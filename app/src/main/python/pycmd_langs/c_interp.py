@@ -63,22 +63,80 @@ class _Exit(Exception):
         self.code = code
 
 
+class _Window:
+    """A writable view of part of a storage list.
+
+    `initialise` fills an array by assigning into the list it is handed, so
+    handing it `storage[a:b]` hands it a *copy* and every write lands in
+    something that is thrown away a moment later. That is why a row of a
+    two-dimensional array initialised to zeroes. A window forwards the writes
+    to the real list instead.
+    """
+
+    __slots__ = ("_storage", "_start", "_length")
+
+    def __init__(self, storage, start: int, length: int) -> None:
+        self._storage = storage
+        self._start = start
+        self._length = max(0, min(length, len(storage) - start))
+
+    def __len__(self) -> int:
+        return self._length
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            start, stop, _ = index.indices(self._length)
+            return _Window(self._storage, self._start + start, stop - start)
+        if not (0 <= index < self._length):
+            raise IndexError(index)
+        return self._storage[self._start + index]
+
+    def __setitem__(self, index, value) -> None:
+        if not (0 <= index < self._length):
+            raise IndexError(index)
+        self._storage[self._start + index] = value
+
+    def extend(self, values) -> None:
+        # Only `char buf[] = "text"` reaches this, and a window is always a
+        # row of something already sized, so there is nothing to grow into.
+        raise CRuntimeError("cannot size an array from inside another one")
+
+
 class Pointer:
-    """A location inside a storage list. `NULL` is a pointer to nothing."""
+    """A location inside a storage list. `NULL` is a pointer to nothing.
 
-    __slots__ = ("storage", "index", "base")
+    `shape` is what is left of a multi-dimensional array after the dimensions
+    already indexed. A C array is one flat run of memory and `grid[r][c]` is
+    arithmetic on it - `r * columns + c` - so `grid` decaying to a pointer has
+    to remember how wide a row is or the second `[` has nothing to work with.
+    That is what shape is: the dimensions still to come. An ordinary pointer
+    has none, and behaves exactly as it always did.
+    """
 
-    def __init__(self, storage, index: int = 0, base: str = "int") -> None:
+    __slots__ = ("storage", "index", "base", "shape")
+
+    def __init__(self, storage, index: int = 0, base: str = "int",
+                 shape=None) -> None:
         self.storage = storage
         self.index = index
         self.base = base
+        self.shape = list(shape or [])
+
+    @property
+    def stride(self) -> int:
+        """How many cells one step of this pointer covers."""
+        step = 1
+        for size in self.shape:
+            step *= max(int(size), 0)
+        return step
 
     @property
     def is_null(self) -> bool:
         return self.storage is None
 
     def offset(self, delta: int) -> "Pointer":
-        return Pointer(self.storage, self.index + delta, self.base)
+        return Pointer(self.storage, self.index + delta * (self.stride or 1),
+                       self.base, self.shape)
 
     def read(self):
         if self.storage is None:
@@ -434,6 +492,19 @@ class Interpreter:
 
         raise CRuntimeError(f"cannot execute {kind}", node[-1] if isinstance(node[-1], int) else 0)
 
+    def _dimensions(self, ctype: CType, scope) -> list:
+        """A type's array sizes as numbers, for working out a row's width."""
+        sizes = []
+        for dimension in ctype.array:
+            if dimension is None:
+                sizes.append(0)
+            else:
+                try:
+                    sizes.append(int(self.evaluate(dimension, scope or {})))
+                except Exception:  # noqa: BLE001 - a size that will not count
+                    sizes.append(0)
+        return sizes
+
     def initialise(self, storage, ctype: CType, init, scope, line: int) -> None:
         if init[0] == "initlist":
             items = init[1]
@@ -446,12 +517,43 @@ class Interpreter:
                     field_name, field_type = spec[index]
                     self.initialise(target.fields[field_name], field_type, item, scope, line)
                 return
+            # `int grid[2][3] = {{1,2,3},{4,5,6}}` - each inner list fills one
+            # row, and a row is three cells along in one flat run of storage.
+            # Stepping one cell per initialiser, as this used to, put the
+            # second row on top of the first and then ran out of room.
+            sizes = self._dimensions(ctype, scope)
+            row = 1
+            for size in sizes[1:]:
+                row *= max(int(size), 0)
+            row = max(row, 1)
+
+            # `int scores[] = {3, 1, 4}` leaves the first dimension out and
+            # lets the list decide it. The type says nothing, so storage was
+            # allocated empty and the first initialiser had nowhere to go.
+            if sizes and sizes[0] == 0 and len(storage) == 0:
+                element = CType(ctype.base, ctype.pointer, [], ctype.struct_name)
+                storage.extend(self.zero_value(element)
+                               for _ in range(len(items) * row))
+
             for index, item in enumerate(items):
+                # Anything at all, once there is more than one dimension,
+                # fills a whole row: `{1,2,3}` fills it cell by cell and
+                # `"ab"` - which is how `char names[2][6] = {"ab", "cd"}` is
+                # written - copies its characters in. Both are the row's
+                # business, so both recurse into the row.
+                if len(sizes) > 1:
+                    start = index * row
+                    if start >= len(storage):
+                        raise CRuntimeError("too many initialisers for this array", line)
+                    inner = CType(ctype.base, ctype.pointer, list(ctype.array[1:]),
+                                  ctype.struct_name)
+                    self.initialise(_Window(storage, start, row), inner, item, scope, line)
+                    continue
                 if index >= len(storage):
                     raise CRuntimeError("too many initialisers for this array", line)
                 if item[0] == "initlist":
                     element = CType(ctype.base, ctype.pointer, [], ctype.struct_name)
-                    self.initialise(storage[index: index + 1], element, item, scope, line)
+                    self.initialise(_Window(storage, index, 1), element, item, scope, line)
                 else:
                     storage[index] = self.coerce(self.evaluate(item, scope), ctype)
             return
@@ -520,7 +622,8 @@ class Interpreter:
             if isinstance(base, Pointer):
                 if base.is_null:
                     raise CRuntimeError("indexed a NULL pointer", node[3])
-                return base.storage, base.index + offset, CType(base.base)
+                return (base.storage, base.index + offset * (base.stride or 1),
+                        CType(base.base))
             raise CRuntimeError("indexed something that is not an array or pointer", node[3])
 
         if kind == "deref":
@@ -570,7 +673,8 @@ class Interpreter:
                 raise CRuntimeError(f"'{name}' is not declared", node[2])
             storage, ctype = self.lookup(name, scope, node[2])
             if ctype is not None and ctype.is_array:
-                return Pointer(storage, 0, ctype.base)
+                return Pointer(storage, 0, ctype.base,
+                               self._dimensions(ctype, scope)[1:])
             return storage[0]
 
         if kind == "assign":
@@ -610,6 +714,15 @@ class Interpreter:
             return Pointer(storage, index, ctype.base if ctype else "int")
 
         if kind == "index":
+            base = self.evaluate(node[1], scope)
+            if isinstance(base, Pointer) and base.shape:
+                # `grid[1]` where grid is int[2][3] is the second row: still a
+                # place, not a value, and the next `[` indexes into it.
+                if base.is_null:
+                    raise CRuntimeError("indexed a NULL pointer", node[3])
+                offset = int(self.evaluate(node[2], scope))
+                return Pointer(base.storage, base.index + offset * base.stride,
+                               base.base, base.shape[1:])
             storage, index, _ = self.lvalue(node, scope)
             if not (0 <= index < len(storage)):
                 raise CRuntimeError(
