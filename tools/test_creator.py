@@ -341,6 +341,57 @@ else:
 shutil.rmtree(_SCRATCH, ignore_errors=True)
 
 say()
+say("== a number slot means a number in JSON, and an expression everywhere else ==")
+# Nine of the ten languages have expressions, and `total += i` puts a variable
+# in a number slot. JSON has no expressions at all, so a word there is a file
+# that does not parse rather than a name that resolves later.
+_expression = blocks.compile_project({"language": "python", "blocks": [
+    {"block": "py.increase", "values": {"name": "total", "amount": "i"}},
+]})
+check("a variable in a Python number slot is written as typed",
+      _expression["code"].strip() == "total += i", _expression["code"])
+_c_expression = blocks.compile_project({"language": "c", "blocks": [
+    {"block": "c.increase", "values": {"name": "total", "amount": "count * 2"}},
+]})
+check("and so is an expression in C",
+      "count * 2" in _c_expression["code"], _c_expression["code"])
+
+for _typed, _written in (("abc", "0"), ("10px", "10"), ("+3", "3"),
+                         ("5.", "5"), (".5", "0.5"), ("..", "0"),
+                         ("3.1.4", "3.1"), ("", "0")):
+    _out = blocks.compile_project({"language": "json", "blocks": [
+        {"block": "json.object", "children": [
+            {"block": "json.number", "values": {"name": "n", "value": _typed}},
+        ]},
+    ]})
+    check(f"JSON writes {_typed!r} as {_written}",
+          f'"n": {_written}' in _out["code"], _out["code"])
+    check(f"and {_typed!r} leaves valid JSON behind",
+          not _out["problems"], _out["problems"])
+
+say()
+say("== a JSON project says when it is not JSON yet ==")
+# The "written out as is" block is an escape hatch by design. An escape hatch
+# that quietly writes a file nothing can read is a trap.
+_broken = blocks.compile_project({"language": "json", "blocks": [
+    {"block": "json.object", "children": [
+        {"block": "json.raw", "values": {"name": "a", "value": "oops"}},
+    ]},
+]})
+check("an escape hatch that broke it is reported",
+      any("not valid JSON" in note for note in _broken["problems"]),
+      _broken["problems"])
+check("and the code is still handed back to be looked at",
+      "oops" in _broken["code"], _broken["code"])
+
+_fine = blocks.compile_project({"language": "json", "blocks": [
+    {"block": "json.object", "children": [
+        {"block": "json.text", "values": {"name": "a", "value": "one"}},
+    ]},
+]})
+check("a JSON project that is fine says nothing", not _fine["problems"], _fine)
+
+say()
 say("== every JSON block on its own is JSON ==")
 _json_broken = []
 for row in blocks.BLOCKS["json"]:

@@ -362,6 +362,25 @@ check("the library reads them back",
       and pycmd_music.library()["state"]["loop"] == "one",
       pycmd_music.library()["state"])
 
+# `remember` writes the whole state object, and the play counter lives in it.
+# Rewriting it wholesale took the counter with it, so every pause reset the
+# history order to zero - which is the exact tie the counter exists to break.
+_before = pycmd_music.played(_blue)["play_order"]
+pycmd_music.remember(loop="off", shuffle=False)
+_after = pycmd_music.played(_blue)["play_order"]
+check("remembering the loop does not reset the play counter",
+      _after > _before, (_before, _after))
+
+# Nothing in this module raises across the bridge; a value that is not a
+# number falls back rather than exploding.
+for _nonsense in ("fast", None, [], {}):
+    _answer = pycmd_music.remember(speed=_nonsense, sleep_minutes=_nonsense)
+    check(f"a speed of {_nonsense!r} falls back rather than raising",
+          _answer["state"]["speed"] == 1.0
+          and _answer["state"]["sleep_minutes"] == 0, _answer)
+check("and a number written as text still works",
+      pycmd_music.remember(speed="1.5")["state"]["speed"] == 1.5)
+
 # Back to the library the checks below expect.
 pycmd_music.configure(root)
 

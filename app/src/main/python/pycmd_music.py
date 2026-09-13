@@ -756,7 +756,21 @@ def remember(loop: str = "off", shuffle: bool = False,
     the middle when somebody opened the app hours later is a surprise, and
     surprises in a music player are the whole of what people hate about them.
     """
+    # Everything else in this module answers rather than raising, and this is
+    # called across a bridge where a raise becomes "something went wrong" with
+    # no idea which argument was the something. A value that is not a number
+    # falls back rather than exploding.
+    try:
+        wanted_speed = min(2.0, max(0.5, float(speed if speed else 1.0)))
+    except (TypeError, ValueError):
+        wanted_speed = 1.0
+    try:
+        wanted_sleep = max(0, min(600, int(sleep_minutes if sleep_minutes else 0)))
+    except (TypeError, ValueError):
+        wanted_sleep = 0
+
     data = _read()
+    state = data["state"] if isinstance(data.get("state"), dict) else {}
     data["state"] = {
         "loop": loop if loop in LOOP_MODES else "off",
         "shuffle": bool(shuffle),
@@ -765,10 +779,15 @@ def remember(loop: str = "off", shuffle: bool = False,
         # Half speed to double, and nothing outside it: a player stuck at 0.05
         # sounds broken rather than slow, and there is no way back from a
         # setting you cannot hear the effect of.
-        "speed": min(2.0, max(0.5, float(speed or 1.0))),
+        "speed": wanted_speed,
         # Minutes from now, not a clock time: a stored deadline that passed
         # while the app was closed would stop the music the moment it opened.
-        "sleep_minutes": max(0, min(600, int(sleep_minutes or 0))),
+        "sleep_minutes": wanted_sleep,
+        # The play counter lives in the same place, and rewriting the state
+        # wholesale used to take it with it - so every pause reset the history
+        # order back to zero and two tracks played either side of one tied
+        # again.
+        "play_order": int(state.get("play_order", 0) or 0),
         "at": int(time.time()),
     }
     _write(data)

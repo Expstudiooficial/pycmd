@@ -3040,7 +3040,8 @@ JSON = [
            [_slot("name", "name", "string", "count"), _slot("value", "value", "number", "0")]),
     _block("json.decimal", "Named values", "a decimal number",
            '@name@: @value@',
-           [_slot("name", "name", "string", "price"), _slot("value", "value", "text", "9.99")]),
+           [_slot("name", "name", "string", "price"),
+            _slot("value", "value", "number", "9.99")]),
     _block("json.bool", "Named values", "true or false", '@name@: @value@',
            [_slot("name", "name", "string", "enabled"),
             _slot("value", "value", "choice", "true", ["true", "false"])]),
@@ -3441,6 +3442,62 @@ def _escaped(raw: str, language: str) -> str:
     return raw
 
 
+def _as_number(raw: str, language: str) -> str:
+    """What a number slot writes.
+
+    In nine of the ten languages: whatever was typed. A number slot is a hole
+    where a number goes, but `total += i` and `range(1, count)` put a
+    *variable* in one, and `x + 1` an expression - which is the ordinary way
+    to use half the blocks in the catalogue. Demanding a literal there breaks
+    the most natural thing anybody does with them.
+
+    In JSON: an actual number, because JSON has no expressions at all. `count`
+    in a JSON number slot is not a variable that will be resolved later; it is
+    a file that does not parse. So a JSON number is read and written back out
+    in the one spelling JSON accepts - which also rules out `+3` and `5.`,
+    both of which are numbers in the other nine languages and neither of which
+    is JSON.
+
+    Two near-misses are rescued rather than thrown away: a trailing unit,
+    because `10px` is somebody answering "how wide" in the units they think
+    in, and a leading sign.
+    """
+    stripped = str(raw).strip()
+    if not stripped:
+        return "0"
+    if language != "json":
+        return stripped
+
+    def salvage(text: str) -> str:
+        sign = text[0] if text[:1] in ("+", "-") else ""
+        head = ""
+        for character in text[len(sign):]:
+            if character.isdigit() or (character == "." and "." not in head):
+                head += character
+            else:
+                break
+        candidate = sign + head
+        try:
+            float(candidate)
+        except ValueError:
+            return "0"
+        return candidate
+
+    try:
+        float(stripped)
+        number = stripped
+    except ValueError:
+        number = salvage(stripped)
+
+    try:
+        value = float(number)
+    except ValueError:
+        return "0"
+    if value.is_integer() and "e" not in number.lower():
+        return str(int(value))
+    return repr(value)
+
+
 def _value_for(slot: dict, given, language: str) -> str:
     kind = slot.get("kind", "text")
     raw = _clean(given if given is not None else slot.get("default", ""))
@@ -3452,10 +3509,7 @@ def _value_for(slot: dict, given, language: str) -> str:
         return raw
 
     if kind == "number":
-        stripped = raw.strip()
-        if not stripped:
-            return "0"
-        return stripped
+        return _as_number(raw, language)
 
     if kind in ("string", "inline"):
         body = _escaped(raw, language)
@@ -3638,6 +3692,17 @@ def compile_project(project: dict) -> dict:
 
     if language == "json":
         _tidy_json(lines)
+        # Said rather than assumed. A JSON block cannot write a stray comma -
+        # the compiler puts those in - but the "written out as is" block is an
+        # escape hatch by design, and an escape hatch that quietly writes a
+        # file nothing can read is a trap. This is the same check the person
+        # would run themselves, run for them.
+        try:
+            import json as _json
+
+            _json.loads("\n".join(lines) or "null")
+        except Exception as error:  # noqa: BLE001
+            problems.append(f"this is not valid JSON yet: {error}")
         # The panel draws the script from the outline, so the outline has to
         # show the commas too - otherwise the screen stops being the code.
         for entry in outline:

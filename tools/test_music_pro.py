@@ -183,6 +183,34 @@ call("flatten", {"deck": "b"})
 check("and they can all go flat at once", host.asked("mixer.flatten"), host.actions)
 
 say()
+say("== a number that is not a number does not throw a traceback ==")
+# An export is a public door. The panel only ever sends numbers, but an
+# export that raises hands back a stack trace where a person expected a
+# sentence.
+host.clear()
+for field, value in (("rate", "fast"), ("level", None), ("position", "soon")):
+    answer = call("deck_set", {"deck": "a", field: value})
+    check(f"{field}={value!r} is taken as a number or left alone",
+          answer.get("ok") and "Traceback" not in str(answer), answer)
+check("and the tempo fell back to normal rather than to nothing",
+      host.asked("mixer.tempo") and host.asked("mixer.tempo")[0]["rate"] == 1.0,
+      host.actions)
+
+host.clear()
+check("a band index that is a word does not throw",
+      call("band", {"deck": "a", "index": "two", "level": 0}).get("ok"))
+check("a crossfader position that is a word does not throw",
+      call("fader", {"position": "middle"}).get("ok"))
+check("and it landed in the middle, which is what was meant",
+      host.asked("mixer.fader")[0]["position"] == 0.5, host.actions)
+
+host.clear()
+_long = call("app_search", {"query": "x" * 4000})
+check("an enormous search is cut down rather than sent whole",
+      _long.get("ok") and len(host.asked("apps.search")[0]["query"]) <= 120,
+      len(host.asked("apps.search")[0]["query"]))
+
+say()
 say("== the other apps ==")
 host.clear()
 call("app_control", {"package": "com.example.player", "what": "next"})

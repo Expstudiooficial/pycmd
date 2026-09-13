@@ -62,6 +62,24 @@ AGENT = "PyCmd/2.6 (+https://github.com/expstudiooficial/pycmd)"
 
 DECKS = ("a", "b")
 
+# Long enough for a band and a song, short enough that it cannot be used to
+# build an enormous URL out of a panel that is misbehaving.
+MAX_QUERY = 120
+
+
+def _number(value, fallback: float = 0.0) -> float:
+    """A number, or the fallback. Never raises.
+
+    Every one of these arrives from a panel over a bridge, and an export that
+    throws hands back a traceback where a person expected a sentence. The
+    panel only ever sends numbers; an export is a public door and should not
+    depend on that.
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
 # The effects the app hangs off a deck, and what each one is called on screen.
 EFFECTS = (
     ("bass", "Bass"),
@@ -162,21 +180,24 @@ def setup(api):
             return {"ok": False, "error": "there are two decks, a and b"}
 
         if "rate" in body:
-            api.request("mixer.tempo", deck=deck, rate=float(body["rate"]))
+            api.request("mixer.tempo", deck=deck,
+                        rate=max(0.5, min(2.0, _number(body["rate"], 1.0))))
         if "level" in body:
-            api.request("mixer.gain", deck=deck, level=float(body["level"]))
+            api.request("mixer.gain", deck=deck,
+                        level=max(0.0, min(1.0, _number(body["level"], 1.0))))
         if "position" in body:
-            api.request("mixer.seek", deck=deck, position=int(body["position"]))
+            api.request("mixer.seek", deck=deck,
+                        position=max(0, int(_number(body["position"], 0))))
         if "loopStart" in body or "loopEnd" in body:
             api.request("mixer.loop", deck=deck,
-                        start=int(body.get("loopStart", 0)),
-                        end=int(body.get("loopEnd", 0)))
+                        start=max(0, int(_number(body.get("loopStart"), 0))),
+                        end=max(0, int(_number(body.get("loopEnd"), 0))))
         return {"ok": True}
 
     @api.export
     def fader(payload):
         """Where the crossfader sits: 0 is all of A, 1 is all of B."""
-        position = float((payload or {}).get("position", 0.5))
+        position = _number((payload or {}).get("position"), 0.5)
         api.request("mixer.fader", position=max(0.0, min(1.0, position)))
         return {"ok": True}
 
@@ -191,7 +212,7 @@ def setup(api):
         if name not in {key for key, _ in EFFECTS}:
             return {"ok": False, "error": f"there is no {name!r} effect"}
         api.request("mixer.effect", deck=deck, name=name,
-                    level=max(0.0, min(1.0, float(body.get("level", 0)))))
+                    level=max(0.0, min(1.0, _number(body.get("level"), 0.0))))
         return {"ok": True}
 
     @api.export
@@ -201,8 +222,9 @@ def setup(api):
         deck = str(body.get("deck", "a")).lower()
         if deck not in DECKS:
             return {"ok": False, "error": "there are two decks, a and b"}
-        api.request("mixer.band", deck=deck, index=int(body.get("index", 0)),
-                    level=max(-1.0, min(1.0, float(body.get("level", 0)))))
+        api.request("mixer.band", deck=deck,
+                    index=max(0, int(_number(body.get("index"), 0))),
+                    level=max(-1.0, min(1.0, _number(body.get("level"), 0.0))))
         return {"ok": True}
 
     @api.export
@@ -243,7 +265,7 @@ def setup(api):
     def app_search(payload):
         """Hands a search to a music app and lets it decide what it means."""
         body = payload or {}
-        query = str(body.get("query", "")).strip()
+        query = str(body.get("query", "")).strip()[:MAX_QUERY]
         if not query:
             return {"ok": False, "error": "what are you looking for?"}
         api.request("apps.search", package=str(body.get("package", "")), query=query)
@@ -270,7 +292,7 @@ def setup(api):
     def find(payload):
         """Searches the free catalogues, and says which found what."""
         body = payload or {}
-        query = str(body.get("query", "")).strip()
+        query = str(body.get("query", "")).strip()[:MAX_QUERY]
         if not query:
             return {"ok": False, "error": "what are you looking for?"}
 

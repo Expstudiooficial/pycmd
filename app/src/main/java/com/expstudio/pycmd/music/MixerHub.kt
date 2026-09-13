@@ -1,6 +1,7 @@
 package com.expstudio.pycmd.music
 
 import android.content.Context
+import android.media.AudioManager
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
@@ -87,20 +88,41 @@ class MixerHub(private val context: Context) {
                     DebugLog.warn(TAG, "$name could not play", error.message.orEmpty())
                 }
             })
+
+            /*
+             * The audio session is made here rather than read off the player.
+             *
+             * `audioSessionId` is 0 until the audio renderer starts, which is
+             * some time after something has been prepared *and* started - so
+             * asking for it at this point returns 0, every effect is skipped,
+             * and the deck silently has no equaliser for the whole session.
+             * Generating one and handing it to the player means there is a
+             * session to attach to before a single frame has been decoded.
+             */
+            val session = runCatching {
+                val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                audio.generateAudioSessionId()
+            }.getOrDefault(0)
+            if (session != 0) {
+                runCatching { made.audioSessionId = session }
+            }
+
             player = made
-            attachEffects(made)
+            attachEffects(session.takeIf { it != 0 } ?: made.audioSessionId)
             return made
         }
 
         /**
-         * Hangs the effects off the player's audio session.
+         * Hangs the effects off the deck's audio session.
          *
          * Each one separately, because a phone that has no reverb should still
          * get an equaliser rather than nothing.
          */
-        private fun attachEffects(made: ExoPlayer) {
-            val session = made.audioSessionId
-            if (session == 0) return
+        private fun attachEffects(session: Int) {
+            if (session == 0) {
+                DebugLog.warn(TAG, "$name got no audio session", "no effects on this deck")
+                return
+            }
             try {
                 equaliser = Equalizer(0, session).apply { enabled = true }
                 available += "equaliser"
@@ -388,11 +410,23 @@ class MixerHub(private val context: Context) {
     private fun startWatching() {
         if (watching?.isActive == true) return
         watching = scope.launch {
-            while (isActive) {
+            // Idle rounds before giving up, rather than the first one.
+            //
+            // `play()` returns before the player is actually playing - it has
+            // to buffer first - so a watcher that stopped the moment nothing
+            // was playing stopped immediately every time it was started, and
+            // the position readout never moved. Two seconds of patience
+            // covers the gap and still means an abandoned panel is not a
+            // timer.
+            var quiet = 0
+            while (isActive && quiet < 8) {
                 var busy = false
                 decks.values.forEach { deck ->
                     val player = deck.player ?: return@forEach
-                    if (player.isPlaying) {
+                    // `playWhenReady` is the honest question: it is true from
+                    // the moment Play was pressed, through buffering, until
+                    // Pause.
+                    if (player.isPlaying || player.playWhenReady) {
                         busy = true
                         if (deck.loopEnd > deck.loopStart &&
                             player.currentPosition >= deck.loopEnd
@@ -401,8 +435,8 @@ class MixerHub(private val context: Context) {
                         }
                     }
                 }
+                quiet = if (busy) 0 else quiet + 1
                 if (busy) report()
-                if (!busy) break
                 delay(250)
             }
         }
