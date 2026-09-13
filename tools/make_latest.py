@@ -25,7 +25,7 @@ import subprocess
 import sys
 import zipfile
 
-REPO = "expstudiooficial/space_dodge-1.0"
+REPO = "expstudiooficial/pycmd"
 BRANCH = "claude/python-mobile-cmd-android-dj1ixb"
 RAW = "https://raw.githubusercontent.com/{repo}/{branch}/{path}"
 

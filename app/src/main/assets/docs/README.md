@@ -228,8 +228,8 @@ on `PATH` as `python3.13` — Chaquopy uses it to resolve the pip requirements a
 build time.
 
 ```bash
-git clone https://github.com/Expstudiooficial/space_dodge-1.0.git
-cd space_dodge-1.0
+git clone https://github.com/Expstudiooficial/pycmd.git
+cd pycmd
 echo "sdk.dir=/path/to/android-sdk" > local.properties
 
 ./gradlew :app:assembleDebug

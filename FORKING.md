@@ -61,8 +61,8 @@ as `python3.13` - Chaquopy uses it to resolve the pip requirements at build
 time.
 
 ```bash
-git clone https://github.com/Expstudiooficial/space_dodge-1.0.git
-cd space_dodge-1.0
+git clone https://github.com/Expstudiooficial/pycmd.git
+cd pycmd
 ./gradlew :app:assembleRelease -Ppycmd.abi=arm64-v8a
 # -> app/build/outputs/apk/release/app-release.apk
 ```
@@ -155,5 +155,5 @@ The same button is on the Guides screen you opened this from, under **Take the
 source** - either one does the same thing.
 
 Reading this on a computer rather than in the app? The zip is at
-`https://codeload.github.com/expstudiooficial/space_dodge-1.0/zip/refs/heads/claude/python-mobile-cmd-android-dj1ixb`,
+`https://codeload.github.com/expstudiooficial/pycmd/zip/refs/heads/claude/python-mobile-cmd-android-dj1ixb`,
 or just clone the repository as above.

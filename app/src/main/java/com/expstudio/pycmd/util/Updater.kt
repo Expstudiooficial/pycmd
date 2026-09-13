@@ -114,9 +114,19 @@ object Updater {
 
     private const val TAG = "update"
 
-    /** Where the app looks unless the user points it somewhere else. */
+    /**
+     * Where the app looks unless the user points it somewhere else.
+     *
+     * The repository was renamed from `space_dodge-1.0` to `pycmd` before
+     * 2.6.0. Builds up to 2.5.9 have the old name in them and still find this
+     * file, because GitHub redirects a renamed repository - but only until
+     * somebody creates a new repository under the old name, at which point
+     * those builds would follow the redirect to a stranger's file. That is
+     * the reason to move every URL at once rather than leave them: it limits
+     * the exposure to the versions already installed.
+     */
     const val DEFAULT_MANIFEST_URL =
-        "https://raw.githubusercontent.com/expstudiooficial/space_dodge-1.0/" +
+        "https://raw.githubusercontent.com/expstudiooficial/pycmd/" +
             "claude/python-mobile-cmd-android-dj1ixb/dist/latest.json"
 
     /**
@@ -127,7 +137,7 @@ object Updater {
      * above it, and its users get its source instead.
      */
     const val SOURCE_ZIP_URL =
-        "https://codeload.github.com/expstudiooficial/space_dodge-1.0/zip/refs/heads/" +
+        "https://codeload.github.com/expstudiooficial/pycmd/zip/refs/heads/" +
             "claude/python-mobile-cmd-android-dj1ixb"
 
     private const val CONNECT_TIMEOUT = 20_000

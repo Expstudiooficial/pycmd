@@ -27,7 +27,7 @@ import zipfile
 
 PYPI_JSON = "https://pypi.org/pypi/{name}/json"
 PYPI_JSON_VERSIONED = "https://pypi.org/pypi/{name}/{version}/json"
-USER_AGENT = "PyCmd-Android/1.0 (+https://github.com/Expstudiooficial/space_dodge-1.0)"
+USER_AGENT = "PyCmd-Android/1.0 (+https://github.com/Expstudiooficial/pycmd)"
 _TIMEOUT = 60
 
 _target_dir: str | None = None

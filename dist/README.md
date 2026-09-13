@@ -1,15 +1,89 @@
 # Prebuilt APK
 
-`PyCmd-2.5.9.apk` — ready to install, nothing else needed.
+`PyCmd-2.6.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 2.5.9 |
-| Size | 18 MB |
+| Version | 2.6.0 |
+| Size | 20 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a** (every phone since about 2016) |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
+
+## What is new in 2.6.0
+
+### Creator: ten languages, 904 blocks
+
+Five new languages, chosen because the phone can already run four of them:
+**C**, **Go**, **Rust** and **Shell** run on the interpreters the app carries,
+and **JSON** is the thing everybody has to write by hand and nobody enjoys.
+363 blocks became 904, with the categories the original five were missing -
+sets, comprehensions, sorting, counting, dates and type hints in Python;
+promises, timers, classes and storage in JavaScript; media, tables and
+sections in HTML; flex, grid, custom properties and animation in CSS; tables,
+quotes and checklists in Markdown.
+
+**Every language has an example, and a button that loads it.** Each one is a
+whole program rather than a fragment, because the first thing anybody does
+with a starter is press Run. The starter used to arrive once, at boot, in one
+language - so switching to Rust gave you an empty page and a hundred and two
+blocks with no clue which two go at the top.
+
+**JSON blocks carry no commas.** The compiler puts them in, by the only rule
+there is, so the two mistakes everybody makes writing JSON by hand cannot be
+made here. A project that still is not valid JSON says so.
+
+Three real bugs fell out of building it:
+
+* **`if` followed by `else` wrote broken JavaScript**, and had since 2.5.4 -
+  the `if` closed itself and then `else` supplied a second brace. Blocks can
+  say what they continue now, and an `else` with no `if` above it is reported
+  rather than written out wrong.
+* **The C interpreter had no two-dimensional arrays.** `grid` decaying to a
+  pointer forgot how wide a row was, so `grid[r][c]` said grid was not an
+  array at all.
+* **`int scores[] = {3, 1, 4}` allocated nothing** and then refused the first
+  initialiser.
+
+### The Music tab
+
+A library of eight tracks is a list; a library of four hundred is something
+you search. Searching matches title, artist, album and file name, every word
+in any order. Eight sorts. Five smart lists worked out fresh each time -
+recently added, most played, never played, the long ones, video files.
+
+**Plays are counted honestly**: thirty seconds, or halfway for anything under
+a minute, measured by where the playhead is. Skipping past something does not
+make it your most played.
+
+**Track details** let you correct the title, artist and album of a file called
+`track_03_final_v2.mp3`, and show how long it is, how often it has been played
+and which playlists hold it.
+
+**Playback speed** from half to double with the pitch corrected, and a
+**sleep timer** counted from now rather than from a clock time.
+
+### New: Music Pro
+
+Two DJ decks with an equal-power crossfader, cue points, loops and tempo; the
+phone's own equaliser, bass boost, stereo widener, reverb and loudness
+enhancer on each deck; the ability to see and drive whatever other app on this
+phone is playing; and search over two catalogues of freely licensed music -
+Jamendo and the Internet Archive.
+
+It is worth being plain about the limit, because the description of a thing
+like this is usually vaguer than the thing: Music Pro drives another app's
+*transport* and hands it a *search*. It cannot read their library, search
+their catalogue from inside PyCmd, stream from their service, or hold your
+password to one. PyCmd has no arrangement with any music service.
+
+Its guide is in **Guides → Music Pro**.
+
+### Elsewhere
+
+The repository was renamed to `pycmd`, so every URL in the app points there
+now. Builds up to 2.5.9 still find their updates through GitHub's redirect.
 
 ## What is new in 2.5.9
 
