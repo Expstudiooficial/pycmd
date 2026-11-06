@@ -140,6 +140,30 @@ def sha256(path: str) -> str:
     return digest.hexdigest()
 
 
+def apk_abis(path: str) -> list[str]:
+    """Which processors an APK actually carries code for.
+
+    Read straight out of the zip's `lib/` folders rather than through aapt2,
+    so it works on a machine with nothing but Python - and so it cannot be
+    fooled by a manifest that says one thing while the file holds another.
+
+    This is the check that matters most in the whole script. Until 2.7.0 the
+    published APK was the arm64-only split, and an emulator on a PC is an
+    x86_64 machine: it either refused to install the file or installed it and
+    then died the moment Python was asked to start. The universal APK is three
+    megabytes bigger and works everywhere.
+    """
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return sorted({
+                name.split("/")[1]
+                for name in archive.namelist()
+                if name.startswith("lib/") and name.count("/") >= 2
+            })
+    except (zipfile.BadZipFile, OSError):
+        return []
+
+
 def is_apk(path: str) -> bool:
     """A real APK, not a rename: it has to hold an AndroidManifest."""
     try:
@@ -175,7 +199,8 @@ def build(apk: str, notes: str) -> dict:
                               .strftime("%Y-%m-%dT%H:%M:%SZ"),
         "minSdk": min_sdk,
         "minAndroid": ANDROID_NAMES.get(min_sdk, str(min_sdk)),
-        "abi": facts.get("abi") or "arm64-v8a",
+        # From the file's own lib/ folders, not from aapt2: see apk_abis.
+        "abi": " ".join(apk_abis(apk)) or facts.get("abi") or "arm64-v8a",
         "python": "3.13",
         "changelog": RAW.format(repo=REPO, branch=BRANCH, path="dist/README.md"),
         "checksums": RAW.format(repo=REPO, branch=BRANCH, path="dist/SHA256SUMS.txt"),
@@ -229,6 +254,21 @@ def check(manifest: dict) -> list[str]:
 
     if not manifest.get("versionName"):
         problems.append("versionName is missing")
+
+    # The emulator rule. An APK without x86_64 in it cannot be installed on an
+    # emulator running on a PC, which is how most people who are not on a
+    # phone try PyCmd - so publishing one is not allowed here any more.
+    if local and os.path.isfile(local):
+        carried = apk_abis(local)
+        if carried and "x86_64" not in carried:
+            problems.append(
+                f"{os.path.basename(local)} carries only {', '.join(carried)}. "
+                "Publish the universal APK (app-universal-release.apk): without "
+                "x86_64 no emulator can install it.")
+        if carried and manifest.get("abi") != " ".join(carried):
+            problems.append(
+                f"abi says {manifest.get('abi')!r}, the APK carries "
+                f"{' '.join(carried)!r}")
 
     # The fields a website reads. Missing ones are not fatal for the app, but
     # they are for the page, and a page nobody checked is how a download link

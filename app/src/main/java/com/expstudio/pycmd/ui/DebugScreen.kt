@@ -206,7 +206,7 @@ fun DebugScreen(
         } else {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().background(PyColors.Background),
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 contentPadding = PaddingValues(vertical = 6.dp),
             ) {
                 items(visible, key = { it.id }) { entry ->

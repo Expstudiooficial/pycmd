@@ -22,8 +22,22 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const PYTHON = process.env.PYTHON || 'python3.13';
-const CHROME = process.env.PYCMD_CHROME
-  || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+// Wherever this machine keeps its Chromium. The folder carries a version
+// number that changes with the image, and the layout changed once
+// (`chrome-linux` became `chrome-linux64`), so the last resort is to look.
+const CHROME = (() => {
+  if (process.env.PYCMD_CHROME) return process.env.PYCMD_CHROME;
+  const base = '/opt/pw-browsers';
+  if (!fs.existsSync(base)) return '';
+  for (const folder of fs.readdirSync(base).sort().reverse()) {
+    if (!folder.startsWith('chromium')) continue;
+    for (const inner of ['chrome-linux64', 'chrome-linux']) {
+      const guess = path.join(base, folder, inner, 'chrome');
+      if (fs.existsSync(guess)) return guess;
+    }
+  }
+  return '';
+})();
 
 let chromium = null;
 try {

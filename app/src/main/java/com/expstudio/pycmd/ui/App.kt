@@ -118,6 +118,12 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
     val keptVersions by viewModel.versions.collectAsState()
     val versionsCap by viewModel.versionsCap.collectAsState()
     val updateState by viewModel.update.collectAsState()
+    val teachHome by viewModel.teach.collectAsState()
+    val teachCourse by viewModel.teachCourse.collectAsState()
+    val teachLesson by viewModel.teachLesson.collectAsState()
+    val teachMark by viewModel.teachMark.collectAsState()
+    val teachBusy by viewModel.teachBusy.collectAsState()
+    val whatsNew by viewModel.whatsNew.collectAsState()
     val updateSource by viewModel.updateSource.collectAsState()
 
     // Worth a dot on More: a newer build found but not yet installed is the
@@ -265,10 +271,22 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
             viewModel.closePluginPanel()
             return@BackHandler
         }
+        // PyCmdTeach is three screens deep, and back walks out of them one at
+        // a time before it leaves the tab.
+        if (tab == Tab.TEACH) {
+            if (teachLesson != null) {
+                viewModel.closeTeachLesson()
+                return@BackHandler
+            }
+            if (teachCourse != null) {
+                viewModel.closeTeachCourse()
+                return@BackHandler
+            }
+        }
         // A destination reached through More goes back to More first.
         val parent = if (tab in setOf(
                 Tab.PACKAGES, Tab.DOWNLOADS, Tab.PLUGINS, Tab.DOCS, Tab.SYSTEM,
-                Tab.PAGES, Tab.MUSIC,
+                Tab.PAGES, Tab.MUSIC, Tab.TEACH, Tab.APPEARANCE,
             )
         ) {
             Tab.MORE
@@ -276,6 +294,12 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
             Tab.CONSOLE
         }
         viewModel.selectTab(parent)
+    }
+
+    // Over everything, and only after an update. Read is the only way out of
+    // it, and pressing Read is what records that it has been read.
+    whatsNew?.let { release ->
+        WhatsNewDialog(release, onRead = viewModel::markWhatsNewRead)
     }
 
     Scaffold(
@@ -290,6 +314,16 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(Branding.NAME, style = MaterialTheme.typography.titleLarge)
+                        // A theme with a glyph puts it here. Only the seasonal
+                        // one has one: a permanent decoration in the chrome
+                        // stops being a decoration after a week, and a
+                        // seasonal one that does not show up anywhere is not
+                        // worth switching on.
+                        val glyph = LocalPyTheme.current.glyph
+                        if (glyph.isNotEmpty()) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(glyph, style = MaterialTheme.typography.titleMedium)
+                        }
                         Spacer(Modifier.width(10.dp))
                         when {
                             status.startupError != null -> StatusChip(
@@ -536,6 +570,31 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                     },
                 )
 
+                Tab.TEACH -> TeachScreen(
+                    home = teachHome,
+                    course = teachCourse,
+                    lesson = teachLesson,
+                    mark = teachMark,
+                    busy = teachBusy,
+                    onOpenCourse = viewModel::openTeachCourse,
+                    onCloseCourse = viewModel::closeTeachCourse,
+                    onOpenLesson = viewModel::openTeachLesson,
+                    onCloseLesson = viewModel::closeTeachLesson,
+                    onAnswer = viewModel::markTeachAnswer,
+                    onNext = viewModel::nextTeachLesson,
+                    onPrevious = viewModel::previousTeachLesson,
+                    onReset = viewModel::resetTeachCourse,
+                    onOpenSnippet = viewModel::openTeachSnippet,
+                    pluginSections = {
+                        PluginSections(
+                            sectionsFor(Tab.TEACH, installedPlugins, installedEnabled),
+                            viewModel,
+                        )
+                    },
+                )
+
+                Tab.APPEARANCE -> AppearanceScreen()
+
                 Tab.SYSTEM -> SystemScreen(
                     info = systemInfo,
                     busy = systemBusy,
@@ -563,6 +622,11 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                     onDeleteAllVersions = viewModel::deleteAllVersions,
                     onSaveVersionToPhone = { saveToDevice(it.file) },
                     onBackupWorkspace = { viewModel.backupWorkspaceForRollback(saveToDevice) },
+                    onCopy = { text ->
+                        copyToClipboard(context, text)
+                        viewModel.showToast("Copied")
+                    },
+                    onShowWhatsNew = viewModel::showWhatsNew,
                     onEmail = { address ->
                         val intent = android.content.Intent(
                             android.content.Intent.ACTION_SENDTO,
@@ -676,6 +740,8 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                     errorCount = debugErrors,
                     pageCount = pagesState.active,
                     musicPlaying = playback.playing,
+                    teachDone = teachHome.totals.done,
+                    teachStreak = teachHome.totals.streak,
                     onSelect = viewModel::selectTab,
                     updateWaiting = updateWaiting,
                     // Only tabs from plugins that are switched on: a tab is a

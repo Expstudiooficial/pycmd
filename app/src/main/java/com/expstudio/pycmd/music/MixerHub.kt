@@ -58,6 +58,16 @@ private const val TAG = "mixer"
  * that is not ready yet has none of them - so every one is wrapped: a missing
  * effect switches itself off and says so rather than taking the panel down.
  */
+/**
+ * Parts of media3 this file uses are marked unstable, and lint treats that as
+ * an error rather than a warning.
+ *
+ * Annotated with AndroidX's `OptIn` rather than Kotlin's, because Kotlin's is
+ * the one the check does not read: an opt-in it cannot see is a build that
+ * still reports three errors. Here on the class rather than in `lint.xml`, so
+ * that opting in covers this file and not the whole app.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MixerHub(private val context: Context) {
 
     /** One deck: a player, what is on it, and the effects hanging off it. */

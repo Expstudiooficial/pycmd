@@ -1,17 +1,176 @@
 # Prebuilt APK
 
-`PyCmd-2.6.1.apk` — ready to install, nothing else needed.
+`PyCmd-2.7.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 2.6.1 |
-| Size | 20 MB |
+| Version | 2.7.0 |
+| Size | 24 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
-| Works on | Android 7.0 (API 24) and newer, **arm64-v8a** (every phone since about 2016) |
+| Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
-## What is new in 2.6.1
+This is the **universal** APK. It carries native code for both processors, so
+the one file installs on a phone and on an emulator. Until 2.7.0 this folder
+published the arm64-only build, which is why PyCmd never worked on an
+emulator — see below.
+
+## What is new in 2.7.0
+
+Four things people asked for, and one thing that was simply broken.
+
+### PyCmdTeach
+
+A new tab. **28 courses and 3,781 lessons**, covering every language PyCmd can
+run, edit or highlight — and regular expressions, which are not a language but
+turn up in all of them. Free, offline, no account, no streak-shaming.
+
+| | lessons | | lessons | | lessons |
+|---|---|---|---|---|---|
+| Python | 625 | Kotlin | 175 | Shell | 104 |
+| JavaScript | 334 | Java | 130 | C++ | 105 |
+| Rust | 305 | PHP | 125 | Regex | 90 |
+| Go | 255 | Swift | 121 | HTML | 81 |
+| C | 205 | Ruby | 121 | JSON | 69 |
+| CSS | 127 | Lua | 119 | Markdown | 66 |
+| SQL | 113 | TypeScript | 108 | YAML | 65 |
+| TOML | 61 | XML | 60 | Dockerfile | 50 |
+| Git ignore | 44 | Makefile | 44 | CSV | 40 |
+| INI | 38 | | | | |
+
+Each lesson is one idea, taught five ways: **read it**, **predict what it
+prints**, **fill the gap**, **put the lines in order**, **write it yourself**.
+
+The last one is the part that is not Duolingo. For Python, C, Rust and Go the
+app **runs what you wrote**, in the same interpreters the Console tab uses, and
+marks it on what came out — so any program that prints the right thing passes,
+not just the one the lesson had in mind. For the languages a phone cannot run,
+your answer is compared with the lesson's and the lesson says so rather than
+pretending to have executed anything.
+
+Every lesson has an **Editor** button that drops its code into
+`workspace/teach/` and opens it, because the point of a course inside a code
+editor is that you can leave the course.
+
+Courses are generated from their topics rather than written out five times
+over, which is how 888 topics become 3,781 lessons — and, more to the point,
+why they are correct: each snippet is the single source for all five of its
+exercises. `tools/test_teach.py` runs every Python, C, Rust and Go snippet and
+compares what came out with what the course claims. 11,152 checks.
+
+### Appearance: six themes, and your own
+
+**More → Appearance.**
+
+- **Classic Green** — the original, and still the default.
+- **Halloween 2026** — pumpkin and purple on a night that is not quite black,
+  with a pumpkin in the title bar. Switched on by hand and off by hand; the
+  app does not read the calendar and redecorate itself.
+- **Terminal Green** — green all the way down.
+- **Amber CRT** — monochrome amber.
+- **Paper** — the first light theme, for a phone outdoors at midday.
+- **Slate** — quiet greys for long sessions.
+
+Then **Copy** any of them and edit all twenty of its colours, with a hex field
+and a swatch each. Plus corner roundness, code text size, and a switch that
+turns off the transitions in panels — worth having on an emulator or an older
+phone.
+
+A theme reaches **everything**: the chrome, the console, the editor and every
+plugin panel take the same palette. That is a real change in how the app is
+put together rather than a colour picker bolted on — the palette is twenty hex
+strings in one object, and the web pages are handed it as CSS variables.
+
+### Plugin panels are part of the app now
+
+The complaint was exact and correct: *"the blue colours and weird design kind
+of suck, plus the plugins feel like they're not even part of the app."* They
+had their own blue palette, their own button shape and their own idea of how
+big a gap between two cards should be — so they looked like a different app
+that had been connected to this one.
+
+The house stylesheet is rewritten in the app's own vocabulary. A card is the
+app's card; a button is the app's button; fields, sliders, check boxes, radio
+buttons, tabs, pills, tables and notes are all the app's. Sliders and check
+boxes are now **drawn by the app** rather than left to Android, so they are
+the accent colour instead of system blue. Every hard-coded colour inside the
+bundled plugins — 61 of them — is a theme variable.
+
+`tools/test_panel_theme.js` loads every bundled panel in a real browser,
+measures its colours, applies a palette and measures again, so a literal
+colour creeping back in fails a test rather than being noticed in a month.
+
+### What's new, once
+
+This screen. It appears after an update, lists what was added, fixed and
+removed, and is dismissed with **Read** — after which it does not come back
+until the next version. Not on a fresh install: somebody who has never used
+PyCmd wants the console, not a list of changes to a version they never had.
+System has it if you want to read it again.
+
+### The version archive goes to 10 GB
+
+Up from 2 GB, with 100 MB added at the bottom. The chips wrap now, instead of
+the two largest being off the edge of the screen, and the line underneath says
+how much room the phone actually has — a 10 GB ceiling on a phone with 3 GB
+free prunes oldest-first rather than filling the device.
+
+## And the fix: PyCmd runs on an emulator
+
+It never did. Every report said the same two things — it crashes, or it hangs —
+and both were one mistake.
+
+**What was wrong.** This folder published `app-arm64-v8a-release.apk`: the
+build for phones. An emulator on a PC is an **x86_64** machine. PyCmd carries a
+real CPython compiled for a particular processor, so an APK with only arm64
+code in it either refuses to install (`INSTALL_FAILED_NO_MATCHING_ABIS`) or
+installs and then dies the moment anything reaches the interpreter. Anybody who
+worked around that by picking an arm64 system image instead got the other
+symptom: an arm64 image on an x86 host is translated instruction by
+instruction, about thirty times slower, which reads as the app hanging.
+
+The build has produced all three APKs — arm64, x86_64 and universal — for a
+long time. The release just pointed at the wrong one.
+
+**What now.** 2.7.0 publishes the universal APK: 24 MB instead of 20, and it
+installs and runs on a phone and on an emulator from the same file.
+`tools/make_latest.py` reads the `lib/` folders out of the APK it is given and
+**refuses** to write a manifest for one with no `x86_64` in it, so this cannot
+be released again without the release script saying so.
+
+**And the rest of it.** [EMULATOR.md](../EMULATOR.md) is a new guide — which
+system image, the one flag that makes it fast, what to do when it is not —
+and it ships inside the app under **Guides**. **More → System → This machine**
+now shows whether PyCmd thinks it is on an emulator, which tests said so,
+every processor the machine reports, and whether this build's Python matches
+that processor. **Copy this** puts the lot on the clipboard; paste that into a
+bug report and the answer is usually on it.
+
+## Also fixed
+
+- A panel opened while the app was being themed no longer paints once in the
+  old colours before the right ones arrive. The palette goes in when the
+  document *starts*, not when it finishes.
+- `audioSessionId` on the DJ decks is opted into properly, so Android Lint
+  reports **zero errors** on this build rather than three.
+- The Python course's `input()` lesson no longer assumes there is something on
+  standard input — which, in a lesson, there never is.
+- The browser-driven tests find Chromium wherever the machine keeps it, rather
+  than at one hard-coded path that changed.
+
+## How it was checked
+
+| | |
+|---|---|
+| Python, interpreters, plugins, pages, music, Creator | 16 suites |
+| PyCmdTeach's courses, every runnable snippet executed | 11,152 checks |
+| WebView JavaScript, console, editor, bridge | 4 suites |
+| Bundled panels in a real browser: sliders, layout, themes | 3 suites |
+| JVM unit tests: panel gestures, themes, device, release notes | 45 tests |
+| Android Lint | 0 errors |
+
+## What was new in 2.6.1
 
 **The sliders in plugin panels work.** In 2.6.0 they did not move at all, and
 that was my mistake. It is the only thing changed here.
@@ -64,7 +223,7 @@ one of which fails against the 2.6.0 rule. On top of that,
 and drags every slider in it with real touch events, and fails if no panel had
 a slider to drag.
 
-## What is new in 2.6.0
+## What was new in 2.6.0
 
 ### Creator: ten languages, 904 blocks
 
@@ -138,7 +297,7 @@ Its guide is in **Guides → Music Pro**.
 The repository was renamed to `pycmd`, so every URL in the app points there
 now. Builds up to 2.5.9 still find their updates through GitHub's redirect.
 
-## What is new in 2.5.9
+## What was new in 2.5.9
 
 **2.5.8 broke every plugin tab, and this puts them back.** Opening one showed
 a black screen with a sliver of something at the top. That was my mistake and

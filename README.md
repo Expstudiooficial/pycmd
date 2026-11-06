@@ -12,8 +12,12 @@ already has. Another twenty file types are edited, highlighted, previewed and
 served, and music, video, images, PDFs, archives and fonts are brought in from
 the phone, kept, served and played.
 
-Version 2.5.9. Kotlin and Jetpack Compose for the app, JavaScript for the console
-and editor.
+It also teaches them. **PyCmdTeach** is 28 courses and 3,781 lessons covering
+every language in that list and every file type the app knows, and for Python,
+C, Rust and Go it marks what you write by running it.
+
+Version 2.7.0. Kotlin and Jetpack Compose for the app, JavaScript for the
+console and editor. Runs on a phone and on an emulator from the same APK.
 
 ---
 
@@ -47,6 +51,24 @@ wanted. Tapping media opens the player rather than the editor, and a file that
 is bytes rather than text is never loaded into a text box it could be ruined
 in. Examples ship on first launch, including two working plugins, and deleting
 them sticks.
+
+**PyCmdTeach** — 28 courses, 3,781 lessons, free and offline. Every language
+the app can run, every file type it can edit, and regular expressions. Each
+lesson is one idea taught five ways: read it, predict what it prints, fill the
+gap, put the lines in order, write it yourself. For Python, C, Rust and Go the
+last one is marked by **running what you wrote**, in the same interpreters the
+console uses - so any program that prints the right thing passes. For the
+languages a phone cannot run, your answer is compared with the lesson's and the
+lesson says so. Every lesson has a button that drops its code into the editor,
+because the point of a course inside a code editor is that you can leave it.
+
+**Appearance** — six themes and your own. Classic Green is the default;
+Halloween 2026 is pumpkin and purple with a pumpkin in the title bar; there are
+also Terminal Green, Amber CRT, Paper (light) and Slate. Copy any of them and
+edit all twenty of its colours. Corner roundness, code text size, and a switch
+that shortens the animations for an emulator or an older phone. A theme reaches
+the chrome, the console, the editor and every plugin panel, because all four
+read the same palette.
 
 **Preview** — HTML, CSS, Markdown, JavaScript, JSON, CSV, SVG, images, and
 music and video that actually play. A page is served over a loopback HTTP
@@ -200,13 +222,20 @@ signal, no answer - says nothing at all.
 ## Just want to try it
 
 A ready-to-install APK is in [`dist/`](dist/) - download
-[`PyCmd-2.5.9.apk`](dist/PyCmd-2.5.9.apk), open it on the phone, and allow the
+[`PyCmd-2.7.0.apk`](dist/PyCmd-2.7.0.apk), open it on the phone, and allow the
 install when Android asks. It is a release build: minified by R8, not
-debuggable, and about 18 MB rather than the 35 MB the debug builds were. It is
+debuggable, and about 24 MB rather than the 35 MB the debug builds were. It is
+the **universal** APK, so the same file installs on a phone and on an
+emulator. It is
 signed with the key in [`keystore/`](keystore/) - the standard Android debug
 certificate, committed so that every build of this repo can replace the last
 one on a phone instead of demanding an uninstall. No store account is involved.
 See [dist/README.md](dist/README.md) for the details.
+
+**On a computer rather than a phone?** Use an Android emulator with an
+**x86_64** system image, and read [EMULATOR.md](EMULATOR.md) first - it is
+short, and it covers the one flag that decides whether this is pleasant or
+unusable. That guide also ships inside the app, under Guides.
 
 **Already have PyCmd on the phone?** Install this APK straight over it - do not
 uninstall first, that is what deletes the workspace. From 2.4 onward the app
@@ -253,13 +282,24 @@ runtime does not ship 32-bit binaries, which matters only for phones from before
 about 2016.
 
 The APK is large because a complete CPython interpreter and standard library are
-inside it. The default build produces one APK per ABI plus a universal one;
-`-Ppycmd.abi=arm64-v8a` drops the x86_64 runtime that no phone can use. What
-`dist/` ships is `./gradlew :app:assembleRelease -Ppycmd.abi=arm64-v8a`: about
-18 MB, of which 11 MB is the Python standard library and the bundled packages,
-3.7 MB the native CPython, and 3 MB the app's own code once R8 has removed the
-AndroidX and Compose it never calls. The debug build of the same source is
-35 MB. The native libraries are packed compressed
+inside it. The default build produces one APK per ABI plus a universal one, and
+what `dist/` ships is the **universal** one: `./gradlew :app:assembleRelease`,
+then `app/build/outputs/apk/release/app-universal-release.apk`.
+
+That is a deliberate change in 2.7.0. Up to 2.6.1 `dist/` published the
+arm64-only split, which is 4 MB smaller and cannot be installed on an emulator
+at all - an emulator on a PC is an x86_64 machine, and an APK with no x86_64
+code in it either refuses to install or starts and then dies the moment
+anything reaches Python. Four megabytes is not worth that.
+`tools/make_latest.py` now reads the `lib/` folders out of whatever APK it is
+handed and refuses to write a manifest for one with no x86_64 in it.
+`-Ppycmd.abi=arm64-v8a` still builds a phone-only APK if you want one for
+yourself.
+
+The universal APK is about 24 MB: the Python standard library and the bundled
+packages, the native CPython for both processors, and the app's own code once
+R8 has removed the AndroidX and Compose it never calls. The debug build of the
+same source is over 40 MB. The native libraries are packed compressed
 (`packaging { jniLibs { useLegacyPackaging = true } }`) because this APK is
 downloaded raw rather than through a store: it halves the download, at the cost
 of about 10 MB more room on the device once Android unpacks them.
@@ -272,15 +312,33 @@ of about 10 MB more room on the device once Android unpacks them.
 tools/run-tests.sh
 ```
 
-That runs four things: the embedded Python modules against a stand-in for the
-Kotlin bridge (execution, error reporting, stdin, interrupt-and-recover,
-completions, a real install/import/uninstall round trip against PyPI and a real
-HTTP server, byte-range requests for the media player, the pages registry, the
-music library, and every one of Creator's blocks compiled and handed to
-Python's own parser), the published update manifest against the APK actually
-sitting in `dist/`, the WebView JavaScript under Node against a stub document -
-the console, the editor, and the Creator panel driven the way a finger drives
-it - and both a debug and a release build with Android Lint.
+That runs five things.
+
+**The embedded Python modules**, against a stand-in for the Kotlin bridge:
+execution, error reporting, stdin, interrupt-and-recover, completions, a real
+install/import/uninstall round trip against PyPI and a real HTTP server,
+byte-range requests for the media player, the pages registry, the music
+library, and every one of Creator's blocks compiled and handed to Python's own
+parser.
+
+**PyCmdTeach's courses.** Every Python, C, Rust and Go snippet in all 28
+courses is executed and what came out is compared with what the lesson claims -
+11,152 checks. A course is generated from its topics, so a snippet whose stated
+output is wrong is wrong in five lessons at once; this is the test that makes
+that safe.
+
+**The published update manifest**, against the APK actually sitting in `dist/`
+- including the rule that it must carry x86_64, so an emulator can install it.
+
+**The WebView JavaScript** under Node against a stub document (the console, the
+editor, the bridge), and every bundled plugin panel in a real headless
+Chromium: its layout at a phone's width, its sliders dragged with a real
+finger, and a theme applied to it and measured.
+
+**A debug and a release build**, with Android Lint and the JVM unit tests -
+which is where the rules that are pure arithmetic live: who owns a drag inside
+a panel, whether a palette's text can be read on its own background, and
+whether this build's changelog describes this build.
 
 Playback is the part no suite here reaches: the media session, its notification
 and the lock-screen controls are Android's, and they need a phone. What is
@@ -425,15 +483,23 @@ app/src/main/
       MusicService.kt        the media session, and why sound outlives the app
       MusicHub.kt            the controller the screens press play on
       MusicImport.kt         copying a picked file into the library
-    ui/                      Compose screens, theme, WebView hosting, icons
+    ui/                      Compose screens, WebView hosting, icons
+    ui/Themes.kt             the palettes, and the hex arithmetic behind them
+    ui/Theme.kt              the Compose theme, and the CSS the web pages get
+    ui/Appearance.kt         the chosen theme, read before the first frame
+    ui/TeachScreen.kt        PyCmdTeach: the course list, a course, a lesson
+    ui/WhatsNewScreen.kt     the changelog shown once after an update
     util/Workspace.kt        file operations, all confined to the workspace
     util/DebugLog.kt         the process-wide record behind the debug console
+    util/Device.kt           emulator detection, and whether Python fits here
+    util/ReleaseNotes.kt     what changed, shipped inside the build it describes
     util/Updater.kt          checking, downloading and verifying a newer build
   python/
     pycmd_runtime.py         execution, streams, interrupt, completions
     pycmd_packages.py        on-device wheel installs
     pycmd_servers.py         background listeners
     pycmd_music.py           the music library: tracks, playlists, order
+    pycmd_teach/             the 28 courses, and what turns them into lessons
   assets/
     web/                     console and editor pages, ANSI and highlighting
     plugins/creator/         the block catalogue and what it compiles to

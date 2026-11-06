@@ -126,6 +126,19 @@ object PythonEngine {
     }
     private val pluginDispatcher = pluginExecutor.asCoroutineDispatcher()
 
+    /**
+     * PyCmdTeach, on a thread of its own.
+     *
+     * Marking a written answer runs it, in the same interpreters the Console
+     * tab uses. A lesson answered with an accidental `while True` would block
+     * whichever thread it was on until the user left the app, so it is not
+     * allowed to be the interpreter's thread or the panels'.
+     */
+    private val teachExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "python-teach").apply { isDaemon = true }
+    }
+    private val teachDispatcher = teachExecutor.asCoroutineDispatcher()
+
     private val _output = MutableSharedFlow<OutputChunk>(
         replay = OUTPUT_BUFFER,
         extraBufferCapacity = OUTPUT_BUFFER,
@@ -172,6 +185,7 @@ object PythonEngine {
     private lateinit var tunnel: PyObject
     private lateinit var cloudflare: PyObject
     private lateinit var music: PyObject
+    private lateinit var teach: PyObject
 
     private lateinit var appContext: Context
     private lateinit var workspaceDir: File
@@ -322,6 +336,7 @@ object PythonEngine {
             tunnel = python.getModule("pycmd_tunnel")
             cloudflare = python.getModule("pycmd_cloudflare")
             music = python.getModule("pycmd_music")
+            teach = python.getModule("pycmd_teach")
 
             val version = runtime.callAttr(
                 "configure",
@@ -347,6 +362,10 @@ object PythonEngine {
             // code, and nobody wants their album in a workspace export.
             val musicDir = File(appContext.filesDir, "music").apply { mkdirs() }
             musicTracksDir = File(music.callAttr("configure", musicDir.absolutePath).toString())
+            // PyCmdTeach's progress. App storage, not the workspace: it is the
+            // user's record of what they have learned, not a file they wrote.
+            val teachDir = File(appContext.filesDir, "teach").apply { mkdirs() }
+            teach.callAttr("configure", teachDir.absolutePath)
             pluginsDir = File(appContext.filesDir, "plugins").apply { mkdirs() }
             pluginRuntime.callAttr(
                 "configure", pluginsDir.absolutePath, workspaceDir.absolutePath, pluginHost,
@@ -934,6 +953,40 @@ object PythonEngine {
                 null
             }
         }
+
+    // ------------------------------------------------------------------
+    // PyCmdTeach
+    // ------------------------------------------------------------------
+
+    /**
+     * One door into the courses.
+     *
+     * The Python side encodes every reply as JSON because Chaquopy's view of a
+     * dict is not JSON - `str()` on one gives single quotes and `True` - so a
+     * per-call conversion here would be a per-call bug.
+     *
+     * On its own dispatcher, not the interpreter's: marking a written answer
+     * *runs* it, and a lesson with an accidental infinite loop in it would
+     * otherwise block the console as well.
+     */
+    suspend fun teach(
+        name: String,
+        first: String = "",
+        second: String = "",
+        third: String = "",
+    ): JSONObject = withContext(teachDispatcher) {
+        if (!_status.value.ready) {
+            return@withContext JSONObject()
+                .put("ok", false)
+                .put("error", "the interpreter is still starting")
+        }
+        runCatching {
+            JSONObject(teach.callAttr("api", name, first, second, third).toString())
+        }.getOrElse { error ->
+            DebugLog.error(TAG, "teach $name failed", error)
+            JSONObject().put("ok", false).put("error", error.message ?: "it did not work")
+        }
+    }
 
     /** Every file type the new-file menu offers. */
     suspend fun languageCatalogue(includeAll: Boolean): List<LanguageInfo> =

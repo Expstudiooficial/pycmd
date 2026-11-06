@@ -36,11 +36,28 @@ try {
   process.exit(0);
 }
 
-const CHROME = [
-  process.env.PYCMD_CHROMIUM,
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  '/opt/pw-browsers/chromium/chrome-linux/chrome',
-].find((candidate) => candidate && fs.existsSync(candidate));
+// Wherever this machine keeps its Chromium. The version number in the folder
+// name changes with the image and the layout changed once - `chrome-linux`
+// became `chrome-linux64` - so the last resort is to go and look.
+const CHROME = (() => {
+  const named = [
+    process.env.PYCMD_CHROMIUM,
+    '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome',
+    '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    '/opt/pw-browsers/chromium/chrome-linux/chrome',
+  ].find((candidate) => candidate && fs.existsSync(candidate));
+  if (named) return named;
+  const base = '/opt/pw-browsers';
+  if (!fs.existsSync(base)) return '';
+  for (const folder of fs.readdirSync(base).sort().reverse()) {
+    if (!folder.startsWith('chromium')) continue;
+    for (const inner of ['chrome-linux64', 'chrome-linux']) {
+      const guess = path.join(base, folder, inner, 'chrome');
+      if (fs.existsSync(guess)) return guess;
+    }
+  }
+  return '';
+})();
 
 if (!CHROME) {
   console.log('  SKIP  panel layout - no Chromium to lay the panels out in');

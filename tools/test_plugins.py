@@ -550,7 +550,18 @@ check("its store round-trips", back.get("result") == "hello", back)
 page = plugins.panel_html("demo.notes")
 check("the panel gets the bridge", "window.pycmd" in page, page[:200])
 check("the panel keeps its own markup", "<h1>Notes</h1>" in page, page[:200])
-check("the panel gets the house style", "background: #0B0F14" in page, page[:200])
+# The house style is written in CSS variables now, so that the app can hand a
+# panel whichever theme is on. The fallbacks are still the Classic Green
+# values: a panel has to look right in the first frame, before the app's
+# `:root` block has arrived.
+check("the panel gets the house style", "background: var(--bg)" in page, page[:200])
+check("the house style declares its fallbacks", "--bg: #0B0F14;" in page, page[:400])
+check("the house style draws the sliders", 'input[type="range"]' in page, page[:400])
+check(
+    "the house style honours the animations switch",
+    'data-pycmd-motion="reduced"' in page,
+    page[:400],
+)
 
 # ---------------------------------------------------------- shape 3: a zip
 

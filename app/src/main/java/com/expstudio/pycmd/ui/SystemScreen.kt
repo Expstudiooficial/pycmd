@@ -2,6 +2,8 @@ package com.expstudio.pycmd.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -55,6 +57,14 @@ data class SystemInfo(
     val servers: Int = 0,
     val plugins: Int = 0,
     val threads: Int = 0,
+    /** Every processor this machine can run code for, best first. */
+    val abis: String = "",
+    /** Whether this looks like an emulator rather than a phone. */
+    val emulator: Boolean = false,
+    /** One line on whether this build's Python matches this processor. */
+    val deviceVerdict: String = "",
+    /** The whole lot as text, for the Copy button and bug reports. */
+    val deviceReport: String = "",
 )
 
 /**
@@ -93,6 +103,8 @@ fun SystemScreen(
     onSaveVersionToPhone: (KeptVersion) -> Unit,
     onBackupWorkspace: () -> Unit,
     onEmail: (String) -> Unit,
+    onCopy: (String) -> Unit,
+    onShowWhatsNew: () -> Unit,
     modifier: Modifier = Modifier,
     /** Null when the examples are still there and nothing needs restoring. */
     onRestoreExamples: (() -> Unit)? = null,
@@ -113,6 +125,59 @@ fun SystemScreen(
                 InfoRow("Android", info.androidVersion)
                 InfoRow("Device", info.device)
                 InfoRow("Threads", info.threads.toString())
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GhostButton(
+                        "What's new in ${BuildConfig.VERSION_NAME}",
+                        PyIcons.Star,
+                        onClick = onShowWhatsNew,
+                    )
+                }
+            }
+        }
+
+        // Its own section because of what it is for: this is the card people
+        // are asked to paste when PyCmd will not start, and the answer is
+        // nearly always on it.
+        item { SectionTitle("This machine") }
+        item {
+            PyCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (info.emulator) "Emulator" else "Device",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            info.deviceVerdict.ifEmpty { "Reading..." },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (info.emulator) {
+                        StatusChip("emulated", MaterialTheme.colorScheme.tertiary)
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                InfoRow("Processors", info.abis.ifEmpty { "unknown" })
+                if (info.emulator) {
+                    Text(
+                        "Emulators are supported. If PyCmd is slow here, start the " +
+                            "emulator with hardware graphics and use an x86_64 " +
+                            "system image rather than an arm64 one - an arm64 image " +
+                            "on a PC is translated instruction by instruction, which " +
+                            "is what reads as the app hanging. Appearance has an " +
+                            "animations-off switch that helps too.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
+                GhostButton(
+                    "Copy this",
+                    PyIcons.ContentCopy,
+                    onClick = { onCopy(info.deviceReport) },
+                )
             }
         }
 
@@ -139,6 +204,7 @@ fun SystemScreen(
             VersionsCard(
                 versions = versions,
                 cap = versionsCap,
+                freeBytes = info.freeBytes,
                 onSetCap = onSetVersionsCap,
                 onInstall = onInstallVersion,
                 onDelete = onDeleteVersion,
@@ -539,10 +605,13 @@ private fun ContactCard(onEmail: (String) -> Unit) {
 /** Where to write when something here is wrong. */
 const val SUPPORT_EMAIL = "andrejbaltes4@proton.me"
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VersionsCard(
     versions: List<KeptVersion>,
     cap: Long,
+    /** Room left on the device, so a ceiling bigger than that can say so. */
+    freeBytes: Long,
     onSetCap: (Long) -> Unit,
     onInstall: (KeptVersion) -> Unit,
     onDelete: (KeptVersion) -> Unit,
@@ -621,7 +690,12 @@ private fun VersionsCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Wrapped, not a Row: eight ceilings do not fit across a phone, and
+        // the two biggest were off the edge of the screen when they did not.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             CAPS.forEach { (label, bytes) ->
                 StatusChip(
                     text = label,
@@ -634,6 +708,25 @@ private fun VersionsCard(
                 )
             }
         }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            when {
+                cap == 0L ->
+                    "Off: an update replaces the build on the phone and nothing is " +
+                        "kept. Going back then means finding the APK again."
+                freeBytes in 1 until cap ->
+                    "There is ${readable(freeBytes)} free on this device, which is " +
+                        "less than the ceiling. The archive will fill the space it " +
+                        "can and prune the oldest build when it runs out - it will " +
+                        "not fill the phone."
+                else ->
+                    "Oldest first when it has to prune, because the reason to keep " +
+                        "an old build is to step back one, and three steps back is a " +
+                        "build nobody installs. ${readable(freeBytes)} free here."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         if (versions.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
             GhostButton("Delete them all", PyIcons.Delete, onDeleteAll, Modifier.fillMaxWidth())
@@ -665,13 +758,24 @@ private fun VersionsCard(
     }
 }
 
-/** The ceilings offered for the archive. A gigabyte is the default. */
+/**
+ * The ceilings offered for the archive. A gigabyte is still the default.
+ *
+ * Ten gigabytes at the top because people asked for it: an APK is about 20 MB,
+ * so ten gigabytes is every build PyCmd will ever have and then some. It is
+ * not a promise that the phone has the room - the archive prunes oldest-first
+ * when it runs out of space, and the line under these chips says how much
+ * there actually is.
+ */
 private val CAPS = listOf(
     "off" to 0L,
+    "100 MB" to 100L * 1024 * 1024,
     "250 MB" to 250L * 1024 * 1024,
     "500 MB" to 500L * 1024 * 1024,
     "1 GB" to 1024L * 1024 * 1024,
-    "2 GB" to 2048L * 1024 * 1024,
+    "2 GB" to 2L * 1024 * 1024 * 1024,
+    "5 GB" to 5L * 1024 * 1024 * 1024,
+    "10 GB" to 10L * 1024 * 1024 * 1024,
 )
 
 private fun capLabel(bytes: Long): String =

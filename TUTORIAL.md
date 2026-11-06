@@ -787,6 +787,99 @@ that already runs, with what it needs already inside it.
 
 ---
 
+## 11g. PyCmdTeach — learn the language you are writing in
+
+**More → PyCmdTeach.** 28 courses, 3,781 lessons, free, and all of it on the
+device — there is nothing to download and no account.
+
+Start with Python if you are not sure. Tap it, then **Start**. The course is
+eleven units from `print` to decorators and generators, and each lesson is one
+idea in one of five shapes:
+
+| | |
+|---|---|
+| **Read it** | a paragraph, the code, and what it prints |
+| **What does it print?** | four answers, three of them from elsewhere in the same course |
+| **Fill the gap** | one word blanked out of the snippet |
+| **Put it in order** | the lines, shuffled; tap them top-first |
+| **Write it yourself** | an empty box |
+
+That last one is the one worth trying. In Python, C, Rust and Go, **it runs
+what you type** — in the same interpreters the Console tab uses — and marks it
+on what came out. So for "write Python that prints `5`", all of these pass:
+
+```python
+print(5)
+```
+
+```python
+n = 2 + 3
+print(n)
+```
+
+```python
+print(len("abcde"))
+```
+
+Get it wrong and it shows you what your program actually printed next to what
+it should have, which is the part that teaches you something. If your code
+raises, it shows the exception. **Show me** reveals one answer if you are
+stuck, and **Skip for now** moves on without marking it.
+
+For the languages a phone cannot execute — Java, Kotlin, Swift, C++, Ruby,
+PHP, Lua, TypeScript, SQL, and the file formats — your answer is compared with
+the lesson's, ignoring whitespace, and the lesson says so rather than
+pretending to have run anything.
+
+Every lesson has an **Editor** button. It writes the snippet into
+`workspace/teach/` and opens it, so you can change it and run it properly. A
+course inside a code editor that you cannot leave would be a strange thing to
+build.
+
+Progress, XP and a day streak are kept on the device and nowhere else. **Reset**
+on a course forgets just that one.
+
+Try these, in this order, for a sense of what is in it:
+
+1. **Python → Basics → print** — the first lesson, all five shapes of it.
+2. **Python → Collections → A list comprehension** — then write your own.
+3. **Rust → Ownership → Borrowing** — a real Rust program, run on the phone.
+4. **Regular expressions → In Python → sub** — the course that is not a
+   language.
+5. **YAML → The parts that bite → The Norway problem** — the kind of thing
+   nobody tells you until it costs you an afternoon.
+
+## 11h. Appearance — themes, including the Halloween one
+
+**More → Appearance.** Six themes. Tap one; the whole app changes while you
+are looking at it — the chrome, the console, the editor, and every plugin
+panel, because all four read the same palette.
+
+- **Classic Green** is the default and the one everything goes back to.
+- **Halloween 2026** is pumpkin and purple, and puts a pumpkin in the title
+  bar. Switch it on and off whenever you like; the app does not read the
+  calendar and redecorate itself.
+- **Terminal Green** is green all the way down.
+- **Amber CRT** is monochrome amber.
+- **Paper** is the light one. Worth having outdoors, where a dark terminal is
+  a mirror.
+- **Slate** is quiet greys for a long evening.
+
+Then press **Copy** on any of them. That makes an editable version, switches to
+it, and **Colours** opens all twenty of its colours with a hex field and a
+swatch each — accent first, because that is the one everybody changes. Type
+`#ff00ff` into Accent and watch the buttons, the switches, the caret in the
+editor and the sliders in every plugin panel follow. Anything that does not
+parse is ignored, so the app never half-applies a colour you are still typing.
+
+Below the themes: **Corners** from square to very round, **Code text size**
+for the console and editor, and **Short animations**, which turns off the
+transitions in panels. That last one is worth having on an emulator or a phone
+of a certain age.
+
+**Reset** puts it back to Classic Green, 14 dp corners and 100% text, and
+leaves your saved themes alone.
+
 ## 12. Updating without losing anything
 
 **More → System → Updates → Check for updates.**

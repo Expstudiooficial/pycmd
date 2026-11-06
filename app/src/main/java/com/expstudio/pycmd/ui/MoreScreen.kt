@@ -49,6 +49,10 @@ fun MoreScreen(
     pageCount: Int,
     /** True while something is playing, so More shows it without being opened. */
     musicPlaying: Boolean,
+    /** Lessons finished in PyCmdTeach, so the row can nudge. */
+    teachDone: Int,
+    /** Days in a row, shown as a badge when there is one. */
+    teachStreak: Int,
     onSelect: (Tab) -> Unit,
     /** True when a newer build is waiting in System, so the row says so. */
     updateWaiting: Boolean,
@@ -79,6 +83,28 @@ fun MoreScreen(
                 subtitle = "Your own audio, playing while you work - and with the app closed",
                 badge = if (musicPlaying) "on" else null,
                 onClick = { onSelect(Tab.MUSIC) },
+            )
+        }
+        item {
+            DestinationRow(
+                icon = PyIcons.School,
+                title = "PyCmdTeach",
+                subtitle = if (teachDone > 0) {
+                    "$teachDone lessons done - keep going"
+                } else {
+                    "Learn every language the app runs, one lesson at a time"
+                },
+                badge = if (teachStreak > 0) "${teachStreak}d" else null,
+                onClick = { onSelect(Tab.TEACH) },
+            )
+        }
+        item {
+            DestinationRow(
+                icon = PyIcons.Palette,
+                title = "Appearance",
+                subtitle = "Themes, including the Halloween one, and your own colours",
+                badge = null,
+                onClick = { onSelect(Tab.APPEARANCE) },
             )
         }
         item {

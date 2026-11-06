@@ -42,6 +42,9 @@ import com.expstudio.pycmd.util.Imports
 import com.expstudio.pycmd.util.KeptVersion
 import com.expstudio.pycmd.util.UpdateState
 import com.expstudio.pycmd.util.UpdateWorker
+import com.expstudio.pycmd.util.Device
+import com.expstudio.pycmd.util.ReleaseNote
+import com.expstudio.pycmd.util.ReleaseNotes
 import com.expstudio.pycmd.util.Updater
 import com.expstudio.pycmd.util.Workspace
 import com.expstudio.pycmd.util.WorkspaceEntry
@@ -85,6 +88,8 @@ enum class Tab(val label: String) {
     DOCS("Guides"),
     PAGES("Pages"),
     MUSIC("Music"),
+    TEACH("PyCmdTeach"),
+    APPEARANCE("Appearance"),
     SYSTEM("System");
 
     /**
@@ -104,6 +109,8 @@ enum class Tab(val label: String) {
             DOCS -> "guides"
             PAGES -> "pages"
             MUSIC -> "music"
+            TEACH -> "teach"
+            APPEARANCE -> "appearance"
             // The console and the editor are a full-screen WebView each, with
             // nowhere to put a card that would not be in the way.
             CONSOLE, EDITOR, MORE, TOOL, PLUGIN_PANEL -> null
@@ -888,6 +895,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             pythonVersion = engine.status.value.pythonVersion,
             appVersion = version,
             abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
+            abis = Device.abis.joinToString(", "),
+            emulator = Device.isEmulator,
+            deviceVerdict = Device.verdict(context),
+            deviceReport = Device.report(context),
             androidVersion = "${android.os.Build.VERSION.RELEASE} " +
                 "(API ${android.os.Build.VERSION.SDK_INT})",
             device = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
@@ -1452,6 +1463,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         "guides", "docs" -> Tab.DOCS
         "pages" -> Tab.PAGES
         "music" -> Tab.MUSIC
+        "teach", "pycmdteach" -> Tab.TEACH
+        "appearance", "themes" -> Tab.APPEARANCE
         "more" -> Tab.MORE
         else -> null
     }
@@ -1867,6 +1880,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Measuring storage walks the whole of private storage, so it happens
         // when the screen is asked for rather than on a timer.
         if (tab == Tab.SYSTEM) refreshSystem()
+        if (tab == Tab.TEACH && _teach.value.courses.isEmpty()) refreshTeach()
         if (tab == Tab.PLUGINS) refreshCustomPlugins(reload = false)
         _tab.value = tab
         when (tab) {
@@ -3637,6 +3651,298 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     refreshFiles(_files.value.directory ?: workspace.root)
                 }
                 .onFailure { showToast(it.message ?: "Could not save the log.") }
+        }
+    }
+
+
+    // ------------------------------------------------------------ what's new
+
+    /**
+     * The release notes waiting to be read, or null.
+     *
+     * Read once when the view model is built rather than watched: the version
+     * cannot change while the app is running, so there is nothing to watch.
+     */
+    private val _whatsNew = MutableStateFlow(ReleaseNotes.due(getApplication()))
+    val whatsNew: StateFlow<ReleaseNote?> = _whatsNew.asStateFlow()
+
+    /** Read was pressed. It does not come back until the next version. */
+    fun markWhatsNewRead() {
+        ReleaseNotes.markSeen(getApplication())
+        _whatsNew.value = null
+    }
+
+    /** The System tab asking for it again, on purpose. */
+    fun showWhatsNew() {
+        _whatsNew.value = ReleaseNotes.forVersion(BuildConfig.VERSION_CODE)
+            ?: ReleaseNotes.ALL.firstOrNull()
+    }
+
+    // ----------------------------------------------------------------- teach
+
+    /**
+     * PyCmdTeach's state, which is three screens deep.
+     *
+     * Home, a course, a lesson - and each of the three is a separate flow
+     * rather than one sealed "where am I" value, because back out of a lesson
+     * has to land on the course it came from with its progress already
+     * updated, and a single value would mean re-fetching the course every
+     * time somebody finished a lesson.
+     */
+    private val _teach = MutableStateFlow(TeachHome())
+    val teach: StateFlow<TeachHome> = _teach.asStateFlow()
+
+    private val _teachCourse = MutableStateFlow<TeachCourseDetail?>(null)
+    val teachCourse: StateFlow<TeachCourseDetail?> = _teachCourse.asStateFlow()
+
+    private val _teachLesson = MutableStateFlow<TeachLesson?>(null)
+    val teachLesson: StateFlow<TeachLesson?> = _teachLesson.asStateFlow()
+
+    /** The last answer's verdict, cleared when the lesson changes. */
+    private val _teachMark = MutableStateFlow<TeachMark?>(null)
+    val teachMark: StateFlow<TeachMark?> = _teachMark.asStateFlow()
+
+    private val _teachBusy = MutableStateFlow(false)
+    val teachBusy: StateFlow<Boolean> = _teachBusy.asStateFlow()
+
+    fun refreshTeach() {
+        viewModelScope.launch {
+            val reply = engine.teach("catalogue")
+            if (!reply.optBoolean("ok")) {
+                _teach.value = _teach.value.copy(
+                    loading = false,
+                    error = reply.optString("error").ifEmpty { "the courses could not be read" },
+                )
+                return@launch
+            }
+            val rows = reply.optJSONArray("courses")
+            val courses = buildList {
+                for (index in 0 until (rows?.length() ?: 0)) {
+                    val row = rows?.optJSONObject(index) ?: continue
+                    add(
+                        TeachCourse(
+                            id = row.optString("id"),
+                            name = row.optString("name"),
+                            blurb = row.optString("blurb"),
+                            extension = row.optString("extension"),
+                            graded = row.optString("graded"),
+                            lessons = row.optInt("lessons"),
+                            units = row.optInt("units"),
+                            done = row.optInt("done"),
+                        ),
+                    )
+                }
+            }
+            _teach.value = TeachHome(
+                loading = false,
+                error = "",
+                courses = courses,
+                totals = teachTotals(reply.optJSONObject("totals")),
+            )
+        }
+    }
+
+    private fun teachTotals(json: JSONObject?): TeachTotals = TeachTotals(
+        courses = json?.optInt("courses") ?: 0,
+        lessons = json?.optInt("lessons") ?: 0,
+        done = json?.optInt("done") ?: 0,
+        xp = json?.optInt("xp") ?: 0,
+        streak = json?.optInt("streak") ?: 0,
+        bestStreak = json?.optInt("best_streak") ?: 0,
+        todayDone = json?.optBoolean("today") ?: false,
+    )
+
+    fun openTeachCourse(id: String) {
+        _teachLesson.value = null
+        _teachMark.value = null
+        viewModelScope.launch {
+            _teachBusy.value = true
+            val reply = engine.teach("course", id)
+            _teachBusy.value = false
+            if (!reply.optBoolean("ok")) {
+                showToast(reply.optString("error").ifEmpty { "that course could not be opened" })
+                return@launch
+            }
+            val units = reply.optJSONArray("units")
+            _teachCourse.value = TeachCourseDetail(
+                id = reply.optString("id"),
+                name = reply.optString("name"),
+                blurb = reply.optString("blurb"),
+                graded = reply.optString("graded"),
+                total = reply.optInt("total"),
+                done = reply.optInt("done"),
+                units = buildList {
+                    for (index in 0 until (units?.length() ?: 0)) {
+                        val unit = units?.optJSONObject(index) ?: continue
+                        val lessons = unit.optJSONArray("lessons")
+                        add(
+                            TeachUnit(
+                                title = unit.optString("title"),
+                                goal = unit.optString("goal"),
+                                lessons = buildList {
+                                    for (row in 0 until (lessons?.length() ?: 0)) {
+                                        val lesson = lessons?.optJSONObject(row) ?: continue
+                                        add(
+                                            TeachLessonRef(
+                                                id = lesson.optString("id"),
+                                                kind = lesson.optString("kind"),
+                                                title = lesson.optString("title"),
+                                                done = lesson.optBoolean("done"),
+                                            ),
+                                        )
+                                    }
+                                },
+                            ),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun closeTeachCourse() {
+        _teachCourse.value = null
+        _teachLesson.value = null
+        _teachMark.value = null
+        refreshTeach()
+    }
+
+    fun openTeachLesson(courseId: String, lessonId: String) {
+        viewModelScope.launch {
+            _teachBusy.value = true
+            _teachMark.value = null
+            val reply = engine.teach("lesson", courseId, lessonId)
+            _teachBusy.value = false
+            if (!reply.optBoolean("ok")) {
+                showToast(reply.optString("error").ifEmpty { "that lesson could not be opened" })
+                return@launch
+            }
+            _teachLesson.value = TeachLesson(
+                course = reply.optString("course"),
+                id = reply.optString("id"),
+                kind = reply.optString("kind"),
+                title = reply.optString("title"),
+                language = reply.optString("language"),
+                extension = reply.optString("extension"),
+                teach = reply.optString("teach"),
+                code = reply.optString("code"),
+                output = reply.optString("output"),
+                note = reply.optString("note"),
+                prompt = reply.optString("prompt"),
+                graded = reply.optString("graded"),
+                options = reply.optJSONArray("options").strings(),
+                lines = reply.optJSONArray("lines").strings(),
+                index = reply.optInt("index"),
+                total = reply.optInt("total"),
+                next = reply.optString("next"),
+                previous = reply.optString("previous"),
+                done = reply.optBoolean("done"),
+            )
+        }
+    }
+
+    fun closeTeachLesson() {
+        val lesson = _teachLesson.value
+        _teachLesson.value = null
+        _teachMark.value = null
+        // The course list behind it shows ticks, and one of them may have just
+        // appeared.
+        if (lesson != null) openTeachCourse(lesson.course)
+    }
+
+    /**
+     * Marks an answer.
+     *
+     * A read has nothing to mark, so it is finished as soon as it is answered
+     * - the button on that lesson says "Got it" rather than "Check".
+     */
+    fun markTeachAnswer(answer: String) {
+        val lesson = _teachLesson.value ?: return
+        viewModelScope.launch {
+            _teachBusy.value = true
+            val reply = engine.teach("check", lesson.course, lesson.id, answer)
+            _teachBusy.value = false
+            if (!reply.optBoolean("ok")) {
+                showToast(reply.optString("error").ifEmpty { "that could not be marked" })
+                return@launch
+            }
+            val right = reply.optBoolean("right")
+            _teachMark.value = TeachMark(
+                right = right,
+                message = reply.optString("message"),
+                expected = reply.optString("expected"),
+                output = reply.optString("output"),
+                ran = reply.optBoolean("ran"),
+            )
+            if (right) finishTeachLesson(lesson)
+        }
+    }
+
+    private suspend fun finishTeachLesson(lesson: TeachLesson) {
+        val reply = engine.teach("complete", lesson.course, lesson.id)
+        if (!reply.optBoolean("ok")) return
+        _teach.value = _teach.value.copy(totals = teachTotals(reply))
+        _teachLesson.value = _teachLesson.value?.copy(done = true)
+    }
+
+    /** The next lesson in the course, or back to the list at the end of it. */
+    fun nextTeachLesson() {
+        val lesson = _teachLesson.value ?: return
+        if (lesson.next.isEmpty()) {
+            showToast("That is the end of ${lesson.language}. ${lesson.total} lessons.")
+            closeTeachLesson()
+            return
+        }
+        openTeachLesson(lesson.course, lesson.next)
+    }
+
+    fun previousTeachLesson() {
+        val lesson = _teachLesson.value ?: return
+        if (lesson.previous.isEmpty()) return
+        openTeachLesson(lesson.course, lesson.previous)
+    }
+
+    fun resetTeachCourse(id: String) {
+        viewModelScope.launch {
+            engine.teach("reset", id)
+            showToast("Progress cleared")
+            if (_teachCourse.value?.id == id) openTeachCourse(id)
+            refreshTeach()
+        }
+    }
+
+    /**
+     * Drops the lesson's code into the workspace and opens it in the editor.
+     *
+     * The point of a course inside a code editor is that you can leave the
+     * course. A snippet you can run and break is worth more than one you can
+     * only read.
+     */
+    fun openTeachSnippet() {
+        val lesson = _teachLesson.value ?: return
+        viewModelScope.launch {
+            val reply = engine.teach("snippet", lesson.course, lesson.id)
+            if (!reply.optBoolean("ok")) {
+                showToast(reply.optString("error").ifEmpty { "there is no code in this lesson" })
+                return@launch
+            }
+            val name = reply.optString("name").ifEmpty { "lesson.txt" }
+            val code = reply.optString("code")
+            if (code.isBlank()) {
+                showToast("This lesson has no code to open")
+                return@launch
+            }
+            val folder = File(workspace.root, "teach").apply { mkdirs() }
+            val target = File(folder, name)
+            val written = withContext(Dispatchers.IO) {
+                runCatching { target.writeText(code) }.isSuccess
+            }
+            if (!written) {
+                showToast("Could not write $name")
+                return@launch
+            }
+            openInEditor(target)
+            showToast("Saved as teach/$name")
         }
     }
 

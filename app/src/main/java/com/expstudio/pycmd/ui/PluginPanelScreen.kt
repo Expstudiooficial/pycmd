@@ -34,7 +34,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.graphics.toColorInt
 import com.expstudio.pycmd.plugins.InstalledPlugin
 import com.expstudio.pycmd.python.PythonEngine
 import com.expstudio.pycmd.util.DebugLog
@@ -67,18 +66,39 @@ fun PluginPanelView(
     // Taken once. A panel that has been shown before comes back whole - its
     // page, its scroll position, and whatever was typed into it - and a panel
     // that has not is built now.
+    val theme = LocalPyTheme.current
+    val corner = LocalCorner.current
+    val reducedMotion = LocalReducedMotion.current
+    val textScale = LocalTextScale.current
+
     val lease = remember(key) {
         val kept = PanelViews.take(key)
         val bridge = kept?.bridge ?: PanelBridge(plugin)
         PanelLease(
             key = key,
-            view = kept?.view ?: newPanelView(context, bridge, plugin),
+            view = kept?.view ?: newPanelView(
+                context,
+                bridge,
+                plugin,
+                Hex.argb(theme.palette.bg).toInt(),
+            ),
             bridge = bridge,
             wasKept = kept != null,
         )
     }
     val bridge = lease.bridge
     val webView = lease.view
+
+    // The panel is handed the app's palette, and handed it again whenever it
+    // changes. This is what makes a plugin look like part of PyCmd rather than
+    // like a page that happens to be inside it.
+    LaunchedEffect(webView, theme.id, theme.palette, corner, reducedMotion, textScale) {
+        bridge.applyTheme(
+            webView,
+            WebTheme.script(theme, textScale, corner, reducedMotion),
+            Hex.argb(theme.palette.bg).toInt(),
+        )
+    }
 
     DisposableEffect(webView, viewModel) {
         bridge.bind(viewModel)
@@ -149,6 +169,7 @@ private fun newPanelView(
     context: android.content.Context,
     bridge: PanelBridge,
     plugin: InstalledPlugin,
+    background: Int,
 ): WebView {
     run {
         // The distance at which a drag has a direction worth believing. Read
@@ -176,7 +197,7 @@ private fun newPanelView(
             // folder, which is inside the app's private storage.
             settings.allowFileAccess = true
             settings.allowContentAccess = false
-            setBackgroundColor("#0B0F14".toColorInt())
+            setBackgroundColor(background)
             isVerticalScrollBarEnabled = true
             overScrollMode = WebView.OVER_SCROLL_IF_CONTENT_SCROLLS
             // A panel sitting inside one of the app's own screens is a
@@ -332,6 +353,18 @@ private fun newPanelView(
                 }
             }
             webViewClient = object : WebViewClient() {
+                override fun onPageStarted(
+                    view: WebView,
+                    url: String?,
+                    favicon: android.graphics.Bitmap?,
+                ) {
+                    bridge.onDocumentStarted(view)
+                }
+
+                override fun onPageFinished(view: WebView, url: String?) {
+                    bridge.onDocumentStarted(view)
+                }
+
                 override fun shouldOverrideUrlLoading(
                     view: WebView?,
                     request: WebResourceRequest?,
@@ -444,6 +477,42 @@ class PanelBridge(private val plugin: InstalledPlugin) {
 
     fun detach() {
         view = null
+    }
+
+    /**
+     * Whether the document is far enough along to run a script.
+     *
+     * A panel is loaded with `loadDataWithBaseURL`, which is asynchronous:
+     * handing it the palette straight after the call evaluates JS against a
+     * document that is not there yet and the call is thrown away without a
+     * word. So the palette is kept and pushed when the page says it has
+     * started, and again when it finishes.
+     */
+    @Volatile
+    private var pageReady = false
+
+    /** The palette last pushed into this panel. */
+    @Volatile
+    private var themeScript = ""
+
+    /** Called by the panel's WebViewClient. */
+    internal fun onDocumentStarted(webView: WebView) {
+        pageReady = true
+        val script = themeScript
+        if (script.isNotEmpty()) webView.evaluateJavascript(script, null)
+    }
+
+    /**
+     * Hands this panel the app's colours.
+     *
+     * Cheap to call again with the same palette, because it is called on every
+     * recomposition of the screen the panel sits on.
+     */
+    fun applyTheme(webView: WebView, script: String, background: Int) {
+        runCatching { webView.setBackgroundColor(background) }
+        if (script == themeScript) return
+        themeScript = script
+        if (pageReady) webView.post { webView.evaluateJavascript(script, null) }
     }
 
     /** The panel is gone for good; nothing it asked for matters any more. */

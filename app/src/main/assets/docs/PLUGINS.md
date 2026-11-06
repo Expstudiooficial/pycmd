@@ -495,11 +495,80 @@ Any HTML file works. PyCmd injects a stylesheet that matches the app and a
 await pycmd.call('export_name', payload)   // runs your Python, resolves with its return
 await pycmd.poll('export_name', payload)   // the same, for a refresh on a timer
 pycmd.on('message', (data) => { ... })     // receives api.send(...)
+pycmd.on('theme', (theme) => { ... })      // the user changed theme
 pycmd.toast('done')                        // the app's toast
 pycmd.log('something happened')            // the debug console
 pycmd.close()                              // back to the plugin list
 pycmd.plugin                               // { id, name, version, author }
+pycmd.theme()                               // { dark, motion, theme }
+pycmd.colour('accent')                      // one of the app's colours, as hex
 ```
+
+### Looking like part of the app
+
+This is the bit worth reading. Before 2.7.0 the injected stylesheet had a blue
+palette of its own, and the result was exactly what people said it was: the
+plugins looked like a different app that had been connected to this one. They
+were not — they just had their own colours, their own button shape and their
+own idea of how big a gap between two cards should be.
+
+So: **write no colours of your own.** The app declares its whole palette as
+CSS custom properties on `:root` and hands your panel whichever theme the user
+has on — Classic Green, Halloween, Paper, or one of their own twenty-colour
+creations. A panel that uses the variables follows all of them for free. A
+panel with `#2E7DD1` in it stays blue in every theme, for ever.
+
+```css
+.mine {
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  color: var(--fg);
+  border-radius: var(--radius);
+}
+.mine .pressed { background: var(--accent); color: var(--on-accent); }
+```
+
+| | |
+|---|---|
+| `--bg` | behind everything |
+| `--surface` | cards |
+| `--surface-high` | a card on a card; the unpressed button |
+| `--outline` | hairlines and card edges |
+| `--fg` | body text |
+| `--muted` | labels and captions |
+| `--accent`, `--accent-dim`, `--accent-soft`, `--on-accent` | the one colour the app is known by |
+| `--info`, `--warning`, `--danger` | notices, "careful", errors |
+| `--kw`, `--builtin`, `--str`, `--num`, `--comment`, `--def`, `--self`, `--decorator` | syntax, if you highlight anything |
+| `--radius` | the user's corner setting, in px |
+| `--font-size`, `--line-height` | the user's code text size |
+
+And **write no components of your own** unless you need to. The injected
+stylesheet already dresses plain HTML: `<button>`, `<input>`, `<textarea>`,
+`<select>`, `<input type="range">`, `<input type="checkbox">`, `<table>`,
+`<pre>`, `<kbd>` and `<progress>` all come out looking like the app, and these
+classes are there when an element is not enough:
+
+| | |
+|---|---|
+| `.card` | the app's card. `.card.lead` for the one with the main action in it |
+| `.section` | a small upper-case heading above a card, as the app's screens use |
+| `.row` | a label on the left, a value on the right — the app's info row |
+| `.bar` | a strip of controls that wraps instead of overflowing |
+| `.grid` | a responsive grid of equal cards |
+| `button.primary`, `.danger`, `.ghost`, `.wide` | the four buttons |
+| `.pill`, `.pill.on`, `.dot`, `.dot.on` | a state label, and the running dot |
+| `.note`, `.note.warn`, `.note.bad` | something to read before pressing anything |
+| `.empty` | a panel with nothing to show yet should say so |
+| `.tabs` | a scrolling row of pills across the top |
+| `ul.list` | a list of things to choose between |
+| `.muted` | quieter text |
+
+Two things you get without asking. `:root[data-pycmd-motion="reduced"]` turns
+off every transition and animation in your panel when the user has asked for
+short animations, so do not fight it. And `pycmd.theme().dark` tells you which
+way round the palette is, for the one case CSS cannot cover: a `<canvas>` that
+has to pick its own stroke colour. `pycmd.colour('accent')` reads any of the
+variables above as a hex string for the same reason.
 
 `pycmd.call` returns a promise. If your Python raises, the promise rejects
 with the error message — so `try { await … } catch (e) { … }` shows the user

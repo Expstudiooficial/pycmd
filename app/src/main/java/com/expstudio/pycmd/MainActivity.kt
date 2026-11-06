@@ -8,7 +8,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.content.ContextCompat
+import com.expstudio.pycmd.ui.Appearance
+import com.expstudio.pycmd.ui.LocalAppearance
 import com.expstudio.pycmd.ui.PanelViews
 import com.expstudio.pycmd.ui.PyCmdRoot
 import com.expstudio.pycmd.ui.PyCmdTheme
@@ -22,14 +25,30 @@ class MainActivity : ComponentActivity() {
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    /**
+     * The theme, read off disk before anything is drawn.
+     *
+     * An activity field and not a `remember`, because it is read while the
+     * first composition is being built and has to already have the answer.
+     */
+    private lateinit var appearance: Appearance
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
+        appearance = Appearance(this)
 
         setContent {
-            PyCmdTheme {
-                PyCmdRoot()
+            CompositionLocalProvider(LocalAppearance provides appearance) {
+                PyCmdTheme(
+                    theme = appearance.theme,
+                    corner = appearance.corner,
+                    reducedMotion = appearance.reducedMotion,
+                    textScale = appearance.textScale,
+                ) {
+                    PyCmdRoot()
+                }
             }
         }
     }

@@ -57,6 +57,12 @@ private val DOCS = listOf(
         "What it is, what it can and cannot do, and how it is built.",
     ),
     Doc(
+        "docs/EMULATOR.md",
+        "Running it on a computer",
+        "Which Android emulator image to use, the one flag that makes it fast, " +
+            "and what to do when it is not.",
+    ),
+    Doc(
         "docs/FORKING.md",
         "Forking PyCmd",
         "How this is put together, how to build it, and how to publish updates " +

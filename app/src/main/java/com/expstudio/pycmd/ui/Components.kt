@@ -54,7 +54,10 @@ fun PyCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        // Follows the Appearance screen's corner setting, so changing it
+        // changes every card in the app rather than the three that happened
+        // to use the theme's shapes.
+        shape = RoundedCornerShape(LocalCorner.current.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
@@ -107,7 +110,7 @@ fun ActionButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape((LocalCorner.current - 2).coerceAtLeast(2).dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
             contentColor = contentColor,
@@ -129,12 +132,25 @@ fun GhostButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /** Red, for the button that deletes something. */
+    destructive: Boolean = false,
 ) {
+    val tint = if (destructive) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shape = RoundedCornerShape((LocalCorner.current - 2).coerceAtLeast(2).dp),
+        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+            contentColor = tint,
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+        ),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         modifier = modifier,
     ) {

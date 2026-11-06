@@ -46,7 +46,7 @@
       <div class="card">
         <p><strong>${esc(row.name)}</strong>
            <span style="opacity:.6">${esc(row.npm)}</span>
-           ${row.installed ? `<span style="color:#7ee0a6">· ${esc(row.version)}</span>` : ''}</p>
+           ${row.installed ? `<span style="color:var(--accent)">· ${esc(row.version)}</span>` : ''}</p>
         <p style="opacity:.8">${esc(row.about)}</p>
         <p>
           <button data-get="${esc(row.id)}">${row.installed ? 'Fetch again' : 'Fetch'}</button>

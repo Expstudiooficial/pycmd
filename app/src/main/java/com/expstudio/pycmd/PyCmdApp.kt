@@ -10,6 +10,7 @@ import com.expstudio.pycmd.plugins.Plugins
 import com.expstudio.pycmd.util.Branding
 import com.expstudio.pycmd.util.UpdateWorker
 import com.expstudio.pycmd.util.DebugLog
+import com.expstudio.pycmd.util.Device
 
 class PyCmdApp : Application() {
 
@@ -22,6 +23,10 @@ class PyCmdApp : Application() {
         // Before anything is drawn: see Branding for what this is and why it
         // cannot fire on a build that still says what it is.
         Branding.verify(this)
+        // Written down before anything else happens, because the first thing
+        // worth knowing about a crash on start-up is what kind of machine it
+        // was on and whether this build had Python for it.
+        Device.log(this)
         Plugins.init(this)
         CustomPlugins.init(this)
         createNotificationChannel()

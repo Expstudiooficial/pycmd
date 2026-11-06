@@ -597,7 +597,7 @@ private fun ServerConsole(
 
         Divider()
 
-        Box(Modifier.weight(1f).fillMaxWidth().background(PyColors.Background)) {
+        Box(Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
             if (lines.isEmpty()) {
                 EmptyState(
                     icon = PyIcons.Terminal,

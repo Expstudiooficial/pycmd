@@ -46,6 +46,13 @@ echo "== Music Pro: what it asks the app for, and what it refuses =="
 "$PYTHON" tools/test_music_pro.py
 
 echo
+echo "== PyCmdTeach: every course, and every snippet it can run =="
+# Runs every Python, C, Rust and Go snippet in the courses and compares what
+# came out with what the lesson claims. A course that states the wrong output
+# is wrong in five lessons at once, so this is not optional.
+"$PYTHON" tools/test_teach.py
+
+echo
 echo "== Plugins, doctor, preview, cloud, bundled =="
 "$PYTHON" tools/test_plugins.py
 "$PYTHON" tools/test_doctor.py
@@ -65,6 +72,13 @@ node tools/test_bridge.js
 node tools/test_creator_ui.js
 node tools/test_music_pro_ui.js
 node tools/test_panel_sliders.js
+
+echo
+echo "== A theme reaching every bundled panel =="
+# The mechanism themes are built on: a panel declares its colours as CSS
+# variables and the app appends a :root block that overrides them. Easy to
+# break with one literal colour, and nothing else would notice.
+node tools/test_panel_theme.js
 
 echo
 echo "== Panels, laid out at a phone's size =="
