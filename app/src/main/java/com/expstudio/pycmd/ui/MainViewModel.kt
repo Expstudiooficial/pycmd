@@ -3742,15 +3742,86 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun teachTotals(json: JSONObject?): TeachTotals = TeachTotals(
-        courses = json?.optInt("courses") ?: 0,
-        lessons = json?.optInt("lessons") ?: 0,
-        done = json?.optInt("done") ?: 0,
-        xp = json?.optInt("xp") ?: 0,
-        streak = json?.optInt("streak") ?: 0,
-        bestStreak = json?.optInt("best_streak") ?: 0,
-        todayDone = json?.optBoolean("today") ?: false,
-    )
+    private fun teachTotals(json: JSONObject?): TeachTotals {
+        val next = json?.optJSONObject("continue")
+        return TeachTotals(
+            courses = json?.optInt("courses") ?: 0,
+            lessons = json?.optInt("lessons") ?: 0,
+            done = json?.optInt("done") ?: 0,
+            xp = json?.optInt("xp") ?: 0,
+            streak = json?.optInt("streak") ?: 0,
+            bestStreak = json?.optInt("best_streak") ?: 0,
+            todayDone = json?.optBoolean("today") ?: false,
+            goal = json?.optInt("goal", 10) ?: 10,
+            todayCount = json?.optInt("today_count") ?: 0,
+            missed = json?.optInt("missed") ?: 0,
+            continueCourse = next?.optString("course").orEmpty(),
+            continueLesson = next?.optString("lesson").orEmpty(),
+            continueTitle = next?.optString("title").orEmpty(),
+            continueLanguage = next?.optString("language").orEmpty(),
+        )
+    }
+
+    private fun teachHits(rows: JSONArray?): List<TeachHit> = buildList {
+        for (index in 0 until (rows?.length() ?: 0)) {
+            val row = rows?.optJSONObject(index) ?: continue
+            add(
+                TeachHit(
+                    course = row.optString("course"),
+                    language = row.optString("language"),
+                    lesson = row.optString("lesson"),
+                    title = row.optString("title"),
+                    kind = row.optString("kind"),
+                ),
+            )
+        }
+    }
+
+    /**
+     * Lessons still to go in a review round, after the one on screen.
+     *
+     * Empty outside a review, which is how Next knows whether to walk the
+     * course in order or to jump to the next mistake.
+     */
+    private val _teachQueue = MutableStateFlow<List<TeachHit>>(emptyList())
+    val teachQueue: StateFlow<List<TeachHit>> = _teachQueue.asStateFlow()
+
+    private val _teachSearch = MutableStateFlow<List<TeachHit>>(emptyList())
+    val teachSearch: StateFlow<List<TeachHit>> = _teachSearch.asStateFlow()
+
+    /** Starts a round of the lessons answered wrong. */
+    fun startTeachReview() {
+        viewModelScope.launch {
+            val reply = engine.teach("review")
+            val queue = teachHits(reply.optJSONArray("lessons"))
+            if (queue.isEmpty()) {
+                showToast("Nothing to review - every answer so far was right")
+                return@launch
+            }
+            _teachQueue.value = queue.drop(1)
+            showToast("${queue.size} to go over again")
+            openTeachLesson(queue[0].course, queue[0].lesson)
+        }
+    }
+
+    fun searchTeach(text: String) {
+        if (text.trim().length < 2) {
+            _teachSearch.value = emptyList()
+            return
+        }
+        viewModelScope.launch {
+            _teachSearch.value = teachHits(engine.teach("search", text).optJSONArray("hits"))
+        }
+    }
+
+    fun setTeachGoal(count: Int) {
+        viewModelScope.launch {
+            val reply = engine.teach("goal", count.toString())
+            if (reply.optBoolean("ok")) {
+                _teach.value = _teach.value.copy(totals = teachTotals(reply))
+            }
+        }
+    }
 
     fun openTeachCourse(id: String) {
         _teachLesson.value = null
@@ -3829,6 +3900,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 output = reply.optString("output"),
                 note = reply.optString("note"),
                 prompt = reply.optString("prompt"),
+                hint = reply.optString("hint"),
                 graded = reply.optString("graded"),
                 options = reply.optJSONArray("options").strings(),
                 lines = reply.optJSONArray("lines").strings(),
@@ -3843,6 +3915,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeTeachLesson() {
         val lesson = _teachLesson.value
+        _teachQueue.value = emptyList()
         _teachLesson.value = null
         _teachMark.value = null
         // The course list behind it shows ticks, and one of them may have just
@@ -3888,6 +3961,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The next lesson in the course, or back to the list at the end of it. */
     fun nextTeachLesson() {
         val lesson = _teachLesson.value ?: return
+        // In a review round, Next goes to the next mistake rather than on
+        // through the course the last one happened to be in.
+        val queue = _teachQueue.value
+        if (queue.isNotEmpty()) {
+            _teachQueue.value = queue.drop(1)
+            openTeachLesson(queue[0].course, queue[0].lesson)
+            return
+        }
         if (lesson.next.isEmpty()) {
             showToast("That is the end of ${lesson.language}. ${lesson.total} lessons.")
             closeTeachLesson()

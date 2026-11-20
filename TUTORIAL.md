@@ -789,12 +789,12 @@ that already runs, with what it needs already inside it.
 
 ## 11g. PyCmdTeach — learn the language you are writing in
 
-**More → PyCmdTeach.** 28 courses, 3,781 lessons, free, and all of it on the
+**More → PyCmdTeach.** 28 courses, 9,038 lessons, free, and all of it on the
 device — there is nothing to download and no account.
 
 Start with Python if you are not sure. Tap it, then **Start**. The course is
 eleven units from `print` to decorators and generators, and each lesson is one
-idea in one of five shapes:
+idea in one of seven shapes:
 
 | | |
 |---|---|
@@ -802,6 +802,8 @@ idea in one of five shapes:
 | **What does it print?** | four answers, three of them from elsewhere in the same course |
 | **Fill the gap** | one word blanked out of the snippet |
 | **Put it in order** | the lines, shuffled; tap them top-first |
+| **Which one prints it?** | four snippets; one gives the output |
+| **Spot the mistake** | one line is broken; find it |
 | **Write it yourself** | an empty box |
 
 That last one is the one worth trying. In Python, C, Rust and Go, **it runs
@@ -838,6 +840,13 @@ build.
 
 Progress, XP and a day streak are kept on the device and nowhere else. **Reset**
 on a course forgets just that one.
+
+The top of the tab has three things worth knowing about. **Continue** opens
+the lesson you were last in. **Today** is a daily goal - press - or + to set
+it - with a bar that fills as you finish lessons. And every answer you get
+wrong is kept: when there are any, **Review** takes you back through them, and
+each one leaves the list when you get it right. The search box finds a lesson
+in any course by its title or its code.
 
 Try these, in this order, for a sense of what is in it:
 

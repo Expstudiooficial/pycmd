@@ -70,6 +70,7 @@ class Parser:
         # Names introduced by typedef, so `Point p;` parses as a declaration.
         self.typedefs: dict[str, CType] = {}
         self.structs: dict[str, list] = {}
+        self.unions: set = set()
 
     # ------------------------------------------------------------------ tokens
 
@@ -125,6 +126,7 @@ class Parser:
                 self.advance()
                 continue
             if token.kind == "kw" and token.value in ("struct", "union"):
+                is_union = token.value == "union"
                 self.advance()
                 name = ""
                 if self.at("id"):
@@ -134,6 +136,10 @@ class Parser:
                     if not name:
                         name = f"__anon{len(self.structs)}"
                     self.structs[name] = fields
+                    if is_union:
+                        # A union is a struct whose fields share one place.
+                        # The interpreter needs to know which names those are.
+                        self.unions.add(name)
                 elif name not in self.structs:
                     # Forward reference; the body may come later.
                     self.structs.setdefault(name, [])
@@ -304,6 +310,7 @@ class Parser:
             "functions": functions,
             "globals": globals_,
             "structs": self.structs,
+            "unions": self.unions,
             "enums": self.enum_constants,
             "typedefs": self.typedefs,
         }
@@ -326,6 +333,17 @@ class Parser:
                 variadic = True
                 break
             param_type = self.parse_type()
+            if self.at_op("("):
+                # `int (*cmp)(int, int)` - a function pointer parameter.
+                self.advance()
+                self.expect("op", "*")
+                param_name = self.advance().value if self.at("id") else ""
+                self.expect("op", ")")
+                self.skip_parameter_list()
+                params.append((param_name, CType("fn", 1)))
+                if not self.accept("op", ","):
+                    break
+                continue
             param_name = self.advance().value if self.at("id") else ""
             while self.at_op("["):
                 self.advance()
@@ -492,11 +510,43 @@ class Parser:
         self.expect("op", "}")
         return cases
 
+    def skip_parameter_list(self) -> None:
+        """Steps over `( ... )` without reading it: a function pointer's
+        parameter list says what it takes, and the interpreter calls through
+        it without checking - the same way C would let a mismatch through."""
+        self.expect("op", "(")
+        depth = 1
+        while depth:
+            if self.at("eof"):
+                raise CSyntaxError("unterminated parameter list", self.current.line)
+            if self.at_op("("):
+                depth += 1
+            elif self.at_op(")"):
+                depth -= 1
+            self.advance()
+
     def parse_declaration_statement(self):
         line = self.current.line
+        # `static int n = 0;` inside a function keeps its value between calls.
+        # The type parser skips the word, so it has to be noticed here first.
+        is_static = self.current.kind == "kw" and self.current.value == "static"
         declared = self.parse_type()
         entries = []
         while True:
+            if self.at_op("("):
+                # `int (*f)(int) = twice;` - a pointer to a function. Kept as
+                # a one-level pointer whose value is the function itself.
+                self.advance()
+                self.expect("op", "*")
+                name = self.expect("id").value
+                self.expect("op", ")")
+                self.skip_parameter_list()
+                var_type = CType("fn", 1)
+                init = self.parse_initializer() if self.accept("op", "=") else None
+                entries.append((name, var_type, init))
+                if not self.accept("op", ","):
+                    break
+                continue
             name = self.expect("id").value
             var_type = CType(declared.base, declared.pointer, [], declared.struct_name)
             while self.at_op("["):
@@ -514,6 +564,8 @@ class Parser:
                 extra += 1
             declared = CType(declared.base, extra, struct_name=declared.struct_name)
         self.expect("op", ";")
+        if is_static:
+            return ("declare", entries, line, "static")
         return ("declare", entries, line)
 
     # ------------------------------------------------------------- expressions

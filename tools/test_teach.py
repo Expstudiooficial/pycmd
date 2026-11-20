@@ -28,6 +28,11 @@ from pycmd_teach import Unit  # noqa: E402
 FAILED = []
 PASSED = 0
 
+# Collected while walking the courses and run afterwards, because running
+# them is the slow part and the walk should report its own failures first.
+WHICH = []
+BUGS = []
+
 
 def check(name, condition, detail=""):
     global PASSED
@@ -72,11 +77,156 @@ def run_registry(source, extension):
         if not result.get("ok"):
             return buffer.getvalue(), result.get("error", "did not run")
         return buffer.getvalue(), ""
+    except Exception as error:  # noqa: BLE001
+        # An interpreter crash is a finding, not a reason to stop counting.
+        return "", f"the interpreter crashed: {type(error).__name__}: {error}"
     finally:
         os.unlink(handle.name)
 
 
+import shutil
+import subprocess
+
+#: How to run one snippet with a real toolchain: the file name to write it
+#: to, and the command (with {file} and {dir} filled in). A list of steps,
+#: for the languages that compile first.
+REAL = {
+    "javascript": ("main.js", [["node", "{file}"]]),
+    "typescript": ("main.ts", [["bun", "run", "{file}"]]),
+    "ruby": ("main.rb", [["ruby", "{file}"]]),
+    "php": ("main.php", [["php", "{file}"]]),
+    "perl": ("main.pl", [["perl", "{file}"]]),
+    "lua": ("main.lua", [["lua5.4", "{file}"]]),
+    "java": ("Main.java", [["java", "{file}"]]),
+    "cpp": ("main.cpp", [["g++", "-std=c++20", "-o", "{dir}/a.out", "{file}"],
+                         ["{dir}/a.out"]]),
+    "c": ("main.c", [["gcc", "-o", "{dir}/a.out", "{file}", "-lm"], ["{dir}/a.out"]]),
+    "go": ("main.go", [["go", "run", "{file}"]]),
+    "rust": ("main.rs", [["rustc", "-o", "{dir}/a.out", "{file}"], ["{dir}/a.out"]]),
+    "shell": ("main.sh", [["bash", "{file}"]]),
+    "sql": ("main.sql", [["sqlite3", ":memory:", ".read {file}"]]),
+    "python": ("main.py", [[sys.executable, "{file}"]]),
+}
+
+
+def run_real(course_id, code):
+    """Runs a snippet with a real toolchain. (output, error) or None if absent."""
+    spec = REAL.get(course_id)
+    if spec is None:
+        return None
+    filename, steps = spec
+    if not shutil.which(steps[0][0]) and not os.path.isabs(steps[0][0]):
+        return None
+    folder = tempfile.mkdtemp(prefix=f"real-{course_id}-")
+    path = os.path.join(folder, filename)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(code + "\n")
+    output = ""
+    env = dict(os.environ, GOCACHE=os.path.join(tempfile.gettempdir(), "teach-gocache"),
+               GOFLAGS="-mod=mod")
+    for step in steps:
+        command = [part.replace("{file}", path).replace("{dir}", folder) for part in step]
+        try:
+            done = subprocess.run(command, cwd=folder, capture_output=True, text=True,
+                                  timeout=120, stdin=subprocess.DEVNULL, env=env)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return "", str(exc)
+        if done.returncode != 0:
+            return done.stdout, (done.stderr or done.stdout)[-400:]
+        output = done.stdout
+    return output, ""
+
+
+#: Courses about a format rather than a language, whose lessons that print
+#: anything are Python using that format. They are checked as Python.
+PYTHON_INSIDE = {"regex", "ini", "csv"}
+
+
+def format_checks(courses):
+    """Every JSON, TOML and XML snippet has to load.
+
+    A course teaching a file format by showing a file that would not parse is
+    teaching the wrong thing, and the standard library can say so.
+    """
+    import json as json_module
+    import tomllib
+    import xml.etree.ElementTree as ElementTree
+
+    # The ones that are not meant to be a single valid document, by title.
+    not_documents = {"JSON Lines", "Several documents", "A multi-document stream"}
+    for course_id, loader in (
+        ("json", json_module.loads),
+        ("toml", tomllib.loads),
+        ("xml", ElementTree.fromstring),
+    ):
+        course = courses.get(course_id)
+        if course is None:
+            continue
+        for unit in course.units:
+            for topic in unit["topics"]:
+                if topic.title in not_documents:
+                    continue
+                text = topic.code
+                if course_id == "xml":
+                    # A fragment is checked inside a root, and the declaration
+                    # and processing instructions are taken off the front.
+                    lines = [l for l in text.split("\n") if not l.startswith("<?")]
+                    text = "<root xmlns:android='a' xmlns:a='b'>" + "\n".join(lines) + "</root>"
+                    text = text.replace("&lt;", "&#60;")
+                try:
+                    loader(text)
+                    ok, why = True, ""
+                except Exception as error:  # noqa: BLE001
+                    ok, why = False, str(error)
+                check(f"{course_id} '{topic.title}' is a valid {course_id.upper()} document",
+                      ok, why)
+
+
+def real_checks(courses):
+    format_checks(courses)
+    for course in courses.values():
+        if course.id in PYTHON_INSIDE:
+            for unit in course.units:
+                for topic in unit["topics"]:
+                    if not topic.out or "import " not in topic.code:
+                        continue
+                    got, error = run_python(topic.code)
+                    check(f"{course.id} '{topic.title}' runs as Python", not error, error)
+                    check(f"{course.id} '{topic.title}' prints what it says",
+                          flatten(got) == flatten(topic.out),
+                          f"got {flatten(got)!r}, course says {flatten(topic.out)!r}")
+            continue
+        if course.id not in REAL:
+            continue
+        tool = REAL[course.id][1][0][0]
+        if not shutil.which(tool) and not os.path.isabs(tool):
+            print(f"  SKIP  {course.name}: no {tool} here to check it with")
+            continue
+        checked = 0
+        for unit in course.units:
+            for topic in unit["topics"]:
+                if not topic.out:
+                    continue
+                result = run_real(course.id, topic.code)
+                if result is None:
+                    continue
+                got, error = result
+                checked += 1
+                if error:
+                    check(f"{course.id} '{topic.title}' runs on the real {tool}", False, error)
+                    continue
+                check(
+                    f"{course.id} '{topic.title}' prints the same on the real {tool}",
+                    flatten(got) == flatten(topic.out),
+                    f"got {flatten(got)!r}, course says {flatten(topic.out)!r}",
+                )
+        print(f"  {course.name}: {checked} snippets checked on the real {tool}")
+
+
 def main():
+    # Progress goes somewhere disposable: marking every generated question
+    # writes to the review list, and that should not land in /tmp for good.
+    pycmd_teach.configure(tempfile.mkdtemp(prefix="teach-progress-"))
     courses = pycmd_teach._courses()
     check("courses", len(courses) >= 20, f"only {len(courses)}")
 
@@ -117,7 +267,46 @@ def main():
                     want in row["options"],
                     str(row["options"]),
                 )
-            elif row["kind"] == "order":
+            elif row["kind"] == "write":
+                # "Show me" reveals this. In 2.7.0 it was missing and the
+                # button opened an empty box.
+                check(f"{course.id} {row['id']} write carries its answer",
+                      bool(row.get("code", "").strip()), row.get("code"))
+                if row.get("graded") == "text":
+                    check(f"{course.id} {row['id']} text write has a hint",
+                          bool(row.get("hint")), row)
+                reply = pycmd_teach.check(course.id, row["id"], row["code"])
+                if row.get("graded") == "text":
+                    check(f"{course.id} {row['id']} its own answer is right",
+                          reply.get("right"), reply)
+            elif row["kind"] == "which":
+                topic = pycmd_teach._topic_for(course, row["id"])
+                check(f"{course.id} {row['id']} which has the right snippet",
+                      topic.code in row["options"])
+                check(f"{course.id} {row['id']} which has no duplicate options",
+                      len(set(row["options"])) == len(row["options"]))
+                reply = pycmd_teach.check(course.id, row["id"], topic.code)
+                check(f"{course.id} {row['id']} which answerable", reply.get("right"), reply)
+                WHICH.append((course, row, topic))
+            elif row["kind"] == "bug":
+                topic = pycmd_teach._topic_for(course, row["id"])
+                broken = pycmd_teach._break(course, topic)
+                check(f"{course.id} {row['id']} bug has a broken line", bool(broken))
+                if broken:
+                    check(f"{course.id} {row['id']} the broken line is offered",
+                          broken[1] in row["options"])
+                    reply = pycmd_teach.check(course.id, row["id"], broken[1])
+                    check(f"{course.id} {row['id']} bug answerable", reply.get("right"), reply)
+                    BUGS.append((course, row, broken[0]))
+            if row["kind"] in ("fill", "order", "write", "predict"):
+                # "Editor" opens the topic's real snippet, never the blanked,
+                # shuffled or empty version an exercise shows.
+                topic = pycmd_teach._topic_for(course, row["id"])
+                opened = pycmd_teach.snippet(course.id, row["id"])
+                check(f"{course.id} {row['id']} opens the real snippet",
+                      opened.get("code", "").rstrip("\n") == topic.code,
+                      opened.get("code", "")[:60])
+            if row["kind"] == "order":
                 want = "\n".join(pycmd_teach._order_answer(course, row))
                 reply = pycmd_teach.check(course.id, row["id"], want)
                 check(f"{course.id} {row['id']} order answerable", reply.get("right"), str(reply))
@@ -152,6 +341,53 @@ def main():
                     flatten(got) == flatten(topic.out),
                     f"got {flatten(got)!r}, course says {flatten(topic.out)!r}",
                 )
+
+    # ---- "which of these prints it": exactly one of them does ----------
+    #
+    # Run every option of every runnable question. The distractors are taken
+    # from other topics with a different stated output, but two snippets can
+    # print the same thing without saying so - and then the question has two
+    # right answers and marks one of them wrong.
+    for course, row, topic in WHICH:
+        if course.graded != "run":
+            continue
+        printing = []
+        for option in row["options"]:
+            if course.extension == ".py":
+                got, error = run_python(option)
+            else:
+                got, error = run_registry(option, course.extension)
+            if not error and flatten(got) == flatten(topic.out):
+                printing.append(option)
+        check(f"{course.id} {row['id']} exactly one option prints the answer",
+              printing == [topic.code], f"{len(printing)} do")
+
+    # ---- "one line is broken": it really is ---------------------------
+    #
+    # The exercise claims the snippet is wrong. For the languages the app can
+    # run, prove it: the broken program must not run cleanly.
+    for course, row, code in BUGS:
+        if course.graded != "run":
+            continue
+        if course.extension == ".py":
+            try:
+                compile(code, "<bug>", "exec")
+                _, error = run_python(code)
+            except SyntaxError as exc:
+                error = str(exc)
+        else:
+            _, error = run_registry(code, course.extension)
+        check(f"{course.id} {row['id']} the broken snippet really is broken",
+              bool(error), code)
+
+    # ---- the stated outputs, checked by the real toolchains -------------
+    #
+    # The phone can only run Python, C, Rust and Go. A machine with Node,
+    # Ruby or a JDK on it can check the rest - and the real go and rustc
+    # double-check that the app's own interpreters agree with the compilers.
+    # Every toolchain is optional: one that is missing skips its course and
+    # says so, rather than failing a laptop that never installed PHP.
+    real_checks(courses)
 
     # ---- the limits on a written answer -------------------------------
     #

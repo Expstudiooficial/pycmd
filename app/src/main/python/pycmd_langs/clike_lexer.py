@@ -206,7 +206,13 @@ def tokenize(source: str, options: Options) -> list:
         # expression.
         leading_dot = char == "." and peek(1).isdigit() and not (
             tokens and (tokens[-1].kind in ("id", "int", "float")
-                        or tokens[-1].value in (")", "]", "}"))
+                        or tokens[-1].value in (")", "]", "}")
+                        # `self.0` - the receiver of a tuple struct is a
+                        # keyword, not a name, and a keyword that ends an
+                        # expression needs the same treatment or `.0` reads
+                        # as the number 0.0 and `self` is left on its own.
+                        or (tokens[-1].kind == "kw"
+                            and tokens[-1].value in ("self", "Self", "this", "super")))
         )
         if char.isdigit() or leading_dot:
             start = index

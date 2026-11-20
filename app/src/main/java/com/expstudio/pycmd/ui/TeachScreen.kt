@@ -61,6 +61,26 @@ data class TeachTotals(
     val streak: Int = 0,
     val bestStreak: Int = 0,
     val todayDone: Boolean = false,
+    /** Lessons a day the user is aiming for. */
+    val goal: Int = 10,
+    /** Lessons finished today. */
+    val todayCount: Int = 0,
+    /** Lessons answered wrong and not yet put right. */
+    val missed: Int = 0,
+    /** Where Continue goes; empty course when there is nowhere to go yet. */
+    val continueCourse: String = "",
+    val continueLesson: String = "",
+    val continueTitle: String = "",
+    val continueLanguage: String = "",
+)
+
+/** One lesson found by searching, or waiting in the review list. */
+data class TeachHit(
+    val course: String,
+    val language: String,
+    val lesson: String,
+    val title: String,
+    val kind: String,
 )
 
 data class TeachHome(
@@ -96,6 +116,8 @@ data class TeachLesson(
     val output: String,
     val note: String,
     val prompt: String,
+    /** A nudge for a write lesson that is compared rather than run. */
+    val hint: String = "",
     val graded: String,
     val options: List<String>,
     val lines: List<String>,
@@ -139,6 +161,13 @@ fun TeachScreen(
     onReset: (String) -> Unit,
     onOpenSnippet: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Lessons matching the search box, newest query. */
+    searchHits: List<TeachHit> = emptyList(),
+    onSearch: (String) -> Unit = {},
+    onReview: () -> Unit = {},
+    onSetGoal: (Int) -> Unit = {},
+    /** Mistakes still to go after this one, in a review round. */
+    reviewLeft: Int = 0,
     pluginSections: @Composable () -> Unit = {},
 ) {
     when {
@@ -146,6 +175,7 @@ fun TeachScreen(
             lesson = lesson,
             mark = mark,
             busy = busy,
+            reviewLeft = reviewLeft,
             onAnswer = onAnswer,
             onNext = onNext,
             onPrevious = onPrevious,
@@ -166,6 +196,11 @@ fun TeachScreen(
             home = home,
             busy = busy,
             onOpenCourse = onOpenCourse,
+            onOpenLesson = onOpenLesson,
+            searchHits = searchHits,
+            onSearch = onSearch,
+            onReview = onReview,
+            onSetGoal = onSetGoal,
             modifier = modifier,
             pluginSections = pluginSections,
         )
@@ -179,9 +214,15 @@ private fun CourseList(
     home: TeachHome,
     busy: Boolean,
     onOpenCourse: (String) -> Unit,
+    onOpenLesson: (String, String) -> Unit,
+    searchHits: List<TeachHit>,
+    onSearch: (String) -> Unit,
+    onReview: () -> Unit,
+    onSetGoal: (Int) -> Unit,
     modifier: Modifier = Modifier,
     pluginSections: @Composable () -> Unit = {},
 ) {
+    var query by remember { mutableStateOf("") }
     LazyColumn(
         modifier.fillMaxSize(),
         contentPadding = PaddingValues(14.dp),
@@ -237,6 +278,139 @@ private fun CourseList(
             }
         }
 
+        val totals = home.totals
+        if (totals.continueCourse.isNotEmpty()) {
+            item {
+                PyCard(contentPadding = PaddingValues(0.dp)) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenLesson(totals.continueCourse, totals.continueLesson) }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Continue",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                totals.continueTitle,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                            )
+                            Text(
+                                totals.continueLanguage,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            PyIcons.PlayArrow,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (!home.loading) {
+            item {
+                PyCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Today", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                if (totals.todayCount >= totals.goal) {
+                                    "${totals.todayCount} lessons. Goal reached."
+                                } else {
+                                    "${totals.todayCount} of ${totals.goal} lessons"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // A small stepper rather than a settings page: the
+                        // goal is the one number here people change, and it
+                        // changes when they look at it.
+                        GhostButton("-", PyIcons.Clear, onClick = {
+                            onSetGoal((totals.goal - 5).coerceAtLeast(5))
+                        })
+                        Spacer(Modifier.width(6.dp))
+                        GhostButton("+", PyIcons.Add, onClick = {
+                            onSetGoal((totals.goal + 5).coerceAtMost(200))
+                        })
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    LinearProgressIndicator(
+                        progress = {
+                            (totals.todayCount.toFloat() / totals.goal.coerceAtLeast(1)).coerceIn(0f, 1f)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (totals.missed > 0) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${totals.missed} answer${if (totals.missed == 1) "" else "s"} " +
+                                    "to go over again",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            ActionButton("Review", PyIcons.History, onClick = onReview)
+                        }
+                    }
+                }
+            }
+            item {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = {
+                        query = it
+                        onSearch(it)
+                    },
+                    label = { Text("Search every lesson") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (query.trim().length >= 2) {
+                if (searchHits.isEmpty()) {
+                    item {
+                        Text(
+                            "No lesson mentions \"${query.trim()}\".",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                        )
+                    }
+                }
+                itemsIndexed(searchHits, key = { index, hit -> "hit-$index-${hit.course}-${hit.lesson}" }) { _, hit ->
+                    PyCard(contentPadding = PaddingValues(0.dp)) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenLesson(hit.course, hit.lesson) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(hit.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                                Text(
+                                    "${hit.language}  ·  ${kindName(hit.kind)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (home.error.isNotEmpty()) {
             item {
                 PyCard {
@@ -263,8 +437,10 @@ private fun CourseList(
             item { SectionTitle("Languages") }
         }
 
-        items(home.courses, key = { it.id }) { course ->
-            CourseRow(course) { onOpenCourse(course.id) }
+        if (query.trim().length < 2) {
+            items(home.courses, key = { it.id }) { course ->
+                CourseRow(course) { onOpenCourse(course.id) }
+            }
         }
 
         if (home.courses.isNotEmpty()) {
@@ -495,6 +671,8 @@ private fun LessonRow(row: TeachLessonRef, onClick: () -> Unit) {
 private fun kindGlyph(kind: String): String = when (kind) {
     "read" -> "i"
     "predict" -> "?"
+    "which" -> "≡"
+    "bug" -> "!"
     "fill" -> "_"
     "order" -> "↕"
     else -> "✎"
@@ -503,6 +681,8 @@ private fun kindGlyph(kind: String): String = when (kind) {
 private fun kindName(kind: String): String = when (kind) {
     "read" -> "Read it"
     "predict" -> "What does it print?"
+    "which" -> "Which one prints it?"
+    "bug" -> "Spot the mistake"
     "fill" -> "Fill the gap"
     "order" -> "Put it in order"
     else -> "Write it yourself"
@@ -515,6 +695,7 @@ private fun LessonPlayer(
     lesson: TeachLesson,
     mark: TeachMark?,
     busy: Boolean,
+    reviewLeft: Int,
     onAnswer: (String) -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -537,6 +718,10 @@ private fun LessonPlayer(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 GhostButton("Course", PyIcons.ArrowBack, onClick = onClose)
                 Spacer(Modifier.weight(1f))
+                if (reviewLeft > 0) {
+                    StatusChip("review · $reviewLeft left", MaterialTheme.colorScheme.tertiary)
+                    Spacer(Modifier.width(8.dp))
+                }
                 Text(
                     "${lesson.index + 1} / ${lesson.total}",
                     style = MaterialTheme.typography.labelSmall,
@@ -596,6 +781,26 @@ private fun LessonPlayer(
             "predict" -> {
                 item { Prompt(lesson.prompt) }
                 item { CodeBlock(lesson.code) }
+                itemsIndexed(lesson.options, key = { index, _ -> index }) { _, option ->
+                    ChoiceRow(
+                        text = option,
+                        chosen = picked == option,
+                        verdict = verdictFor(option, picked, mark),
+                        mono = true,
+                    ) {
+                        if (mark?.right != true) {
+                            picked = option
+                            onAnswer(option)
+                        }
+                    }
+                }
+            }
+
+            "which", "bug" -> {
+                item { Prompt(lesson.prompt) }
+                if (lesson.code.isNotEmpty()) {
+                    item { CodeBlock(lesson.code) }
+                }
                 itemsIndexed(lesson.options, key = { index, _ -> index }) { _, option ->
                     ChoiceRow(
                         text = option,
@@ -714,6 +919,17 @@ private fun LessonPlayer(
 
             else -> {
                 item { Prompt(lesson.prompt) }
+                if (lesson.hint.isNotEmpty()) {
+                    item {
+                        Text(
+                            lesson.hint,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = MonoFamily,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                        )
+                    }
+                }
                 item {
                     PyCard {
                         Text(

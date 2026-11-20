@@ -699,6 +699,78 @@ check_error("too many rows is still refused", """
 int main(void) { int grid[1][2] = {{1,2},{3,4}}; return grid[0][0]; }
 """, "too many initialisers")
 
+print("\n== found by PyCmdTeach's C course, fixed in 2.8.0 ==")
+# Each of these was a lesson whose stated output the interpreter got wrong.
+# The lessons were right; the interpreter was not.
+check("a static local keeps its value between calls", """
+#include <stdio.h>
+int count(void) { static int n = 0; return ++n; }
+int main(void) { count(); count(); printf("%d\\n", count()); return 0; }
+""", "3\n")
+check("sizeof an array is the whole array", """
+#include <stdio.h>
+int main(void) {
+    int a[] = {1, 2, 3, 4};
+    printf("%d %d\\n", (int) (sizeof a / sizeof a[0]), (int) sizeof a);
+    return 0;
+}
+""", "4 16\n")
+check("sizeof does not evaluate what it measures", """
+#include <stdio.h>
+#include <stdlib.h>
+struct P { int x; int y; };
+int main(void) {
+    struct P *p = malloc(sizeof *p);
+    p->x = 5;
+    printf("%d %d\\n", p->x, (int) sizeof *p);
+    free(p);
+    return 0;
+}
+""", "5 8\n")
+check("a function pointer can be declared, assigned and called", """
+#include <stdio.h>
+int twice(int n) { return n * 2; }
+int apply(int (*f)(int), int n) { return f(n); }
+int main(void) {
+    int (*f)(int) = twice;
+    printf("%d %d %d\\n", f(4), (*f)(5), apply(twice, 6));
+    return 0;
+}
+""", "8 10 12\n")
+check("qsort sorts with the program's own comparator", """
+#include <stdio.h>
+#include <stdlib.h>
+int cmp(const void *a, const void *b) { return *(const int *) a - *(const int *) b; }
+int main(void) {
+    int a[] = {3, 1, 2};
+    qsort(a, 3, sizeof(int), cmp);
+    printf("%d %d %d\\n", a[0], a[1], a[2]);
+    return 0;
+}
+""", "1 2 3\n")
+check("bsearch finds what qsort sorted", """
+#include <stdio.h>
+#include <stdlib.h>
+int cmp(const void *a, const void *b) { return *(const int *) a - *(const int *) b; }
+int main(void) {
+    int a[] = {2, 4, 6, 8};
+    int key = 6;
+    int *found = bsearch(&key, a, 4, sizeof(int), cmp);
+    printf("%d\\n", found ? *found : -1);
+    return 0;
+}
+""", "6\n")
+check("a union's fields share their memory", """
+#include <stdio.h>
+union U { int i; char c; };
+int main(void) {
+    union U u;
+    u.i = 65;
+    printf("%c %d\\n", u.c, (int) sizeof(union U));
+    return 0;
+}
+""", "A 4\n")
+
 print("\n== errors are reported, not crashed on ==")
 check_error("missing semicolon", 'int main() { int x = 1 return 0; }', "expected")
 check_error("unknown variable", '''

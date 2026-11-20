@@ -805,6 +805,20 @@ check_error("no main", 'package main\n\nimport "fmt"\n\nfunc other() { fmt.Print
             "no main")
 
 
+# Found by PyCmdTeach's Go course in 2.8.0.
+check("a missing map key reads as the value type's zero", """
+package main
+
+import "fmt"
+
+func main() {
+	m := map[string][]int{}
+	m["a"] = append(m["a"], 1)
+	n := make(map[string]string)
+	fmt.Println(m["a"], len(n["x"]))
+}
+""", "[1] 0\n")
+
 def run_one(source, stdin_text):
     out = io.StringIO()
     code = go_interp.run_source(source, stdout=out, stdin=io.StringIO(stdin_text))

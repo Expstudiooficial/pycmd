@@ -12,11 +12,11 @@ already has. Another twenty file types are edited, highlighted, previewed and
 served, and music, video, images, PDFs, archives and fonts are brought in from
 the phone, kept, served and played.
 
-It also teaches them. **PyCmdTeach** is 28 courses and 3,781 lessons covering
+It also teaches them. **PyCmdTeach** is 28 courses and 9,038 lessons covering
 every language in that list and every file type the app knows, and for Python,
 C, Rust and Go it marks what you write by running it.
 
-Version 2.7.0. Kotlin and Jetpack Compose for the app, JavaScript for the
+Version 2.8.0. Kotlin and Jetpack Compose for the app, JavaScript for the
 console and editor. Runs on a phone and on an emulator from the same APK.
 
 ---
@@ -52,10 +52,12 @@ is bytes rather than text is never loaded into a text box it could be ruined
 in. Examples ship on first launch, including two working plugins, and deleting
 them sticks.
 
-**PyCmdTeach** — 28 courses, 3,781 lessons, free and offline. Every language
+**PyCmdTeach** — 28 courses, 9,038 lessons, free and offline. Every language
 the app can run, every file type it can edit, and regular expressions. Each
-lesson is one idea taught five ways: read it, predict what it prints, fill the
-gap, put the lines in order, write it yourself. For Python, C, Rust and Go the
+lesson is one idea taught seven ways: read it, predict what it prints, pick
+the snippet that prints it, fill the gap, spot the broken line, put the lines
+in order, write it yourself. Wrong answers go on a review list, there is a
+daily goal, and every lesson in every course can be searched. For Python, C, Rust and Go the
 last one is marked by **running what you wrote**, in the same interpreters the
 console uses - so any program that prints the right thing passes. For the
 languages a phone cannot run, your answer is compared with the lesson's and the

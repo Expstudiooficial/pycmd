@@ -124,6 +124,8 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
     val teachMark by viewModel.teachMark.collectAsState()
     val teachBusy by viewModel.teachBusy.collectAsState()
     val whatsNew by viewModel.whatsNew.collectAsState()
+    val teachSearch by viewModel.teachSearch.collectAsState()
+    val teachQueue by viewModel.teachQueue.collectAsState()
     val updateSource by viewModel.updateSource.collectAsState()
 
     // Worth a dot on More: a newer build found but not yet installed is the
@@ -585,6 +587,11 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                     onPrevious = viewModel::previousTeachLesson,
                     onReset = viewModel::resetTeachCourse,
                     onOpenSnippet = viewModel::openTeachSnippet,
+                    searchHits = teachSearch,
+                    onSearch = viewModel::searchTeach,
+                    onReview = viewModel::startTeachReview,
+                    onSetGoal = viewModel::setTeachGoal,
+                    reviewLeft = teachQueue.size,
                     pluginSections = {
                         PluginSections(
                             sectionsFor(Tab.TEACH, installedPlugins, installedEnabled),

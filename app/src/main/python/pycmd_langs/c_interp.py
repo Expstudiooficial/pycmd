@@ -202,6 +202,11 @@ class Interpreter:
     def __init__(self, program: dict, stdout=None, stdin=None, argv=None) -> None:
         self.functions = program["functions"]
         self.structs = program["structs"]
+        self.unions = program.get("unions", set())
+        # `static` locals: one storage per declaration, made the first time
+        # it is reached and handed back every time after that. Keyed by the
+        # declaration node itself, which lives as long as the program does.
+        self.statics: dict = {}
         self.enums = program["enums"]
         self.global_decls = program["globals"]
         self.globals: dict = {}
@@ -275,6 +280,19 @@ class Interpreter:
         if fields_spec is None:
             raise CRuntimeError(f"unknown struct '{name}'")
         fields = {}
+        if name in self.unions:
+            # Every field of a union is the same place in memory. Here that
+            # means the same storage list, so writing `u.i = 65` and reading
+            # `u.c` sees the 65 - which is the whole point of a union.
+            shared = None
+            for field_name, field_type in fields_spec:
+                if field_type.is_array:
+                    fields[field_name] = self.allocate(field_type)
+                    continue
+                if shared is None:
+                    shared = self.allocate(field_type)
+                fields[field_name] = shared
+            return CStruct(name, fields)
         for field_name, field_type in fields_spec:
             fields[field_name] = self.allocate(field_type)
         return CStruct(name, fields)
@@ -401,7 +419,19 @@ class Interpreter:
             return
 
         if kind == "declare":
+            is_static = len(node) > 3 and node[3] == "static"
             for name, ctype, init in node[1]:
+                if is_static:
+                    key = (id(node), name)
+                    kept = self.statics.get(key)
+                    if kept is None:
+                        storage = self.allocate(ctype, scope)
+                        if init is not None:
+                            self.initialise(storage, ctype, init, scope, node[2])
+                        kept = (storage, ctype)
+                        self.statics[key] = kept
+                    scope[name] = kept
+                    continue
                 storage = self.allocate(ctype, scope)
                 scope[name] = (storage, ctype)
                 if init is not None:
@@ -763,6 +793,16 @@ class Interpreter:
             return self.sizeof(node[1])
 
         if kind == "sizeof_expr":
+            # Worked out from the declared type wherever that is known, the
+            # way the compiler does it - which matters for two reasons. An
+            # array's size is the whole array, not the pointer it decays to,
+            # so `sizeof a / sizeof a[0]` counts elements as C programmers
+            # expect. And sizeof never evaluates its operand, so
+            # `malloc(sizeof *p)` must not dereference p - it is usually NULL
+            # at that moment, because the malloc is what is about to set it.
+            known = self.static_size(node[1], scope)
+            if known is not None:
+                return known
             value = self.evaluate(node[1], scope)
             if isinstance(value, Pointer):
                 return 8
@@ -791,14 +831,82 @@ class Interpreter:
         count = max(1, len(storage) // unit)
         storage[:] = [self.new_struct(struct_name) for _ in range(count)]
 
+    def static_type(self, node, scope):
+        """The declared type of an expression, without evaluating it.
+
+        Returns (ctype, storage) where storage is the array's own storage for
+        a whole array, so its length can be read; or None when the type is
+        not known statically - the caller then falls back to the value.
+        """
+        kind = node[0]
+        if kind == "name":
+            name = node[1]
+            if name in scope or name in self.globals:
+                storage, ctype = self.lookup(name, scope, node[2])
+                if ctype is not None:
+                    return ctype, storage
+            return None
+        if kind in ("deref", "index"):
+            inner = self.static_type(node[1], scope)
+            if inner is None:
+                return None
+            ctype, _ = inner
+            if ctype.is_array:
+                rest = list(ctype.array[1:])
+                return CType(ctype.base, ctype.pointer, rest, ctype.struct_name), None
+            if ctype.pointer > 0:
+                return CType(ctype.base, ctype.pointer - 1, [], ctype.struct_name), None
+            return None
+        if kind == "member":
+            _, target, field, through_pointer = node
+            inner = self.static_type(target, scope)
+            if inner is None:
+                return None
+            ctype, _ = inner
+            if ctype.base != "struct":
+                return None
+            for field_name, field_type in self.structs.get(ctype.struct_name, []):
+                if field_name == field:
+                    return field_type, None
+            return None
+        return None
+
+    def static_size(self, node, scope):
+        """sizeof for an expression whose type is known; None otherwise."""
+        try:
+            found = self.static_type(node, scope)
+        except CRuntimeError:
+            return None
+        if found is None:
+            return None
+        ctype, storage = found
+        element = CType(ctype.base, ctype.pointer, [], ctype.struct_name)
+        if ctype.is_array:
+            count = 1
+            if storage is not None and len(ctype.array) == 1:
+                count = len(storage)
+            else:
+                for dimension in ctype.array:
+                    if dimension is None:
+                        return None
+                    try:
+                        count *= int(self.evaluate(dimension, scope))
+                    except CRuntimeError:
+                        return None
+            return count * self.sizeof(element)
+        return self.sizeof(element)
+
     def sizeof(self, ctype: CType) -> int:
         if ctype.is_pointer:
             return 8
         if ctype.base == "struct":
-            total = sum(
+            sizes = [
                 self.sizeof(field_type) for _, field_type in self.structs.get(ctype.struct_name, [])
-            )
-            return total or 1
+            ]
+            if ctype.struct_name in self.unions:
+                # A union is as big as its biggest member, not their sum.
+                return max(sizes, default=1) or 1
+            return sum(sizes) or 1
         return {"char": 1, "int": 4, "float": 4, "double": 8, "void": 1}.get(ctype.base, 4)
 
     def step(self, value, delta: int):
@@ -919,6 +1027,21 @@ class Interpreter:
 
         if name in self.functions:
             return self.call_function(self.functions[name], args, line)
+
+        # A call through a function pointer: `f(4)` where f holds a function,
+        # or the explicit `(*f)(4)`. Either way the value is the function's
+        # name, as `twice` evaluated to when it was assigned.
+        callee = None
+        if target[0] == "name" and (name in scope or name in self.globals):
+            callee = self.evaluate(target, scope)
+        elif target[0] == "deref":
+            callee = self.evaluate(target[1], scope)
+        if isinstance(callee, tuple) and len(callee) == 2 and callee[0] == "__function__":
+            function = self.functions.get(callee[1])
+            if function is not None:
+                return self.call_function(function, args, line)
+        if callee is not None and not (isinstance(callee, Pointer) and callee.is_null):
+            raise CRuntimeError(f"'{name or 'that'}' is not a function", line)
 
         from .c_stdlib import call_builtin
 

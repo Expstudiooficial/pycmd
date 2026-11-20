@@ -412,7 +412,9 @@ def _make(interp, arguments, env, line, want=1):
         backing = [interp.zero_value(element) for _ in range(capacity)]
         return Slice(backing, 0, length, capacity, interp.type_label(element))
     if resolved[0] == "map":
-        return {}
+        from .go_values import TypedMap
+
+        return TypedMap(value_type=resolved[2])
     if resolved[0] == "chan":
         return Chan(sizes[0] if sizes else 0, interp.type_label(resolved[1]))
     raise GoError(f"cannot make a {interp.type_label(resolved)}", line)

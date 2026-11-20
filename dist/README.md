@@ -1,22 +1,106 @@
 # Prebuilt APK
 
-`PyCmd-2.7.0.apk` — ready to install, nothing else needed.
+`PyCmd-2.8.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 2.7.0 |
+| Version | 2.8.0 |
 | Size | 24 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
-This is the **universal** APK. It carries native code for both processors, so
-the one file installs on a phone and on an emulator. Until 2.7.0 this folder
-published the arm64-only build, which is why PyCmd never worked on an
-emulator — see below.
+The universal APK, as in 2.7.0: one file for a phone and for an emulator.
 
-## What is new in 2.7.0
+## What is new in 2.8.0
+
+### Show me shows you
+
+The bug that started this release. A write-it-yourself lesson never carried
+its own answer — only the marker ever looked at it — so **Show me** opened an
+empty box. It shows the answer now. The **Editor** button had three versions
+of the same problem: a fill-the-gap lesson opened its code with the gap still
+in it, an ordering lesson opened its lines *shuffled*, and a write lesson
+opened an empty file. All of them open the topic's real snippet.
+
+Answers that are compared rather than run (the languages a phone cannot
+execute) no longer fail over spacing or over `'` versus `"`, and those lessons
+now say how the answer starts.
+
+### PyCmdTeach more than doubled
+
+**9,038 lessons**, up from 3,781. Every one of the 28 courses gained new units,
+appended after the existing ones so that nobody's finished lessons move.
+
+| | 2.7.0 | 2.8.0 | | 2.7.0 | 2.8.0 |
+|---|---|---|---|---|---|
+| Python | 625 | 1,531 | Kotlin | 175 | 453 |
+| JavaScript | 334 | 822 | Java | 130 | 379 |
+| Rust | 305 | 766 | PHP | 125 | 334 |
+| Go | 255 | 630 | Ruby | 121 | 328 |
+| C | 205 | 515 | Swift | 121 | 317 |
+| C++ | 105 | 286 | Lua | 119 | 308 |
+
+…and the same for the other sixteen.
+
+Two new kinds of lesson. **Which one prints it?** puts four snippets from the
+same course side by side and asks which gives the output. **Spot the mistake**
+takes one line of a program, breaks it the way people actually break lines —
+a bracket or quote opened and never closed — and asks which one.
+
+Four features around them:
+
+- **Review.** Every answer you get wrong is kept. The Review button takes you
+  back through them, and each leaves the list when you get it right.
+- **Continue.** The tab opens on the lesson you were last in.
+- **A daily goal**, with − and + to set it, and a bar that fills.
+- **Search** every lesson in every course, by title or code.
+
+### Six bugs in the built-in interpreters, found by lessons
+
+Writing lessons with stated outputs, and then running them, turned out to be a
+very good way to test the interpreters.
+
+- **C:** `static` locals reset on every call; `sizeof` an array gave the size
+  of a pointer, so `sizeof a / sizeof a[0]` was wrong; `sizeof *p`
+  dereferenced `p` — usually NULL at that moment, because the `malloc` around
+  it is what is about to set it; function pointers could not be declared;
+  unions gave each field its own memory; `qsort` and `bsearch` were missing.
+- **Rust:** `BTreeMap` and `BTreeSet` walked their keys in insertion order,
+  which is the one thing a BTreeMap is chosen to avoid; and `self.0` on a
+  tuple struct was read as `self` followed by the number `0.0`.
+- **Go:** reading a missing key from a `map[string][]int` gave `0` rather than
+  an empty slice, so `m[k] = append(m[k], x)` — the standard grouping idiom —
+  stopped with "append needs a slice".
+
+Each has a regression test in `tools/test_c.py`, `test_rust.py` or
+`test_go.py`.
+
+### And how the courses are checked now
+
+Every lesson that states an output is run before release — on the app's own
+interpreters for Python, C, Rust and Go, **and** on the real `node`, `ruby`,
+`php`, `lua`, `java`, `g++`, `gcc`, `go`, `rustc`, `bash`, `bun` and
+`sqlite3`. Every JSON, TOML and XML lesson is parsed. Every "which one prints
+it" question is run option by option to prove exactly one option is right, and
+every "spot the mistake" program is run to prove it really is broken.
+
+That found two lessons in 2.7.0 that stated the wrong output — Lua's `ipairs`
+and a shell pipe through `echo` — both fixed. **40,015 checks.**
+
+## How it was checked
+
+| | |
+|---|---|
+| PyCmdTeach, every lesson and every runnable snippet | 40,015 checks |
+| C, Go and Rust interpreters | 69 + 93 + 76 checks |
+| Python, plugins, pages, music, Creator, Music Pro | 13 suites |
+| WebView JavaScript, panels in a real browser, themes | 8 suites |
+| JVM unit tests | 45 tests |
+| Android Lint | 0 errors |
+
+## What was new in 2.7.0
 
 Four things people asked for, and one thing that was simply broken.
 

@@ -251,7 +251,7 @@ LUA = Course(
         T("Adding", "`table.insert`, or just assign.",
           'local t = {}\ntable.insert(t, 7)\nprint(t[1])', "7"),
         T("ipairs", "Walks 1, 2, 3 until a nil.",
-          'for i, v in ipairs({7, 8}) do\n  print(i, v)\nend', "7\t8"),
+          'for i, v in ipairs({7, 8}) do\n  print(i, v)\nend', "1\t7\n2\t8"),
         T("pairs", "Walks every key, in no particular order.",
           'for k, v in pairs({a = 1}) do\n  print(k, v)\nend', "a\t1"),
         T("table.concat", "Join, for a list of strings.",
@@ -302,7 +302,7 @@ SHELL = Course(
 
         U("Commands and pipes"),
         T("A pipe", "The left command's output becomes the right one's input.",
-          '#!/bin/sh\necho "b\\na" | sort', "a\nb"),
+          '#!/bin/sh\nprintf "b\\na\\n" | sort', "a\nb"),
         T("Counting lines", "`wc -l` counts the newlines it is given.",
           '#!/bin/sh\nprintf "a\\nb\\n" | wc -l', "2"),
         T("grep", "Keeps the lines that match.",

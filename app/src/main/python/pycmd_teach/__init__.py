@@ -46,7 +46,7 @@ import time
 
 __all__ = [
     "configure", "catalogue", "course", "lesson", "check", "complete",
-    "progress", "reset", "snippet", "search", "totals",
+    "progress", "reset", "snippet", "search", "totals", "review", "set_goal",
 ]
 
 # ---------------------------------------------------------------- the DSL
@@ -121,13 +121,47 @@ class Course:
 # The courses, imported from the four modules they are written in. Split by
 # family rather than alphabetically so that a language's neighbours in the file
 # are the ones its snippets most resemble.
+#: The modules that add units to courses defined elsewhere. Each has an
+#: `EXTRA` dictionary of course id to a list of units and topics, which is
+#: appended to that course - at the end, so no existing lesson changes id.
+EXTRA_MODULES = ("extra_core", "extra_systems", "extra_script", "extra_markup")
+
+#: Modules that define whole courses of their own. The phone ships the first
+#: four; a build that carries more (the Windows one does) lists them in
+#: COURSE_MODULES_MORE before anything is loaded.
+COURSE_MODULES = ("courses_core", "courses_systems", "courses_script", "courses_markup")
+COURSE_MODULES_MORE: tuple = ()
+
+
 def _load_courses():
-    from . import courses_core, courses_systems, courses_script, courses_markup
+    import importlib
 
     rows = []
-    for module in (courses_core, courses_systems, courses_script, courses_markup):
+    for name in COURSE_MODULES + tuple(COURSE_MODULES_MORE):
+        try:
+            module = importlib.import_module(f"{__name__}.{name}")
+        except ImportError:
+            continue
         rows.extend(module.COURSES)
-    return {course.id: course for course in rows}
+    courses = {course.id: course for course in rows}
+
+    for name in EXTRA_MODULES:
+        try:
+            module = importlib.import_module(f"{__name__}.{name}")
+        except ImportError:
+            continue
+        for course_id, topics in getattr(module, "EXTRA", {}).items():
+            course = courses.get(course_id)
+            if course is None:
+                continue
+            # A unit marker first, always: topics appended without one would
+            # land in the course's last unit and renumber nothing - but they
+            # would also be filed under a heading that does not describe them.
+            if topics and not isinstance(topics[0], Unit):
+                topics = [Unit("More")] + list(topics)
+            course.topics = list(course.topics) + list(topics)
+            course._units = None
+    return courses
 
 
 _COURSES = None
@@ -143,7 +177,24 @@ def _courses():
 # ------------------------------------------------------------- lesson making
 
 #: The lesson kinds a topic can produce, in the order they are shown.
-KINDS = ("read", "predict", "fill", "order", "write")
+KINDS = ("read", "predict", "which", "fill", "bug", "order", "write")
+
+#: Courses whose snippets are programs rather than documents. The "spot the
+#: broken line" exercise only makes sense for these: an HTML page with a
+#: missing bracket still renders, and a YAML file with one is a different
+#: kind of wrong from the one the exercise teaches.
+CODE_COURSES = {
+    "python", "javascript", "c", "rust", "go", "cpp", "java", "kotlin",
+    "swift", "typescript", "ruby", "php", "lua", "csharp", "fsharp", "dart",
+    "zig", "nim", "scala", "groovy", "haskell", "ocaml", "elixir", "erlang",
+    "julia", "r", "perl", "d", "crystal", "vlang", "objectivec", "pascal",
+    "fortran", "clojure", "racket", "scheme", "powershell", "visualbasic",
+}
+
+#: The longest snippet offered as an option in "which of these prints...".
+#: Four snippets of a dozen lines each is a page of scrolling to compare, and
+#: the exercise is about reading, not about stamina.
+WHICH_MAX_LINES = 8
 
 _BLANK = "____"
 
@@ -217,6 +268,90 @@ def _options(correct: str, pool, rng: random.Random, count: int = 4):
     return chosen
 
 
+def _which_options(course: Course, topic: Topic, base: str):
+    """Four snippets, exactly one of which prints this topic's output.
+
+    The others come from the same course - so they look like the right answer
+    and use the same words - and none of them prints the same thing, or the
+    question would have two right answers. Too few candidates and there is no
+    question: None.
+    """
+    if not topic.out or len(_lines(topic.code)) > WHICH_MAX_LINES:
+        return None
+    want = _flatten(topic.out)
+    others = []
+    for unit in course.units:
+        for other in unit["topics"]:
+            if other is topic or not other.out:
+                continue
+            if _flatten(other.out) == want or other.code == topic.code:
+                continue
+            if len(_lines(other.code)) > WHICH_MAX_LINES:
+                continue
+            others.append(other.code)
+    if len(others) < 2:
+        return None
+    rng = _seed(course.id, base, "which")
+    rng.shuffle(others)
+    options = [topic.code] + others[:3]
+    rng.shuffle(options)
+    return options
+
+
+_CLOSERS = {")": "(", "]": "[", "}": "{"}
+
+
+def _break(course: Course, topic: Topic):
+    """The snippet with one line made wrong, and which line it was.
+
+    The mistake is always the same kind - a closing bracket or quote taken
+    off the end of a line that opened it - because it is a mistake in every
+    language here, it is the mistake people actually make, and it can be made
+    without knowing the language. A cleverer one (a misspelt keyword, say) can
+    land on a word that happens to be a valid name and leave the program
+    working, which turns the exercise into a lie.
+
+    Returns None when no line has a bracket or a string to break, and when
+    the broken line would read the same as another line in the snippet - the
+    answer is given by tapping a line, and two identical lines would make the
+    tap ambiguous.
+    """
+    if course.id not in CODE_COURSES:
+        return None
+    lines = topic.code.split("\n")
+    candidates = []
+    for index, line in enumerate(lines):
+        stripped = line.rstrip()
+        # A line ending in a closer whose opener is on the same line.
+        for position in range(len(stripped) - 1, -1, -1):
+            char = stripped[position]
+            if char in _CLOSERS and _CLOSERS[char] in stripped[:position]:
+                candidates.append((index, position))
+                break
+            if char in "\"'" and stripped[:position].count(char) % 2 == 1:
+                candidates.append((index, position))
+                break
+            if char not in " ;,:":
+                # Only trailing punctuation is worth breaking; a bracket in
+                # the middle of a line is part of an expression the line
+                # still needs.
+                if char not in _CLOSERS and char not in "\"'":
+                    break
+    if not candidates:
+        return None
+    rng = _seed(course.id, topic.title, "bug")
+    index, position = candidates[rng.randrange(len(candidates))]
+    line = lines[index]
+    broken_line = line[:position] + line[position + 1:]
+    if not broken_line.strip():
+        return None
+    others = [l for i, l in enumerate(lines) if i != index]
+    if broken_line in others:
+        return None
+    lines = lines[:index] + [broken_line] + lines[index + 1:]
+    return "\n".join(lines), broken_line
+
+
 def _topic_lessons(course: Course, unit_index: int, topic_index: int, topic: Topic):
     """Every lesson one topic produces, as dicts the app can show."""
     base = f"{unit_index}.{topic_index}"
@@ -256,6 +391,29 @@ def _topic_lessons(course: Course, unit_index: int, topic_index: int, topic: Top
             "options": _options(word, pool, _seed(course.id, base, "fill")),
         })
 
+    which = _which_options(course, topic, base)
+    if which:
+        made.insert(2, {
+            "id": f"{base}.which",
+            "kind": "which",
+            "title": topic.title,
+            "prompt": f"Which of these prints:\n{topic.out}",
+            "code": "",
+            "options": which,
+        })
+
+    broken = _break(course, topic)
+    if broken:
+        broken_code, _line = broken
+        made.append({
+            "id": f"{base}.bug",
+            "kind": "bug",
+            "title": topic.title,
+            "prompt": "One line has a mistake in it. Which?",
+            "code": broken_code,
+            "options": _lines(broken_code),
+        })
+
     rows = _lines(topic.code)
     if len(rows) >= 3:
         shuffled = list(rows)
@@ -274,19 +432,30 @@ def _topic_lessons(course: Course, unit_index: int, topic_index: int, topic: Top
             "lines": shuffled,
         })
 
+    graded = course.graded if topic.out else "text"
+    first_line = next((line.strip() for line in topic.code.split("\n") if line.strip()), "")
     made.append({
         "id": f"{base}.write",
         "kind": "write",
         "title": topic.title,
         "prompt": (
-            f"Write it yourself. {topic.teach}"
-            if not topic.out else
             f"Write {course.name} that prints:\n{topic.out}"
+            if topic.out else
+            f"Write it from memory. {topic.teach}"
         ),
         "starter": "",
         "output": topic.out,
-        "graded": course.graded if topic.out else "text",
+        "graded": graded,
         "extension": course.extension,
+        # The answer travels with the lesson. Until 2.8.0 it did not, and
+        # "Show me" opened a box with nothing in it - the lesson had no idea
+        # what its own answer was, because only the marker ever looked.
+        "code": topic.code,
+        # Something to start from when the answer is compared rather than run.
+        # "Write it from memory" with nothing to go on is a memory test of a
+        # snippet nobody has been shown yet; the first line is enough to
+        # remind somebody which one.
+        "hint": f"It starts with: {first_line}" if graded == "text" and first_line else "",
     })
 
     return made
@@ -351,7 +520,20 @@ def _progress_path() -> str:
     return os.path.join(_storage or tempfile.gettempdir(), "progress.json")
 
 
-_DEFAULT = {"done": {}, "xp": 0, "streak": 0, "last_day": "", "best_streak": 0}
+_DEFAULT = {
+    "done": {}, "xp": 0, "streak": 0, "last_day": "", "best_streak": 0,
+    # Added in 2.8.0. Every one has a default here, so a progress file written
+    # by 2.7.0 loads without a migration step and simply gains the new keys.
+    "missed": {},          # course -> lesson ids answered wrong, not yet right
+    "last": {},            # {"course": ..., "lesson": ...} - where to continue
+    "day": "",             # the date day_count belongs to
+    "day_count": 0,        # lessons finished on that date
+    "goal": 10,            # lessons a day the user is aiming for
+}
+
+#: The most lessons a review round holds. A queue of two hundred mistakes is
+#: not a review, it is a second course.
+REVIEW_SIZE = 20
 
 
 def _read_progress() -> dict:
@@ -362,10 +544,12 @@ def _read_progress() -> dict:
         return dict(_DEFAULT, done={})
     if not isinstance(data, dict):
         return dict(_DEFAULT, done={})
-    out = dict(_DEFAULT)
+    out = {key: (dict(value) if isinstance(value, dict) else value)
+           for key, value in _DEFAULT.items()}
     out.update({k: v for k, v in data.items() if k in _DEFAULT})
-    if not isinstance(out.get("done"), dict):
-        out["done"] = {}
+    for key in ("done", "missed", "last"):
+        if not isinstance(out.get(key), dict):
+            out[key] = {}
     return out
 
 
@@ -422,6 +606,36 @@ def catalogue() -> list:
     return rows
 
 
+def _missed_count(data: dict) -> int:
+    return sum(len(rows) for rows in data.get("missed", {}).values() if isinstance(rows, list))
+
+
+def _continue_point(data: dict) -> dict:
+    """Where "Continue" goes: the lesson after the last one opened.
+
+    The last one opened rather than the last one finished, because somebody
+    who opened a lesson and left without answering it wants to land back on
+    that lesson, not skip it.
+    """
+    last = data.get("last") or {}
+    course_ = _courses().get(last.get("course", ""))
+    if course_ is None:
+        return {}
+    row = _find(course_, last.get("lesson", ""))
+    if row is None:
+        return {}
+    done = _done_set(data, course_.id)
+    target = row
+    if row["id"] in done:
+        flat = [r for unit in _tree(course_) for r in unit["lessons"]]
+        index = next((i for i, r in enumerate(flat) if r["id"] == row["id"]), -1)
+        target = next((r for r in flat[index + 1:] if r["id"] not in done), None)
+        if target is None:
+            return {}
+    return {"course": course_.id, "language": course_.name,
+            "lesson": target["id"], "title": target["title"], "kind": target["kind"]}
+
+
 def totals() -> dict:
     """One line for the top of the tab."""
     data = _read_progress()
@@ -439,6 +653,10 @@ def totals() -> dict:
         "streak": int(data.get("streak", 0)),
         "best_streak": int(data.get("best_streak", 0)),
         "today": data.get("last_day", "") == _today(),
+        "goal": int(data.get("goal", 10) or 10),
+        "today_count": int(data.get("day_count", 0)) if data.get("day") == _today() else 0,
+        "missed": _missed_count(data),
+        "continue": _continue_point(data),
     }
 
 
@@ -501,22 +719,29 @@ def lesson(course_id: str, lesson_id: str) -> dict:
     out["previous"] = flat[index - 1] if index > 0 else ""
     data = _read_progress()
     out["done"] = lesson_id in _done_set(data, course_id)
+    out["missed"] = lesson_id in (data.get("missed", {}).get(course_id) or [])
+    if data.get("last") != {"course": course_id, "lesson": lesson_id}:
+        data["last"] = {"course": course_id, "lesson": lesson_id}
+        _write_progress(data)
     return out
 
 
 def snippet(course_id: str, lesson_id: str) -> dict:
-    """The lesson's code and a filename for it, for "open this in the editor"."""
+    """The lesson's code and a filename for it, for "open this in the editor".
+
+    Always the topic's own snippet, whichever exercise asked. Reading it back
+    out of the lesson gave three different wrong answers: a fill-the-gap lesson
+    opened its code with the gap still in it, an ordering lesson opened its
+    lines *shuffled*, and a write-it-yourself lesson opened an empty file.
+    """
     found = _courses().get(course_id)
     if found is None:
         return {"ok": False, "error": f"no course called {course_id}"}
     row = _find(found, lesson_id)
     if row is None:
         return {"ok": False, "error": f"no lesson {lesson_id}"}
-    code = row.get("code", "") or ""
-    if _BLANK in code:
-        code = code.replace(_BLANK, "")
-    if not code and row.get("lines"):
-        code = "\n".join(row["lines"])
+    topic = _topic_for(found, lesson_id)
+    code = topic.code if topic else (row.get("code", "") or "")
     safe = re.sub(r"[^a-z0-9]+", "_", row["title"].lower()).strip("_") or "lesson"
     return {
         "ok": True,
@@ -527,6 +752,11 @@ def snippet(course_id: str, lesson_id: str) -> dict:
 
 
 # ------------------------------------------------------------------- marking
+
+
+def _loose(text: str) -> str:
+    """Code with no whitespace at all and one kind of quote, for comparing."""
+    return "".join(text.split()).replace("'", '"')
 
 
 def _flatten(text: str) -> str:
@@ -684,6 +914,67 @@ RUNNABLE = {".py": "python", ".c": "registry", ".rs": "registry", ".go": "regist
 
 
 def check(course_id: str, lesson_id: str, answer: str) -> dict:
+    """Marks an attempt, and remembers it if it was wrong.
+
+    A wrong answer goes on the review list; a right one takes the lesson off
+    again. Reading a lesson cannot be wrong, so it never lands there.
+    """
+    reply = _mark(course_id, lesson_id, answer)
+    if reply.get("ok") and "right" in reply:
+        _remember_attempt(course_id, lesson_id, bool(reply["right"]))
+    return reply
+
+
+def _remember_attempt(course_id: str, lesson_id: str, right: bool) -> None:
+    data = _read_progress()
+    missed = data.setdefault("missed", {})
+    rows = [row for row in (missed.get(course_id) or []) if isinstance(row, str)]
+    changed = False
+    if right and lesson_id in rows:
+        rows.remove(lesson_id)
+        changed = True
+    elif not right and lesson_id not in rows:
+        rows.append(lesson_id)
+        changed = True
+    if changed:
+        if rows:
+            missed[course_id] = rows
+        else:
+            missed.pop(course_id, None)
+        _write_progress(data)
+
+
+def review(limit: int = REVIEW_SIZE) -> list:
+    """The lessons answered wrong and not yet put right, oldest first."""
+    data = _read_progress()
+    out = []
+    for course_id, rows in (data.get("missed") or {}).items():
+        course_ = _courses().get(course_id)
+        if course_ is None or not isinstance(rows, list):
+            continue
+        for lesson_id in rows:
+            row = _find(course_, lesson_id)
+            if row is None:
+                continue
+            out.append({"course": course_id, "language": course_.name,
+                        "lesson": lesson_id, "title": row["title"], "kind": row["kind"]})
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def set_goal(count) -> dict:
+    """How many lessons a day the user is aiming for. 1 to 200."""
+    data = _read_progress()
+    try:
+        data["goal"] = max(1, min(200, int(count)))
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "the goal has to be a number"}
+    _write_progress(data)
+    return {"ok": True, **totals()}
+
+
+def _mark(course_id: str, lesson_id: str, answer: str) -> dict:
     """Marks an attempt. Never throws; a crash here would be a wrong answer."""
     found = _courses().get(course_id)
     if found is None:
@@ -714,6 +1005,32 @@ def check(course_id: str, lesson_id: str, answer: str) -> dict:
             "ok": True,
             "right": right,
             "message": f"`{want}` it is." if right else "Not that word.",
+            "expected": want,
+        }
+
+    if kind == "which":
+        topic = _topic_for(found, row["id"])
+        want = topic.code if topic else ""
+        right = answer == want
+        return {
+            "ok": True,
+            "right": right,
+            "message": "That one prints it." if right else "That one prints something else.",
+            "expected": want,
+        }
+
+    if kind == "bug":
+        topic = _topic_for(found, row["id"])
+        broken = _break(found, topic) if topic else None
+        want = broken[1] if broken else ""
+        right = answer == want
+        return {
+            "ok": True,
+            "right": right,
+            "message": (
+                "That is the one. It is missing its last character."
+                if right else "That line is fine. Look for one that opens something and never closes it."
+            ),
             "expected": want,
         }
 
@@ -806,10 +1123,13 @@ def _check_written(course: Course, row: dict, answer: str) -> dict:
             "ran": True,
         }
 
-    # Nothing to run it with, so the answer is compared with the snippet after
-    # both have had their whitespace flattened. The lesson says as much.
+    # Nothing to run it with, so the answer is compared with the snippet. The
+    # comparison ignores whitespace entirely and treats ' and " as the same
+    # mark: somebody who wrote `print('hi')` where the lesson had
+    # `print("hi")` has learned the lesson, and marking it wrong teaches only
+    # that the marker is fussy. The lesson says it is comparing, not running.
     model = topic.code if topic else ""
-    right = _flatten(answer) == _flatten(model)
+    right = _loose(answer) == _loose(model)
     return {
         "ok": True,
         "right": right,
@@ -841,6 +1161,11 @@ def complete(course_id: str, lesson_id: str) -> dict:
         data["xp"] = int(data.get("xp", 0)) + 10
 
     today = _today()
+    if fresh:
+        if data.get("day") != today:
+            data["day"] = today
+            data["day_count"] = 0
+        data["day_count"] = int(data.get("day_count", 0)) + 1
     last = data.get("last_day", "")
     if last != today:
         if last == _yesterday():
@@ -928,6 +1253,10 @@ def api(name: str, first: str = "", second: str = "", third: str = "") -> str:
             return json.dumps(snippet(first, second))
         if name == "search":
             return json.dumps({"ok": True, "hits": search(first)})
+        if name == "review":
+            return json.dumps({"ok": True, "lessons": review()})
+        if name == "goal":
+            return json.dumps(set_goal(first))
         return json.dumps({"ok": False, "error": f"no such call: {name}"})
     except BaseException as error:  # noqa: BLE001
         return json.dumps({"ok": False, "error": f"{type(error).__name__}: {error}"})

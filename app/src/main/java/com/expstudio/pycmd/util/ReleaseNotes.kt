@@ -41,6 +41,53 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 27,
+            versionName = "2.8.0",
+            headline = "PyCmdTeach more than doubled, and Show me shows you.",
+            added = listOf(
+                "PyCmdTeach has 9,038 lessons now, up from 3,781. Every one of the " +
+                    "28 courses gained new units - Python alone went from 625 " +
+                    "lessons to over 1,500.",
+                "Two new kinds of lesson: \"Which one prints it?\" puts four " +
+                    "snippets side by side and asks which gives the output, and " +
+                    "\"Spot the mistake\" breaks one line of a program and asks " +
+                    "you to find it.",
+                "Review: every answer you get wrong is kept, and the Review " +
+                    "button takes you back through them until you get them right.",
+                "Continue: the Teach tab opens on the lesson you were last in.",
+                "A daily goal, with - and + to set it, and a bar that fills as " +
+                    "you go.",
+                "Search every lesson in every course from the top of the tab.",
+                "Write-it-yourself lessons in the languages a phone cannot run " +
+                    "now tell you how the answer starts.",
+            ),
+            fixed = listOf(
+                "Show me showed nothing. A write-it-yourself lesson never carried " +
+                    "its own answer, so the button opened an empty box. It shows " +
+                    "the answer now.",
+                "The Editor button opened the wrong code: a fill-the-gap lesson " +
+                    "opened its code with the gap still in it, an ordering lesson " +
+                    "opened its lines shuffled, and a write lesson opened an " +
+                    "empty file. All of them open the real snippet now.",
+                "Answers compared rather than run no longer fail over spacing or " +
+                    "over ' versus \".",
+                "The C interpreter: static locals kept resetting, sizeof on an " +
+                    "array gave the size of a pointer, sizeof *p dereferenced p, " +
+                    "function pointers could not be declared, unions did not " +
+                    "share their memory, and qsort and bsearch were missing. All " +
+                    "fixed - every one of them was found by a lesson.",
+                "The Rust interpreter: BTreeMap and BTreeSet walked their keys " +
+                    "in insertion order rather than sorted, and self.0 on a tuple " +
+                    "struct read as the number 0.0.",
+                "The Go interpreter: reading a missing key from a map of slices " +
+                    "gave 0 instead of an empty slice, so append refused it.",
+                "Two lessons in 2.7.0 stated the wrong output - Lua's ipairs and " +
+                    "a shell pipe. Every lesson is now checked against the real " +
+                    "node, ruby, php, lua, java, g++, gcc, go, rustc, bash and " +
+                    "sqlite3 before release.",
+            ),
+        ),
+        ReleaseNote(
             versionCode = 26,
             versionName = "2.7.0",
             headline = "PyCmdTeach, themes, and PyCmd on an emulator.",

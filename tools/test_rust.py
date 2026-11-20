@@ -740,6 +740,42 @@ check_error("unknown method", wrap('''
 '''), "no method")
 
 
+# Found by PyCmdTeach's Rust course in 2.8.0. Each was a lesson whose stated
+# output the interpreter got wrong.
+check("BTreeMap walks its keys in order", """
+use std::collections::BTreeMap;
+fn main() {
+    let mut m = BTreeMap::new();
+    m.insert(2, "b");
+    m.insert(1, "a");
+    let keys: Vec<_> = m.keys().collect();
+    println!("{:?}", keys);
+}
+""", "[1, 2]\n")
+check("self.0 on a tuple struct is a field, not the number 0.0", """
+struct Sq(i32);
+impl Sq {
+    fn area(&self) -> i32 {
+        self.0 * self.0
+    }
+}
+fn main() {
+    println!("{}", Sq(3).area());
+}
+""", "9\n")
+check("impl Display can format self.0", """
+use std::fmt;
+struct P(i32);
+impl fmt::Display for P {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<{}>", self.0)
+    }
+}
+fn main() {
+    println!("{}", P(5));
+}
+""", "<5>\n")
+
 def run_one(source, stdin_text):
     out = io.StringIO()
     rust_interp.run_source(source, stdout=out, stdin=io.StringIO(stdin_text))

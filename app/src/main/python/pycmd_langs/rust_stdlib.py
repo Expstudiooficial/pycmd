@@ -26,6 +26,35 @@ FLOAT_TYPES = {"f32", "f64"}
 
 # ------------------------------------------------------------------ format
 
+
+class SortedMap(dict):
+    """A BTreeMap: a dictionary that walks its keys in order.
+
+    Until 2.8.0 BTreeMap was an ordinary dict, so it walked keys in the order
+    they were inserted - which is HashMap's behaviour, near enough, and the
+    one thing a BTreeMap is chosen for is the other one. Only iteration is
+    sorted; lookups are the dict's own.
+    """
+
+    def __iter__(self):
+        return iter(sorted(dict.keys(self)))
+
+    def keys(self):
+        return sorted(dict.keys(self))
+
+    def values(self):
+        return [dict.__getitem__(self, key) for key in sorted(dict.keys(self))]
+
+    def items(self):
+        return [(key, dict.__getitem__(self, key)) for key in sorted(dict.keys(self))]
+
+
+class SortedSet(set):
+    """A BTreeSet: a set that walks its members in order."""
+
+    def __iter__(self):
+        return iter(sorted(set.__iter__(self)))
+
 def format_args(interp, template, args, env=None) -> str:
     """The formatting language `println!` and `format!` share."""
     out = []
@@ -297,14 +326,26 @@ def path_value(interp, parts, line):
             return Native("Vec::new", lambda args: [])
         if tail == "from":
             return Native("Vec::from", lambda args: list(_iterate(args[0])))
-    if head in ("HashMap", "BTreeMap"):
+    if head == "BTreeMap":
+        if tail in ("new", "with_capacity"):
+            return Native("BTreeMap::new", lambda args: SortedMap())
+        if tail == "from":
+            return Native("BTreeMap::from", lambda args: SortedMap(
+                (tuple(item)[0], tuple(item)[1]) for item in _iterate(args[0])
+            ))
+    if head == "HashMap":
         if tail in ("new", "with_capacity"):
             return Native("HashMap::new", lambda args: {})
         if tail == "from":
             return Native("HashMap::from", lambda args: {
                 tuple(item)[0]: tuple(item)[1] for item in _iterate(args[0])
             })
-    if head in ("HashSet", "BTreeSet"):
+    if head == "BTreeSet":
+        if tail in ("new", "with_capacity"):
+            return Native("BTreeSet::new", lambda args: SortedSet())
+        if tail == "from":
+            return Native("BTreeSet::from", lambda args: SortedSet(_iterate(args[0])))
+    if head == "HashSet":
         if tail in ("new", "with_capacity"):
             return Native("HashSet::new", lambda args: set())
         if tail == "from":
