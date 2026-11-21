@@ -35,9 +35,9 @@ import time
 import traceback
 
 from . import (android, builtins, bundle, copies, disk, files, install, known,
-               langs, runner, setup_all, store, toolchains)
-VERSION = "3.0"
-BUILD = 5
+               langs, portable, runner, setup_all, store, toolchains)
+VERSION = "4.0"
+BUILD = 6
 
 _engine_ready = False
 
@@ -187,6 +187,10 @@ class Host:
                     "python": sys.version.split()[0], "root": store.root()}
 
         store.prepare()
+        # Toolchains PyCmd downloaded itself live in its own folder and are put
+        # on its own PATH here - nothing about them is written to the registry.
+        portable.activate_all()
+        _features.apply_run_env()
         self.engine = _import_engine()
 
         workspace = store.folder("workspace")
@@ -443,13 +447,24 @@ def _h_run_file(host, payload):
             pass
     prefer = str(payload.get("toolchain", ""))
     channel = str(payload.get("channel", "console"))
+    # Arguments and input for the program itself. A string of arguments is
+    # split the way a Windows command line is, so quotes group as expected.
+    raw_args = payload.get("args") or []
+    if isinstance(raw_args, str):
+        import shlex
+
+        raw_args = shlex.split(raw_args, posix=False) if raw_args.strip() else []
+        raw_args = [a[1:-1] if len(a) > 1 and a[0] == a[-1] == '"' else a for a in raw_args]
+    args = [str(a) for a in raw_args]
+    stdin = payload.get("stdin")
+    stdin = str(stdin) if stdin not in (None, "") else None
 
     def work():
         def write(text):
             host.onOutput("stdout", text, channel)
 
         started = time.monotonic()
-        result = runner.run_file(path, write, prefer=prefer)
+        result = runner.run_file(path, write, prefer=prefer, args=args, stdin=stdin)
         host.onFinished(
             result.get("run", {}).get("id", 0),
             "ok" if result.get("ok") else "error",
@@ -488,42 +503,29 @@ def _h_toolchain_check(host, payload):
 
 
 def _h_toolchain_install(host, payload):
-    """Runs the install line for a toolchain, streaming what the installer says.
+    """Installs one toolchain through the route that was asked for.
 
-    PyCmd does not bundle compilers - a build carrying MSVC and a JDK would be
-    gigabytes - so this shells out to whichever package manager the machine
-    has. It is the user's own winget, running the line they would have typed.
+    This used to split the install line and run it - `["scoop", "install",
+    "go"]` - which never worked for scoop on Windows: scoop is a .cmd shim, and
+    Windows only finds .exe files by bare name. It goes through the installer
+    now, which runs the full path, adds scoop's buckets and git when they are
+    needed, and checks the program actually arrived.
     """
     chain = toolchains.by_id(str(payload.get("id", "")))
     if chain is None:
         return {"ok": False, "error": "no such toolchain"}
-    manager = str(payload.get("with", "winget"))
-    line = {"winget": chain.winget, "scoop": chain.scoop,
-            "choco": chain.choco}.get(manager, "")
-    if not line:
-        return {"ok": False, "error": f"{chain.name} has no {manager} package",
-                "site": chain.site}
+    manager = str(payload.get("with", ""))
 
     def work():
-        host.onOutput("system", f"[PyCmd] {line}\n", "console")
-        try:
-            process = subprocess.Popen(
-                line.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, encoding="utf-8", errors="replace",
-                creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0)
-                               if os.name == "nt" else 0),
-            )
-        except FileNotFoundError:
-            host.onOutput("stderr", f"[PyCmd] {manager} is not installed here.\n", "console")
-            return
-        for chunk in process.stdout or []:
-            host.onOutput("stdout", chunk, "console")
-        process.wait()
-        toolchains.detect(chain.id, refresh=True)
+        result = install.install(
+            chain.id, lambda text: host.onOutput("stdout", text, "console"),
+            prefer=manager)
+        host.emit("install-done", toolchain=chain.id, ok=bool(result.get("ok")),
+                  error=result.get("error", ""))
         host.emit("toolchains-changed", id=chain.id)
 
     threading.Thread(target=work, name="pycmd-install", daemon=True).start()
-    return {"queued": True, "command": line}
+    return {"queued": True, "toolchain": chain.id, "with": manager or "best"}
 
 
 # -- everything else delegates ---------------------------------------------
@@ -924,9 +926,9 @@ def _h_manager_install(host, payload):
     which = str(payload.get("manager", ""))
 
     def work():
-        host.onOutput("stdout", "", "install")
+        host.onOutput("stdout", "", "console")
         result = install.bootstrap(
-            which, lambda text: host.onOutput("stdout", text, "install"))
+            which, lambda text: host.onOutput("stdout", text, "console"))
         host.emit("manager-done", manager=which, ok=bool(result.get("ok")),
                   error=result.get("error", ""))
 
@@ -943,7 +945,7 @@ def _h_install_one(host, payload):
 
     def work():
         result = install.install(
-            which, lambda text: host.onOutput("stdout", text, "install"))
+            which, lambda text: host.onOutput("stdout", text, "console"))
         host.emit("install-done", toolchain=which, ok=bool(result.get("ok")),
                   error=result.get("error", ""))
 
@@ -1068,7 +1070,8 @@ def _h_android_plan(host, payload):
 
 
 def _h_android_start(host, payload):
-    return android.start(str(payload.get("apk", "")))
+    return android.start(str(payload.get("apk", "")), wipe=bool(payload.get("wipe")),
+                         skip_apk=bool(payload.get("skipApk")))
 
 
 def _h_android_job(host, payload):
@@ -1077,6 +1080,71 @@ def _h_android_job(host, payload):
 
 def _h_android_stop(host, payload):
     return android.shutdown()
+
+
+def _h_android_cancel(host, payload):
+    return android.cancel()
+
+
+def _h_android_config(host, payload):
+    changes = payload.get("set")
+    if isinstance(changes, dict):
+        return android.set_config(changes)
+    return {"ok": True, "config": android.config()}
+
+
+def _h_android_accel(host, payload):
+    return android.accel_check()
+
+
+def _h_android_fix_accel(host, payload):
+    return android.fix_accel(str(payload.get("how", "whpx")))
+
+
+def _h_android_screenshot(host, payload):
+    return android.screenshot(str(payload.get("serial", "")))
+
+
+def _h_android_logcat(host, payload):
+    return android.logcat(str(payload.get("serial", "")), int(payload.get("lines", 400) or 400),
+                          bool(payload.get("onlyPycmd")))
+
+
+def _h_android_delete(host, payload):
+    return android.delete_avd()
+
+
+def _h_android_devices(host, payload):
+    return {"ok": True, "devices": android.devices()}
+
+
+def _h_android_install_to(host, payload):
+    serial = str(payload.get("serial", ""))
+    apk = str(payload.get("apk", ""))
+
+    def work():
+        result = android.install_to(serial, apk)
+        host.emit("android-installed", serial=serial, ok=bool(result.get("ok")),
+                  error=result.get("error", ""))
+
+    threading.Thread(target=work, name="pycmd-apk", daemon=True).start()
+    return {"ok": True, "queued": True}
+
+
+def _h_android_open(host, payload):
+    return android.open_app(str(payload.get("serial", "")) or next(iter(android.running()), ""))
+
+
+def _h_android_key(host, payload):
+    return android.key(str(payload.get("serial", "")), str(payload.get("key", "")))
+
+
+def _h_android_text(host, payload):
+    return android.send_text(str(payload.get("serial", "")), str(payload.get("text", "")))
+
+
+def _h_android_diagnose(host, payload):
+    return android.diagnose()
 
 
 HANDLERS = {
@@ -1108,6 +1176,19 @@ HANDLERS = {
     "android.start": _h_android_start,
     "android.job": _h_android_job,
     "android.stop": _h_android_stop,
+    "android.cancel": _h_android_cancel,
+    "android.config": _h_android_config,
+    "android.accel": _h_android_accel,
+    "android.fixAccel": _h_android_fix_accel,
+    "android.screenshot": _h_android_screenshot,
+    "android.logcat": _h_android_logcat,
+    "android.delete": _h_android_delete,
+    "android.devices": _h_android_devices,
+    "android.installTo": _h_android_install_to,
+    "android.open": _h_android_open,
+    "android.key": _h_android_key,
+    "android.text": _h_android_text,
+    "android.diagnose": _h_android_diagnose,
     "run.file": _h_run_file,
     "run.stop": _h_run_stop,
     "run.active": _h_run_active,
@@ -1166,6 +1247,12 @@ HANDLERS = {
     "log": _h_log,
     "drain": _h_drain,
 }
+
+
+# The handlers 4.0 added live in features.py, grouped by screen.
+from . import features as _features  # noqa: E402
+
+HANDLERS.update(_features.HANDLERS)
 
 
 def call(host: Host, name: str, payload=None) -> dict:

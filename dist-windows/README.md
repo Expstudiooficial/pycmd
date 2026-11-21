@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Version | 3.0 |
+| Version | 4.0 |
 | Works on | Windows 10 and newer, 64-bit |
 | Runtime | Edge WebView2, which Windows 10 and 11 already have |
 | Installer | none — it is one exe |
@@ -23,7 +23,7 @@ To make one:
 
 - **On your own machine:**
   `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`
-- **Or push a tag** `windows-v3.0` and let the workflow do it — it builds on
+- **Or push a tag** `windows-v4.0` and let the workflow do it — it builds on
   a Windows runner, proves the exe starts, writes this manifest with the real
   hash, and attaches the exe to a release.
 
@@ -36,6 +36,86 @@ release for the tag that built it, which is what `latest.json` points at.
 describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
+
+## What is new in 4.0
+
+The biggest update the Windows build has had. Most of it is things that did
+not work and now do, and a lot of it is new.
+
+### Fixed
+
+- **Toolchain installs.** Nearly every "it throws errors" came from here, and
+  from four separate bugs. scoop was launched by its bare name, which Windows
+  cannot resolve for a `.cmd` shim, so `scoop install` failed on every machine
+  that had scoop. scoop's buckets were never added after the first run, and
+  adding one needs git, which a fresh scoop does not have - so Kotlin, the JDK
+  and Prolog "did not exist". scoop's installer refuses to run elevated unless
+  told it may. And every installer's output went to a channel no screen
+  showed, so an install looked like it did nothing at all. All four fixed.
+- **Rust** installed but could not build anything without Visual Studio's
+  `link.exe`. It now installs the GNU toolchain, which links by itself.
+- **TypeScript**'s scoop line installed Node and no TypeScript. It installs
+  TypeScript now.
+- **Android Lab** - see below. It failed on almost every machine.
+- **Erlang** lesson and Run files lost their first line to escript.
+
+### New: toolchains install themselves
+
+Seventeen toolchains - Node.js, Go, Java, Zig, Deno, Bun, .NET, Rust, Kotlin,
+PowerShell 7, GCC, Git with bash, Dart, Nim, Perl, PHP, TypeScript - install
+with one click **straight from their vendor**: the newest version from the
+vendor's own index, checked against the hash the vendor publishes, unpacked
+into PyCmd's folder and put on PyCmd's PATH. No administrator, no package
+manager, nothing in the registry; **Remove** deletes one folder. The package
+managers are still there for everything else.
+
+### New: Android Lab that works
+
+It sets up Java (installing Temurin 21 if there is none), downloads Google's
+command-line tools directly and checks them, accepts the licences, gives every
+SDK tool `--sdk_root` and the environment it needs, checks hardware
+acceleration and offers the fix (Windows Hypervisor Platform, Google's driver,
+or what to change in the BIOS), watches the emulator and says why it stopped
+in seconds instead of timing out after seven minutes, and finally downloads
+PyCmd Android from its release manifest, checks its SHA-256, installs it and
+opens it - which it never used to do. Choose Android 13-16, memory, storage,
+cores and graphics. Screenshots, logcat, Back/Home/Apps, typing, install any
+APK, phones on USB listed separately, wipe, delete, diagnostics.
+
+### New: PyCmd Learn
+
+50 languages, 14,700 lessons. The phone's 28 courses plus **22 only a PC can
+run**: C#, F#, Haskell, OCaml, Scheme, Racket, Clojure, Elixir, Erlang, Scala,
+Groovy, R, AWK, Prolog, Fortran, Pascal, COBOL, D, Nim, Perl, Tcl and
+PowerShell. Where the language is installed, **your answer is marked by
+running it** - so a correct answer written differently is still correct. Run
+any lesson's code, change it and run it again. Review your mistakes, search
+every course, a daily goal and a streak. Every snippet was checked by running
+it on the real compiler.
+
+### New screens and features
+
+- **Command palette** (Ctrl+K): every screen, action, recent file and course.
+- **Keyboard shortcuts**: Ctrl+1-9 for screens, Ctrl+Shift+F/L/N/T, zoom, F1.
+- **Themes**: Classic Green, Midnight Blue, Halloween, Amber Terminal, Slate,
+  Paper (light), or your own colours - and they reach inside the console and
+  editor. Zoom and a compact layout.
+- **Search** in files, with a regex option, file filters and replace.
+- **Git**: status, stage, discard, commit, branches, pull, push, history, diffs.
+- **Tasks**: npm scripts, Makefile targets, cargo, go, dotnet, Gradle - one click.
+- **Tools**: JSON, Base64, URLs, hashes, UUIDs, timestamps, regex tester, diff,
+  case and counts, colours.
+- **Ports**: what is listening, whether a port is free, and stopping what holds it.
+- **Snippets** and **Notes**.
+- **New project** from ten templates (Python, web server, Node, website, Go,
+  Rust, C, C#, Java, PowerShell), optionally as a git repository.
+- **Run with arguments and input**, remembered per file.
+- **Recent files**, **console history that survives a restart**, zip and unzip
+  in Files, **environment variables** for everything you run.
+- **System** shows memory, drives and uptime; **Export diagnostics** writes
+  one zip for a bug report, with none of your files in it.
+- **Guides** render properly, with two new ones: PyCmd Learn and Android Lab.
+- **What's new** appears once after an update.
 
 ## What is new in 3.0
 

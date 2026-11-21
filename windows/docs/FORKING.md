@@ -26,7 +26,7 @@ from a machine that only has the exe.
 windows/
   pycmd_win/        the Windows shell - about 3,000 lines
     store.py        where files live
-    toolchains.py   the 51 compilers, and how to drive them
+    toolchains.py   the 52 compilers, and how to drive them
     langs.py        the language table, Android's caveats lifted
     runner.py       pressing Run
     builtins.py     the thirteen built-in plugins

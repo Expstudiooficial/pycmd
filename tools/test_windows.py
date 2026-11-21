@@ -1197,6 +1197,197 @@ check("updates read the Windows manifest",
       updates.MANIFEST_URL.endswith("dist-windows/latest.json"), updates.MANIFEST_URL)
 check("and it is on the windows branch", "windowsmain" in updates.MANIFEST_URL)
 
+say("\n== 4.0: downloads are checked, and archives cannot escape ==")
+from pycmd_win import fetch as _fetch, portable as _portable, learn as _learn  # noqa: E402
+from pycmd_win import features as _features  # noqa: E402
+import hashlib as _hashlib, http.server as _hs, threading as _th, zipfile as _zf  # noqa: E402
+
+_srv_dir = tempfile.mkdtemp(prefix="srv-")
+open(os.path.join(_srv_dir, "blob.bin"), "wb").write(b"pycmd" * 1000)
+_bad_zip = os.path.join(_srv_dir, "evil.zip")
+with _zf.ZipFile(_bad_zip, "w") as _z:
+    _z.writestr("../../escaped.txt", "nope")
+_good_zip = os.path.join(_srv_dir, "good.zip")
+with _zf.ZipFile(_good_zip, "w") as _z:
+    _z.writestr("tool-1.2/bin/tool.sh", "#!/bin/sh\necho hi\n")
+    _info = _zf.ZipInfo("tool-1.2/bin/run")
+    _info.external_attr = 0o755 << 16
+    _z.writestr(_info, "#!/bin/sh\necho run\n")
+
+
+class _Quiet(_hs.SimpleHTTPRequestHandler):
+    def __init__(self, *a, **k):
+        super().__init__(*a, directory=_srv_dir, **k)
+
+    def log_message(self, *a):
+        pass
+
+
+_server = _hs.ThreadingHTTPServer(("127.0.0.1", 0), _Quiet)
+_th.Thread(target=_server.serve_forever, daemon=True).start()
+_base = f"http://127.0.0.1:{_server.server_address[1]}"
+_want = _hashlib.sha256(b"pycmd" * 1000).hexdigest()
+_dl = os.path.join(_HOME, "dl", "blob.bin")
+_os_env_proxy = {k: os.environ.pop(k) for k in list(os.environ) if k.lower() in ("http_proxy", "https_proxy", "all_proxy")}
+try:
+    _got = _fetch.download(_base + "/blob.bin", _dl, sha256=_want)
+    check("a download whose hash matches is kept", os.path.isfile(_got))
+    try:
+        _fetch.download(_base + "/blob.bin", _dl + "2", sha256="0" * 64)
+        check("a download whose hash does not match is refused", False)
+    except _fetch.FetchError:
+        check("a download whose hash does not match is refused", True)
+    check("and nothing half-written is left behind",
+          not os.path.exists(_dl + "2") and not os.path.exists(_dl + "2.part"))
+finally:
+    os.environ.update(_os_env_proxy)
+try:
+    _fetch.unpack(_bad_zip, os.path.join(_HOME, "unz-bad"))
+    check("a zip that writes outside its folder is refused", False)
+except _fetch.FetchError:
+    check("a zip that writes outside its folder is refused", True)
+check("and nothing escaped", not os.path.exists(os.path.join(_HOME, "escaped.txt")))
+_into = _fetch.unpack(_good_zip, os.path.join(_HOME, "unz-good"), strip_top=True)
+check("the version-named top folder is stripped", os.path.isfile(os.path.join(_into, "bin", "tool.sh")))
+if os.name != "nt":
+    check("executable bits survive the unpack", os.access(os.path.join(_into, "bin", "run"), os.X_OK))
+_server.shutdown()
+
+say("\n== 4.0: toolchains install without a package manager ==")
+check("seventeen toolchains install directly", len(_portable.PORTABLES) >= 17, len(_portable.PORTABLES))
+check("tsc comes from the TypeScript package, not from node",
+      _portable.for_toolchain("tsc").id == "typescript")
+check("Rust is the GNU toolchain, which needs no Visual Studio",
+      "gnu" in _portable.by_id("rust").name.lower())
+check("Kotlin brings its JDK with it", "jdk" in _portable.by_id("kotlin").needs)
+_orig_json, _orig_final = _fetch.json_doc, _fetch.final_url
+
+
+def _rate_limited(url, *a, **k):
+    raise _fetch.FetchError("api.github.com answered 403")
+
+
+_fetch.json_doc = _rate_limited
+_fetch.final_url = lambda url, *a, **k: "https://github.com/JetBrains/kotlin/releases/tag/v2.4.0"
+try:
+    _plan = _portable._kotlin()
+    check("a rate-limited GitHub API falls back to the release page",
+          _plan.url.endswith("/v2.4.0/kotlin-compiler-2.4.0.zip"), _plan.url)
+finally:
+    _fetch.json_doc, _fetch.final_url = _orig_json, _orig_final
+_routes = install.plan("zig")
+check("the direct download is offered first", _routes.get("routes", [{}])[0].get("manager") == "portable",
+      _routes.get("routes"))
+check("scoop's extras bucket is named in the package", install._scoop_bucket_for("extras/swipl") == "extras")
+check("and a main-bucket package needs no bucket", install._scoop_bucket_for("go") == "")
+_src = open(os.path.join(ROOT, "windows", "pycmd_win", "install.py"), encoding="utf-8").read()
+check("installs run the manager's full path, not its bare name",
+      "command = [where] + [" in _src)
+check("scoop is told it may install as administrator", "-RunAsAdmin" in _src)
+check("Rust without Visual Studio is switched to the GNU toolchain",
+      "stable-x86_64-pc-windows-gnu" in _src)
+_tc = open(os.path.join(ROOT, "windows", "pycmd_win", "toolchains.py"), encoding="utf-8").read()
+check("TypeScript no longer 'installs' with nodejs-lts", 'scoop install nodejs-lts", choco="choco install typescript"' not in _tc)
+_hs_src = open(os.path.join(ROOT, "windows", "pycmd_win", "host.py"), encoding="utf-8").read()
+check("install output reaches the console", '"install")' not in _hs_src)
+
+say("\n== 4.0: Android Lab sets itself up ==")
+_xml = ('<sdk:sdk-repository xmlns:sdk="x"><remotePackage path="cmdline-tools;9.0"><channelRef ref="channel-0"/>'
+        '<archives><archive><complete><size>10</size><checksum type="sha1">aaa</checksum>'
+        '<url>commandlinetools-win-1_latest.zip</url></complete><host-os>windows</host-os></archive></archives>'
+        '</remotePackage><remotePackage path="cmdline-tools;12.0"><channelRef ref="channel-0"/><archives>'
+        '<archive><complete><size>20</size><checksum type="sha1">bbb</checksum>'
+        '<url>commandlinetools-win-2_latest.zip</url></complete><host-os>windows</host-os></archive></archives>'
+        '</remotePackage><remotePackage path="cmdline-tools;13.0-alpha01"><channelRef ref="channel-2"/><archives>'
+        '<archive><complete><size>30</size><checksum type="sha1">ccc</checksum><url>alpha.zip</url></complete>'
+        '<host-os>windows</host-os></archive></archives></remotePackage></sdk:sdk-repository>')
+_ct = android_lab.cmdline_tools_plan(_xml, "windows")
+check("the newest stable command-line tools are chosen, not an alpha", _ct["version"] == "12.0", _ct)
+check("and checked against Google's SHA-1", _ct["sha1"] == "bbb")
+check("with a full download URL", _ct["url"] == android_lab.REPOSITORY + "commandlinetools-win-2_latest.zip")
+_ok = android_lab.parse_accel("accel:\n0\nWHPX(10.0.22631) is installed and usable.\naccel\n", True)
+_bad = android_lab.parse_accel("accel:\n1\nWHPX is not enabled.\naccel\n", False)
+_bios = android_lab.parse_accel("accel:\n7\nVT-x is disabled in BIOS\naccel\n", False)
+check("working acceleration is recognised", _ok["ok"] and _ok["status"] == 0)
+check("Hypervisor Platform switched off is recognised, with its fix", not _bad["ok"] and _bad["fix"] == "whpx")
+check("virtualisation off in the firmware says so", _bios["fix"] == "bios")
+_devs = android_lab.parse_devices("List of devices attached\nemulator-5556 device model:sdk_gphone64\n"
+                                  "R58M12 device usb:1 model:SM_G991B\nZX1 unauthorized usb:2\n")
+check("an emulator is told apart from a phone",
+      [d["emulator"] for d in _devs] == [True, False, False], _devs)
+check("an unauthorised phone is not ready", _devs[2]["ready"] is False)
+check("an emulator that exits for want of acceleration says so",
+      "acceleration" in android_lab.explain_exit("ERROR | x86_64 emulation currently requires hardware acceleration!"))
+check("the lab starts with an APK, not without one",
+      "fetch_apk" in open(os.path.join(ROOT, "windows", "pycmd_win", "android.py"), encoding="utf-8").read())
+check("the APK comes from the Android release manifest", android_lab.APK_MANIFEST.endswith("dist/latest.json"))
+check("an AVD folder off a non-ASCII profile is moved", android_lab.avd_home().isascii())
+_cfg = android_lab.set_config({"ramMb": 999999, "api": 34})
+check("device settings are clamped to sane limits", _cfg["config"]["ramMb"] == android_lab.LIMITS["ramMb"][1])
+check("and the Android version sticks", android_lab.config()["api"] == 34)
+android_lab.set_config({"api": 35, "ramMb": 4096})
+
+say("\n== 4.0: PyCmd Learn ==")
+_cat = _learn.catalogue()
+check("Learn loads", _cat.get("ok"), _cat.get("error"))
+_ids = {c["id"] for c in _cat.get("courses", [])}
+check("at least fifty courses", len(_ids) >= 50, len(_ids))
+check("well over ten thousand lessons", _cat["totals"]["lessons"] > 10000, _cat["totals"]["lessons"])
+for _cid in ("csharp", "fsharp", "haskell", "ocaml", "elixir", "erlang", "scala", "groovy", "clojure",
+             "r", "awk", "prolog", "fortran", "pascal", "cobol", "d", "nim", "perl", "tcl", "powershell",
+             "scheme", "racket"):
+    check(f"the PC-only course {_cid} is there", _cid in _ids)
+_teach_engine = _learn._engine()
+check("the shared engine has the runner hook Learn needs (a sync must not drop it)",
+      hasattr(_teach_engine, "EXTERNAL_RUNNER") and hasattr(_teach_engine, "_external"))
+check("and a one-line snippet makes no 'which line is broken' lesson",
+      "len(_lines(broken[0])) >= 2" in open(_teach_engine.__file__, encoding="utf-8").read())
+check("Kotlin is not marked by running - its lessons were never run on kotlinc",
+      not _learn._run_marked(".kt"))
+check("JavaScript is - its lessons were", _learn._run_marked(".js"))
+_env = _learn._neutral_env()
+check("lesson runs use the invariant culture, so 3.5 is never 3,5",
+      _env.get("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT") == "1" and "-Duser.language=en" in _env.get("JAVA_TOOL_OPTIONS", ""))
+_py = _learn.check("python", "0.0.write", 'print("hel" + "lo")')
+check("a Python answer written differently is still right", _py.get("right"), _py)
+_tr = _learn.try_code("python", "print(6 * 7)")
+check("Try it runs the code", _tr.get("output", "").strip() == "42", _tr)
+
+say("\n== 4.0: the new screens' work ==")
+_h = host_module.Host()
+_c = lambda n, p=None: host_module.call(_h, n, p or {})  # noqa: E731
+_made = _c("template.create", {"template": "node", "name": "Demo"})
+check("a project from a template", _made.get("ok") and os.path.isfile(_made.get("open", "")), _made)
+check("the same name twice is refused, not overwritten",
+      not _c("template.create", {"template": "node", "name": "Demo"}).get("ok"))
+check("its npm scripts are found as tasks",
+      "start" in [t["name"] for t in _c("tasks", {"folder": os.path.dirname(_made["open"])})["tasks"]])
+_found = _c("search", {"text": "hello", "folder": os.path.dirname(_made["open"])})
+check("search finds text in files", _found.get("ok") and _found["hits"], _found)
+check("a bad regex is an answer, not a crash", not _c("search", {"text": "(", "regex": True}).get("ok"))
+_zip = _c("zip", {"paths": [os.path.dirname(_made["open"])]})
+check("a folder zips", _zip.get("ok") and _zip["files"] >= 2, _zip)
+check("and unzips", _c("unzip", {"path": _zip["zip"], "to": os.path.join(_HOME, "unz3")}).get("ok"))
+check("hashes are right", _c("hash", {"text": "abc"})["sha256"].startswith("ba7816bf"))
+check("a free port is free", _c("port.check", {"port": 59_999}).get("free") in (True, False))
+check("system information answers", _c("machine").get("cores", 0) >= 1)
+_c("history.add", {"line": "print(1)"})
+check("console history survives", "print(1)" in _c("history")["lines"])
+_c("env.set", {"vars": {"PYCMD_TEST_VAR": "yes", "bad name": "x"}})
+check("run environment variables are applied, bad names dropped",
+      os.environ.get("PYCMD_TEST_VAR") == "yes" and "bad name" not in _c("env")["vars"])
+_c("env.set", {"vars": {}})
+check("and removed again", "PYCMD_TEST_VAR" not in os.environ)
+_look = _c("look.set", {"theme": "halloween", "zoom": 9})
+check("themes switch, and zoom is clamped", _look["theme"] == "halloween" and _look["zoom"] == 2.0)
+check("the default theme is Classic Green", _features.DEFAULT_THEME == "classic-green")
+_c("look.set", {"theme": "classic-green", "zoom": 1})
+check("what's new knows the version", _c("whatsnew").get("version") == host_module.VERSION)
+_diag = _c("diagnostics")
+check("diagnostics export to a zip", _diag.get("ok") and _zf.is_zipfile(_diag["zip"]), _diag)
+check("every handler 4.0 added is reachable",
+      all(name in host_module.HANDLERS for name in _features.HANDLERS))
+
 say()
 if FAILURES:
     say(f"{len(FAILURES)} of {CHECKS[0]} checks failed: {FAILURES[:6]}")

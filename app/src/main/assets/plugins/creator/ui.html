@@ -40,70 +40,70 @@
   body { margin: 0; padding: 0 0 32px; }
 
   .bar {
-    background: #0B0F14; border-bottom: 1px solid #223041;
+    background: var(--bg); border-bottom: 1px solid var(--outline);
     padding: 10px 14px 10px;
   }
   .row { display: flex; align-items: center; gap: 8px; }
   .grow { flex: 1 1 auto; min-width: 0; }
   .field-input {
     font: inherit; padding: 9px 11px; border-radius: 10px;
-    border: 1px solid #223041; background: #10161F; color: #F1F5FA; width: 100%;
+    border: 1px solid var(--outline); background: var(--bg); color: var(--fg); width: 100%;
   }
   select.field-input { font-weight: 600; }
-  .muted { color: #8FA0B4; font-size: 12px; }
-  .warn { color: #E0A33E; font-size: 12px; }
-  .bad { color: #E05A5A; font-size: 13px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .warn { color: var(--warning); font-size: 12px; }
+  .bad { color: var(--danger); font-size: 13px; }
 
   .chip {
     display: inline-block; padding: 7px 13px; border-radius: 20px;
-    border: 1px solid #223041; background: #121A24; color: #9BA9BB;
+    border: 1px solid var(--outline); background: var(--surface); color: var(--muted);
     font-size: 13px; white-space: nowrap;
   }
-  .chip.on { background: #16324D; border-color: #2E7DD1; color: #DCE3EC; }
+  .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
   .chips { display: flex; gap: 6px; overflow-x: auto; padding: 3px 0; }
   .chips::-webkit-scrollbar { height: 0; }
 
   button.small {
     font: inherit; padding: 9px 13px; font-size: 13px; border-radius: 10px;
-    background: #121A24; border: 1px solid #223041; color: #DCE3EC;
+    background: var(--surface); border: 1px solid var(--outline); color: var(--fg);
   }
-  button.small.primary { background: #16324D; border-color: #2E7DD1; }
-  button.small.danger { border-color: #5A2A2A; color: #F0A5A5; }
+  button.small.primary { background: var(--accent-soft); border-color: var(--accent); }
+  button.small.danger { border-color: var(--danger); color: var(--danger); }
   button.small:disabled { opacity: .45; }
 
   .pane { padding: 12px 14px 0; }
   .head {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    margin: 18px 0 6px; color: #F1F5FA; font-weight: 600; font-size: 15px;
+    margin: 18px 0 6px; color: var(--fg); font-weight: 600; font-size: 15px;
   }
   .head .muted { font-weight: 400; }
 
   .note {
-    background: #121A24; border: 1px solid #223041; border-radius: 10px;
-    padding: 9px 11px; margin: 6px 0 10px; font-size: 12px; color: #9BA9BB;
+    background: var(--surface); border: 1px solid var(--outline); border-radius: 10px;
+    padding: 9px 11px; margin: 6px 0 10px; font-size: 12px; color: var(--muted);
   }
-  .note b { color: #DCE3EC; font-weight: 600; }
+  .note b { color: var(--fg); font-weight: 600; }
 
   /* -- the script ---------------------------------------------------- */
   .code {
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 13px; color: #DCE3EC; white-space: pre-wrap;
+    font-size: 13px; color: var(--fg); white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .blk {
-    border: 1px solid #223041; border-left: 3px solid #2E7DD1;
-    background: #121A24; border-radius: 10px;
+    border: 1px solid var(--outline); border-left: 3px solid var(--accent);
+    background: var(--surface); border-radius: 10px;
     padding: 9px 11px; margin: 6px 0;
   }
-  .blk.sel { border-color: #2E7DD1; background: #16243A; }
-  .blk .why { font-size: 12px; color: #8FA0B4; margin-top: 3px; }
-  .blk.holds .why::after { content: "  ·  holds blocks"; color: #6FB3FF; }
-  .blk.cat-Logic, .blk.cat-Loops { border-left-color: #E0A33E; }
-  .blk.cat-Functions, .blk.cat-Classes { border-left-color: #9B6FE0; }
-  .blk.cat-Text, .blk.cat-Lists, .blk.cat-Dictionaries { border-left-color: #43B581; }
-  .blk.cat-Errors { border-left-color: #E05A5A; }
-  .rail { border-left: 1px dashed #223041; margin-left: 9px; padding-left: 13px; }
-  .closing { font-size: 12px; color: #55657A; margin: 2px 0 6px 6px; }
+  .blk.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .blk .why { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .blk.holds .why::after { content: "  ·  holds blocks"; color: var(--accent); }
+  .blk.cat-Logic, .blk.cat-Loops { border-left-color: var(--warning); }
+  .blk.cat-Functions, .blk.cat-Classes { border-left-color: var(--info); }
+  .blk.cat-Text, .blk.cat-Lists, .blk.cat-Dictionaries { border-left-color: var(--accent); }
+  .blk.cat-Errors { border-left-color: var(--danger); }
+  .rail { border-left: 1px dashed var(--outline); margin-left: 9px; padding-left: 13px; }
+  .closing { font-size: 12px; color: var(--muted); margin: 2px 0 6px 6px; }
 
   .tools { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
   .tools button { padding: 8px 11px; font-size: 12px; }
@@ -111,17 +111,28 @@
   /* -- the palette, which lives in its own sheet ---------------------- */
   .addtop {
     position: sticky; top: 0; z-index: 2;
-    background: #0B0F14; padding: 12px 0 10px;
-    border-bottom: 1px solid #223041; margin-bottom: 8px;
+    background: var(--bg); padding: 12px 0 10px;
+    border-bottom: 1px solid var(--outline); margin-bottom: 8px;
   }
   .pal { padding-bottom: 8px; }
   .pick {
     display: block; width: 100%; text-align: left;
-    border: 1px solid #223041; background: #10161F; color: #DCE3EC;
+    border: 1px solid var(--outline); background: var(--bg); color: var(--fg);
     border-radius: 10px; padding: 10px 12px; margin: 6px 0; font: inherit;
   }
-  .pick .what { font-size: 14px; color: #F1F5FA; }
-  .pick .code { color: #6FB3FF; font-size: 12px; margin-top: 3px; display: block; }
+  .pick .what { font-size: 14px; color: var(--fg); }
+  .pick .code { color: var(--accent); font-size: 12px; margin-top: 3px; display: block; }
+  /* The heading over each group of blocks. Sticky, because a list of two
+     hundred is scrolled a long way and "which group am I in" is the question
+     it raises. */
+  .palgroup {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--bg); color: var(--muted);
+    font-size: 11.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+    padding: 10px 2px 4px;
+  }
+  .palgroup:first-child { padding-top: 2px; }
 
   /* -- overlays ------------------------------------------------------ */
   /*
@@ -139,21 +150,21 @@
     padding: 22px 12px 40px;
   }
   .sheet.open { display: block; }
-  #addSheet { background: #0B0F14; padding-top: 0; }
+  #addSheet { background: var(--bg); padding-top: 0; }
   .sheet .card { max-width: 640px; margin: 0 auto; }
   .field { margin: 12px 0; }
-  .field label { display: block; font-size: 12px; color: #8FA0B4; margin-bottom: 5px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
 
   /* What used to be the fixed footer, now the first thing under the bar. */
   .actions {
-    background: #0B0F14; border-bottom: 1px solid #223041;
+    background: var(--bg); border-bottom: 1px solid var(--outline);
     padding: 10px 14px 12px;
     display: flex; gap: 8px;
   }
   .actions button { flex: 1 1 0; padding: 13px 8px; font-size: 14px; }
   .empty {
-    color: #8FA0B4; font-size: 13px; padding: 16px 12px;
-    border: 1px dashed #223041; border-radius: 10px; text-align: center;
+    color: var(--muted); font-size: 13px; padding: 16px 12px;
+    border: 1px dashed var(--outline); border-radius: 10px; text-align: center;
   }
   pre.out { max-height: 50vh; overflow: auto; }
 </style>
@@ -166,8 +177,10 @@
   </div>
   <div class="row" style="margin-top:8px">
     <select id="lang" class="field-input grow" aria-label="Language"></select>
+    <button class="small" id="example-load" title="Fill this language's script with a working example">Example</button>
   </div>
-  <div class="muted" id="count" style="margin-top:7px">&nbsp;</div>
+  <div class="muted" id="about" style="margin-top:7px">&nbsp;</div>
+  <div class="muted" id="count" style="margin-top:4px">&nbsp;</div>
 </div>
 
 <div class="actions">
@@ -704,9 +717,17 @@
 
     groups.forEach(function (group) {
       if (state.category && group.name !== state.category) return;
+      var here = 0;
+      var mark = parts.length;
+      // A heading per group, written before its blocks and taken back out
+      // again if the search left none of them. Twenty-one groups of Python
+      // blocks in one flat list is a wall; the same list with its headings
+      // in it can be scanned.
+      parts.push('<div class="palgroup">' + escapeHtml(group.name) + '</div>');
       group.blocks.forEach(function (spec) {
         if (needle && (spec.hay || '').indexOf(needle) < 0) return;
         shown += 1;
+        here += 1;
         parts.push(
           '<button class="pick" type="button" data-block="' +
           escapeAttr(spec.id) + '">' +
@@ -716,6 +737,7 @@
           '</button>'
         );
       });
+      if (!here) parts.splice(mark, 1);
     });
 
     if (!shown) {
@@ -1002,10 +1024,29 @@
     state.languages.forEach(function (row) {
       var option = document.createElement('option');
       option.value = row.id;
-      option.textContent = row.name + '  -  ' + row.blocks + ' blocks';
+      option.textContent = row.name + '  -  ' + row.blocks + ' blocks' +
+        (row.runs ? '  -  runs here' : '');
       if (row.id === state.language) option.selected = true;
       host.appendChild(option);
     });
+  }
+
+  /*
+   * What the chosen language is, in a sentence.
+   *
+   * With five languages a name was enough. With ten - four of which most
+   * people have never written a line of - the difference between "runs on
+   * this phone" and "is a file you serve" is the first thing worth knowing,
+   * so it is on screen rather than in a guide.
+   */
+  function drawAbout() {
+    var row = null;
+    state.languages.forEach(function (each) {
+      if (each.id === state.language) row = each;
+    });
+    if (!row) { $('about').textContent = ''; return; }
+    $('about').textContent = row.about +
+      (row.runs ? '  Press Run on the saved file and it runs on this phone.' : '');
   }
 
   /** Switches to a language and makes sure its blocks are loaded. */
@@ -1017,6 +1058,7 @@
     state.outline = {};
     state.closings = {};
     var wasUntouched = state.untouched;
+    drawAbout();
     return loadCatalogue(id).then(function () {
       drawCategories();
       drawPalette();
@@ -1121,6 +1163,49 @@
           $('name').value = 'untitled';
           refresh();
         });
+  });
+
+  /*
+   * Every language gets an example, and this is the way back to it.
+   *
+   * The starter used to arrive once, at boot, in whichever language the
+   * setting named - so anybody who switched to Rust got an empty script and
+   * a hundred and two blocks with no idea which two go at the top. An empty
+   * page is the worst place to start learning a language, and it is exactly
+   * where switching left you.
+   */
+  $('example-load').addEventListener('click', function () {
+    var language = state.language;
+    var apply = function () {
+      pycmd.call('starter', { language: language }).then(function (result) {
+        if (!result || !result.ok || !result.project) {
+          pycmd.toast('There is no example for ' + language + ' yet.');
+          return;
+        }
+        var start = JSON.parse(JSON.stringify(result.project));
+        if (start.language !== language) {
+          pycmd.toast('There is no example for ' + language + ' yet.');
+          return;
+        }
+        state.ids[language] = '';
+        state.drafts[language] = { name: start.name, blocks: start.blocks, file: '' };
+        stampUids(state.drafts[language].blocks);
+        state.selected = null;
+        $('name').value = start.name;
+        refresh();
+        state.untouched = true;
+        drawScript();
+        pycmd.toast('An example ' + language + ' script, ready to change.');
+      }).catch(function (error) {
+        trouble('The example did not load: ' + (error.message || error));
+      });
+    };
+    if (draft().blocks.length) {
+      ask('Replace this script?', 'The blocks in this ' + language +
+          ' script go, and an example takes their place.', apply);
+    } else {
+      apply();
+    }
   });
 
   $('askOk').addEventListener('click', function () {

@@ -63,22 +63,80 @@ class _Exit(Exception):
         self.code = code
 
 
+class _Window:
+    """A writable view of part of a storage list.
+
+    `initialise` fills an array by assigning into the list it is handed, so
+    handing it `storage[a:b]` hands it a *copy* and every write lands in
+    something that is thrown away a moment later. That is why a row of a
+    two-dimensional array initialised to zeroes. A window forwards the writes
+    to the real list instead.
+    """
+
+    __slots__ = ("_storage", "_start", "_length")
+
+    def __init__(self, storage, start: int, length: int) -> None:
+        self._storage = storage
+        self._start = start
+        self._length = max(0, min(length, len(storage) - start))
+
+    def __len__(self) -> int:
+        return self._length
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            start, stop, _ = index.indices(self._length)
+            return _Window(self._storage, self._start + start, stop - start)
+        if not (0 <= index < self._length):
+            raise IndexError(index)
+        return self._storage[self._start + index]
+
+    def __setitem__(self, index, value) -> None:
+        if not (0 <= index < self._length):
+            raise IndexError(index)
+        self._storage[self._start + index] = value
+
+    def extend(self, values) -> None:
+        # Only `char buf[] = "text"` reaches this, and a window is always a
+        # row of something already sized, so there is nothing to grow into.
+        raise CRuntimeError("cannot size an array from inside another one")
+
+
 class Pointer:
-    """A location inside a storage list. `NULL` is a pointer to nothing."""
+    """A location inside a storage list. `NULL` is a pointer to nothing.
 
-    __slots__ = ("storage", "index", "base")
+    `shape` is what is left of a multi-dimensional array after the dimensions
+    already indexed. A C array is one flat run of memory and `grid[r][c]` is
+    arithmetic on it - `r * columns + c` - so `grid` decaying to a pointer has
+    to remember how wide a row is or the second `[` has nothing to work with.
+    That is what shape is: the dimensions still to come. An ordinary pointer
+    has none, and behaves exactly as it always did.
+    """
 
-    def __init__(self, storage, index: int = 0, base: str = "int") -> None:
+    __slots__ = ("storage", "index", "base", "shape")
+
+    def __init__(self, storage, index: int = 0, base: str = "int",
+                 shape=None) -> None:
         self.storage = storage
         self.index = index
         self.base = base
+        self.shape = list(shape or [])
+
+    @property
+    def stride(self) -> int:
+        """How many cells one step of this pointer covers."""
+        step = 1
+        for size in self.shape:
+            step *= max(int(size), 0)
+        return step
 
     @property
     def is_null(self) -> bool:
         return self.storage is None
 
     def offset(self, delta: int) -> "Pointer":
-        return Pointer(self.storage, self.index + delta, self.base)
+        return Pointer(self.storage, self.index + delta * (self.stride or 1),
+                       self.base, self.shape)
 
     def read(self):
         if self.storage is None:
@@ -144,6 +202,11 @@ class Interpreter:
     def __init__(self, program: dict, stdout=None, stdin=None, argv=None) -> None:
         self.functions = program["functions"]
         self.structs = program["structs"]
+        self.unions = program.get("unions", set())
+        # `static` locals: one storage per declaration, made the first time
+        # it is reached and handed back every time after that. Keyed by the
+        # declaration node itself, which lives as long as the program does.
+        self.statics: dict = {}
         self.enums = program["enums"]
         self.global_decls = program["globals"]
         self.globals: dict = {}
@@ -217,6 +280,19 @@ class Interpreter:
         if fields_spec is None:
             raise CRuntimeError(f"unknown struct '{name}'")
         fields = {}
+        if name in self.unions:
+            # Every field of a union is the same place in memory. Here that
+            # means the same storage list, so writing `u.i = 65` and reading
+            # `u.c` sees the 65 - which is the whole point of a union.
+            shared = None
+            for field_name, field_type in fields_spec:
+                if field_type.is_array:
+                    fields[field_name] = self.allocate(field_type)
+                    continue
+                if shared is None:
+                    shared = self.allocate(field_type)
+                fields[field_name] = shared
+            return CStruct(name, fields)
         for field_name, field_type in fields_spec:
             fields[field_name] = self.allocate(field_type)
         return CStruct(name, fields)
@@ -343,7 +419,19 @@ class Interpreter:
             return
 
         if kind == "declare":
+            is_static = len(node) > 3 and node[3] == "static"
             for name, ctype, init in node[1]:
+                if is_static:
+                    key = (id(node), name)
+                    kept = self.statics.get(key)
+                    if kept is None:
+                        storage = self.allocate(ctype, scope)
+                        if init is not None:
+                            self.initialise(storage, ctype, init, scope, node[2])
+                        kept = (storage, ctype)
+                        self.statics[key] = kept
+                    scope[name] = kept
+                    continue
                 storage = self.allocate(ctype, scope)
                 scope[name] = (storage, ctype)
                 if init is not None:
@@ -434,6 +522,19 @@ class Interpreter:
 
         raise CRuntimeError(f"cannot execute {kind}", node[-1] if isinstance(node[-1], int) else 0)
 
+    def _dimensions(self, ctype: CType, scope) -> list:
+        """A type's array sizes as numbers, for working out a row's width."""
+        sizes = []
+        for dimension in ctype.array:
+            if dimension is None:
+                sizes.append(0)
+            else:
+                try:
+                    sizes.append(int(self.evaluate(dimension, scope or {})))
+                except Exception:  # noqa: BLE001 - a size that will not count
+                    sizes.append(0)
+        return sizes
+
     def initialise(self, storage, ctype: CType, init, scope, line: int) -> None:
         if init[0] == "initlist":
             items = init[1]
@@ -446,12 +547,43 @@ class Interpreter:
                     field_name, field_type = spec[index]
                     self.initialise(target.fields[field_name], field_type, item, scope, line)
                 return
+            # `int grid[2][3] = {{1,2,3},{4,5,6}}` - each inner list fills one
+            # row, and a row is three cells along in one flat run of storage.
+            # Stepping one cell per initialiser, as this used to, put the
+            # second row on top of the first and then ran out of room.
+            sizes = self._dimensions(ctype, scope)
+            row = 1
+            for size in sizes[1:]:
+                row *= max(int(size), 0)
+            row = max(row, 1)
+
+            # `int scores[] = {3, 1, 4}` leaves the first dimension out and
+            # lets the list decide it. The type says nothing, so storage was
+            # allocated empty and the first initialiser had nowhere to go.
+            if sizes and sizes[0] == 0 and len(storage) == 0:
+                element = CType(ctype.base, ctype.pointer, [], ctype.struct_name)
+                storage.extend(self.zero_value(element)
+                               for _ in range(len(items) * row))
+
             for index, item in enumerate(items):
+                # Anything at all, once there is more than one dimension,
+                # fills a whole row: `{1,2,3}` fills it cell by cell and
+                # `"ab"` - which is how `char names[2][6] = {"ab", "cd"}` is
+                # written - copies its characters in. Both are the row's
+                # business, so both recurse into the row.
+                if len(sizes) > 1:
+                    start = index * row
+                    if start >= len(storage):
+                        raise CRuntimeError("too many initialisers for this array", line)
+                    inner = CType(ctype.base, ctype.pointer, list(ctype.array[1:]),
+                                  ctype.struct_name)
+                    self.initialise(_Window(storage, start, row), inner, item, scope, line)
+                    continue
                 if index >= len(storage):
                     raise CRuntimeError("too many initialisers for this array", line)
                 if item[0] == "initlist":
                     element = CType(ctype.base, ctype.pointer, [], ctype.struct_name)
-                    self.initialise(storage[index: index + 1], element, item, scope, line)
+                    self.initialise(_Window(storage, index, 1), element, item, scope, line)
                 else:
                     storage[index] = self.coerce(self.evaluate(item, scope), ctype)
             return
@@ -520,7 +652,8 @@ class Interpreter:
             if isinstance(base, Pointer):
                 if base.is_null:
                     raise CRuntimeError("indexed a NULL pointer", node[3])
-                return base.storage, base.index + offset, CType(base.base)
+                return (base.storage, base.index + offset * (base.stride or 1),
+                        CType(base.base))
             raise CRuntimeError("indexed something that is not an array or pointer", node[3])
 
         if kind == "deref":
@@ -570,7 +703,8 @@ class Interpreter:
                 raise CRuntimeError(f"'{name}' is not declared", node[2])
             storage, ctype = self.lookup(name, scope, node[2])
             if ctype is not None and ctype.is_array:
-                return Pointer(storage, 0, ctype.base)
+                return Pointer(storage, 0, ctype.base,
+                               self._dimensions(ctype, scope)[1:])
             return storage[0]
 
         if kind == "assign":
@@ -610,6 +744,15 @@ class Interpreter:
             return Pointer(storage, index, ctype.base if ctype else "int")
 
         if kind == "index":
+            base = self.evaluate(node[1], scope)
+            if isinstance(base, Pointer) and base.shape:
+                # `grid[1]` where grid is int[2][3] is the second row: still a
+                # place, not a value, and the next `[` indexes into it.
+                if base.is_null:
+                    raise CRuntimeError("indexed a NULL pointer", node[3])
+                offset = int(self.evaluate(node[2], scope))
+                return Pointer(base.storage, base.index + offset * base.stride,
+                               base.base, base.shape[1:])
             storage, index, _ = self.lvalue(node, scope)
             if not (0 <= index < len(storage)):
                 raise CRuntimeError(
@@ -650,6 +793,16 @@ class Interpreter:
             return self.sizeof(node[1])
 
         if kind == "sizeof_expr":
+            # Worked out from the declared type wherever that is known, the
+            # way the compiler does it - which matters for two reasons. An
+            # array's size is the whole array, not the pointer it decays to,
+            # so `sizeof a / sizeof a[0]` counts elements as C programmers
+            # expect. And sizeof never evaluates its operand, so
+            # `malloc(sizeof *p)` must not dereference p - it is usually NULL
+            # at that moment, because the malloc is what is about to set it.
+            known = self.static_size(node[1], scope)
+            if known is not None:
+                return known
             value = self.evaluate(node[1], scope)
             if isinstance(value, Pointer):
                 return 8
@@ -678,14 +831,82 @@ class Interpreter:
         count = max(1, len(storage) // unit)
         storage[:] = [self.new_struct(struct_name) for _ in range(count)]
 
+    def static_type(self, node, scope):
+        """The declared type of an expression, without evaluating it.
+
+        Returns (ctype, storage) where storage is the array's own storage for
+        a whole array, so its length can be read; or None when the type is
+        not known statically - the caller then falls back to the value.
+        """
+        kind = node[0]
+        if kind == "name":
+            name = node[1]
+            if name in scope or name in self.globals:
+                storage, ctype = self.lookup(name, scope, node[2])
+                if ctype is not None:
+                    return ctype, storage
+            return None
+        if kind in ("deref", "index"):
+            inner = self.static_type(node[1], scope)
+            if inner is None:
+                return None
+            ctype, _ = inner
+            if ctype.is_array:
+                rest = list(ctype.array[1:])
+                return CType(ctype.base, ctype.pointer, rest, ctype.struct_name), None
+            if ctype.pointer > 0:
+                return CType(ctype.base, ctype.pointer - 1, [], ctype.struct_name), None
+            return None
+        if kind == "member":
+            _, target, field, through_pointer = node
+            inner = self.static_type(target, scope)
+            if inner is None:
+                return None
+            ctype, _ = inner
+            if ctype.base != "struct":
+                return None
+            for field_name, field_type in self.structs.get(ctype.struct_name, []):
+                if field_name == field:
+                    return field_type, None
+            return None
+        return None
+
+    def static_size(self, node, scope):
+        """sizeof for an expression whose type is known; None otherwise."""
+        try:
+            found = self.static_type(node, scope)
+        except CRuntimeError:
+            return None
+        if found is None:
+            return None
+        ctype, storage = found
+        element = CType(ctype.base, ctype.pointer, [], ctype.struct_name)
+        if ctype.is_array:
+            count = 1
+            if storage is not None and len(ctype.array) == 1:
+                count = len(storage)
+            else:
+                for dimension in ctype.array:
+                    if dimension is None:
+                        return None
+                    try:
+                        count *= int(self.evaluate(dimension, scope))
+                    except CRuntimeError:
+                        return None
+            return count * self.sizeof(element)
+        return self.sizeof(element)
+
     def sizeof(self, ctype: CType) -> int:
         if ctype.is_pointer:
             return 8
         if ctype.base == "struct":
-            total = sum(
+            sizes = [
                 self.sizeof(field_type) for _, field_type in self.structs.get(ctype.struct_name, [])
-            )
-            return total or 1
+            ]
+            if ctype.struct_name in self.unions:
+                # A union is as big as its biggest member, not their sum.
+                return max(sizes, default=1) or 1
+            return sum(sizes) or 1
         return {"char": 1, "int": 4, "float": 4, "double": 8, "void": 1}.get(ctype.base, 4)
 
     def step(self, value, delta: int):
@@ -806,6 +1027,21 @@ class Interpreter:
 
         if name in self.functions:
             return self.call_function(self.functions[name], args, line)
+
+        # A call through a function pointer: `f(4)` where f holds a function,
+        # or the explicit `(*f)(4)`. Either way the value is the function's
+        # name, as `twice` evaluated to when it was assigned.
+        callee = None
+        if target[0] == "name" and (name in scope or name in self.globals):
+            callee = self.evaluate(target, scope)
+        elif target[0] == "deref":
+            callee = self.evaluate(target[1], scope)
+        if isinstance(callee, tuple) and len(callee) == 2 and callee[0] == "__function__":
+            function = self.functions.get(callee[1])
+            if function is not None:
+                return self.call_function(function, args, line)
+        if callee is not None and not (isinstance(callee, Pointer) and callee.is_null):
+            raise CRuntimeError(f"'{name or 'that'}' is not a function", line)
 
         from .c_stdlib import call_builtin
 

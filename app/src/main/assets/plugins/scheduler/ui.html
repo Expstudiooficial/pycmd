@@ -54,7 +54,7 @@
         <p><strong>${escape(job.label)}</strong> <span style="opacity:.7">${escape(job.id)}</span></p>
         <p>every ${job.every}s · ${job.runs} run${job.runs === 1 ? '' : 's'}
            · ${job.failures} failed · next in ${job.next_in}s · ${escape(job.status)}</p>
-        ${job.error ? `<p style="color:#ff8a7a">${escape(job.error)}</p>` : ''}
+        ${job.error ? `<p style="color:var(--danger)">${escape(job.error)}</p>` : ''}
         <p>
           <button data-run="${escape(job.id)}">Run now</button>
           <button data-stop="${escape(job.id)}">Stop</button>

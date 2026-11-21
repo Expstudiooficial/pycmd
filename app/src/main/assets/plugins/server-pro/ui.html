@@ -38,9 +38,9 @@
   ));
 
   function healthColour(health) {
-    if (health === 'answering') return '#4dd0a0';
-    if (health === 'not answering') return '#ff8a7a';
-    return '#9db2c9';
+    if (health === 'answering') return 'var(--accent)';
+    if (health === 'not answering') return 'var(--danger)';
+    return 'var(--muted)';
   }
 
   function draw(data) {
@@ -64,7 +64,7 @@
           · ${row.requests} request${row.requests === 1 ? '' : 's'}
         </p>
         ${row.url ? `<p><code>${escape(row.url)}</code></p>` : ''}
-        ${row.error ? `<p style="color:#ff8a7a">${escape(row.error)}</p>` : ''}
+        ${row.error ? `<p style="color:var(--danger)">${escape(row.error)}</p>` : ''}
         <p>
           <button data-stop="${escape(row.handle)}">Stop</button>
           <button data-restart="${escape(row.handle)}">Restart</button>

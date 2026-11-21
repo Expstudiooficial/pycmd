@@ -42,7 +42,7 @@ import subprocess
 import threading
 import time
 
-from . import envpath, known, toolchains
+from . import envpath, known, portable, toolchains
 
 WINDOWS = os.name == "nt"
 
@@ -202,6 +202,14 @@ def plan(toolchain_id: str) -> dict:
                 "note": f"{chain.name} is already here."}
 
     routes = []
+    spec = portable.for_toolchain(toolchain_id)
+    if spec is not None:
+        routes.append({
+            "manager": "portable", "managerName": "Direct download",
+            "package": spec.id, "ready": portable.supported(), "needsAdmin": False,
+            "canBootstrap": False, "size": spec.size_hint, "note": spec.note,
+            "command": f"download {spec.name} from {spec.site} into PyCmd's folder",
+        })
     for manager_id in PREFERENCE:
         package = _package_for(chain, manager_id)
         if not package:
@@ -321,9 +329,16 @@ def bootstrap(manager_id: str, write=None) -> dict:
 
     write(f"[PyCmd] installing {manager.name}. This runs its own installer, "
           f"published by {manager.name}:\n")
+    script = manager.bootstrap
+    if manager_id == "scoop" and is_admin():
+        # Scoop's installer refuses to run elevated unless told it may - and
+        # people who start PyCmd "as administrator" to make installs work hit
+        # exactly that, with an error that looks like PyCmd's fault.
+        script = ("Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; "
+                  "iex \"& {$(irm get.scoop.sh)} -RunAsAdmin\"")
+        write("[PyCmd] PyCmd is running as administrator, so Scoop is told that is fine.\n")
     ok, output = _run(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-Command", manager.bootstrap],
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
         BOOTSTRAP_TIMEOUT, write,
     )
     # The installer put things on the PATH *in the registry*; this process is
@@ -348,8 +363,11 @@ def add_buckets(write=None) -> list:
     that is there, which is not a failure and is not treated as one.
     """
     write = write or (lambda text: None)
-    scoop = find("scoop")
+    scoop = find("scoop", refresh=True)
     if not scoop:
+        return []
+    if not _ensure_git_for_scoop(scoop, write):
+        write("[PyCmd] scoop needs git to add buckets, and git could not be installed.\n")
         return []
     added = []
     for bucket in BUCKETS:
@@ -361,7 +379,92 @@ def add_buckets(write=None) -> list:
     return added
 
 
-def install(toolchain_id: str, write=None, allow_bootstrap: bool = True) -> dict:
+def is_admin() -> bool:
+    """Whether this process is elevated. Always False off Windows."""
+    if not WINDOWS:
+        return False
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _ensure_git_for_scoop(scoop: str, write) -> bool:
+    """`scoop bucket add` is a git clone, so scoop needs git before any bucket.
+
+    A fresh scoop has no git, and every bucket add failed with "git is
+    required" - which is why kotlin, the JDK and Prolog never installed.
+    """
+    envpath.refresh()
+    if shutil.which("git"):
+        return True
+    write("[PyCmd] scoop needs git for its buckets; installing git through scoop first.\n")
+    _run([scoop, "install", "git"], INSTALL_TIMEOUT, write)
+    envpath.refresh()
+    return bool(shutil.which("git"))
+
+
+_buckets_ready: set = set()
+
+
+def _scoop_bucket_for(package: str) -> str:
+    """"extras/swipl" lives in the extras bucket; a bare name is in main."""
+    return package.split("/", 1)[0].lower() if "/" in package else ""
+
+
+def _ensure_bucket(bucket: str, write) -> bool:
+    if not bucket or bucket in _buckets_ready:
+        return True
+    scoop = find("scoop", refresh=True)
+    if not scoop or not _ensure_git_for_scoop(scoop, write):
+        return False
+    ok, output = _run([scoop, "bucket", "add", bucket], 300, write)
+    if ok or "already" in (output or "").lower():
+        _buckets_ready.add(bucket)
+        return True
+    return False
+
+
+def _after_install(toolchain_id: str, write) -> None:
+    """The one or two installs that need a second step to actually work."""
+    if toolchain_id == "rustc" and WINDOWS and not shutil.which("link"):
+        # rustup's default on Windows is the MSVC toolchain, which links with
+        # Visual Studio's link.exe. Without Visual Studio every program fails
+        # with "linker `link.exe` not found". The GNU toolchain carries its
+        # own linker, so that is what a machine without Visual Studio gets.
+        rustup = shutil.which("rustup")
+        if rustup:
+            write("[PyCmd] no Visual Studio linker here, so Rust is switched to its GNU "
+                  "toolchain, which brings its own.\n")
+            _run([rustup, "toolchain", "install", "stable-x86_64-pc-windows-gnu",
+                  "--profile", "minimal"], INSTALL_TIMEOUT, write)
+            _run([rustup, "default", "stable-x86_64-pc-windows-gnu"], 300, write)
+
+
+def install_portable(toolchain_id: str, write=None, cancelled=None) -> dict:
+    """The direct route: the vendor's own archive, no package manager."""
+    write = write or (lambda text: None)
+    spec = portable.for_toolchain(toolchain_id)
+    if spec is None:
+        return {"ok": False, "reason": "no-portable"}
+    got = portable.install(spec.id, write, cancelled)
+    if not got.get("ok"):
+        return got
+    envpath.refresh()
+    portable.activate_all()
+    after = toolchains.detect(toolchain_id, refresh=True)
+    if after.get("path"):
+        known.mark_installed(toolchain_id, "portable")
+        return {"ok": True, "path": after["path"], "version": after.get("version", ""),
+                "manager": "portable"}
+    return {"ok": False, "error": f"{spec.name} unpacked, but {toolchain_id} did not appear "
+                                  f"in {portable.folder(spec.id)}"}
+
+
+def install(toolchain_id: str, write=None, allow_bootstrap: bool = True,
+            prefer: str = "") -> dict:
     """Installs one toolchain, trying every route it has.
 
     The fallback is the point. A single `scoop install` that fails because the
@@ -381,12 +484,32 @@ def install(toolchain_id: str, write=None, allow_bootstrap: bool = True) -> dict
         return {"ok": True, "already": True, "path": found["path"],
                 "version": found.get("version", "")}
 
+    tried = []
+    if (prefer in ("", "portable") and portable.supported()
+            and portable.for_toolchain(toolchain_id) is not None):
+        write(f"[PyCmd] {chain.name}: trying the direct download first - no package "
+              "manager, no administrator.\n")
+        got = install_portable(toolchain_id, write)
+        if got.get("ok"):
+            write(f"[PyCmd] {chain.name} {got.get('version', '')} is ready\n")
+            return got
+        tried.append({"manager": "portable", "why": got.get("error", "it did not work")})
+        write(f"[PyCmd] the direct download did not work ({got.get('error')}); "
+              "trying package managers.\n")
+        if prefer == "portable":
+            return {"ok": False, "tried": tried, "error": got.get("error", ""),
+                    "site": chain.site}
+
     made = plan(toolchain_id)
     if not made.get("ok"):
+        if tried:
+            made["tried"] = tried
         return made
 
-    routes = made["routes"]
-    if allow_bootstrap and not made["ready"]:
+    routes = [r for r in made["routes"] if r["manager"] != "portable"]
+    if prefer and prefer != "portable":
+        routes.sort(key=lambda r: r["manager"] != prefer)
+    if allow_bootstrap and not any(r["ready"] for r in routes):
         # Nothing that carries this package is installed. Put scoop in place if
         # one of the routes uses it - it is the only one that costs the user
         # nothing but time.
@@ -399,14 +522,25 @@ def install(toolchain_id: str, write=None, allow_bootstrap: bool = True) -> dict
                     write(f"[PyCmd] {got.get('error', 'that did not work')}\n")
                 break
 
-    tried = []
     for route in routes:
         manager_id = route["manager"]
-        if not find(manager_id, refresh=True):
+        where = find(manager_id, refresh=True)
+        if not where:
             tried.append({"manager": manager_id, "why": "not installed"})
             continue
         manager = _BY_ID[manager_id]
-        command = [manager.program] + [
+        if manager_id == "scoop":
+            bucket = _scoop_bucket_for(route["package"])
+            if bucket and not _ensure_bucket(bucket, write):
+                tried.append({"manager": manager_id,
+                              "why": f"scoop's {bucket} bucket could not be added"})
+                continue
+        if manager.needs_admin and not is_admin():
+            write(f"[PyCmd] {manager.name} needs administrator; Windows will ask.\n")
+        # The full path, not the bare name: scoop is a .cmd shim, and Windows
+        # only finds .exe files by bare name - so `scoop install` used to fail
+        # with "scoop is not there" on every machine that had scoop.
+        command = [where] + [
             part.format(package=route["package"]) for part in manager.install_verb
         ]
         write(f"[PyCmd] {chain.name} through {manager.name}\n")
@@ -423,6 +557,8 @@ def install(toolchain_id: str, write=None, allow_bootstrap: bool = True) -> dict
         # Whether the installer said it worked matters less than whether the
         # program is now there. Package managers exit 0 on all sorts of
         # non-events, and exit non-zero on some successes.
+        if ok:
+            _after_install(toolchain_id, write)
         after = toolchains.detect(toolchain_id, refresh=True)
         if after.get("path"):
             known.mark_installed(toolchain_id, manager_id)

@@ -88,8 +88,21 @@ async function Files(screen) {
     el('button', { class: 'small primary', text: '+ New file', onclick: () => newFile(reply.path) }),
     el('button', { class: 'small', text: '+ New folder', onclick: () => newFolder(reply.path) }),
     el('button', { class: 'small', text: 'Bring a file in', onclick: () => bringIn(reply.path) }),
+    el('button', { class: 'small', text: 'New project…', onclick: newProjectSheet }),
     el('span', { class: 'muted', text: reply.folders + ' folders · ' + reply.files + ' files' }),
   ));
+
+  if (!filesAt) {
+    const recent = await PyCmd.call('recent', {});
+    if ((recent.recent || []).length) {
+      const list = el('div', { class: 'list' });
+      recent.recent.slice(0, 8).forEach((r) => list.appendChild(el('button', { class: 'row-item',
+        onclick: () => openInEditor(r.path, r.onDisk) },
+        el('span', { class: 'grow', text: r.path.split(/[\\/]/).pop() }),
+        el('span', { class: 'muted small-text ellipsis', text: r.path }))));
+      screen.appendChild(card(el('h2', { text: 'Recent' }), list));
+    }
+  }
 
   if (!reply.entries.length) {
     screen.appendChild(el('div', { class: 'empty', text: 'Nothing here yet.' }));
@@ -116,6 +129,16 @@ async function Files(screen) {
         class: 'small primary', text: 'Run',
         onclick: () => runPath(entry.path, entry.name),
       }) : null,
+      entry.folder ? el('button', { class: 'small', text: 'Zip', onclick: async () => {
+        const r = await PyCmd.call('zip', { paths: [entry.path] });
+        PyCmd.toast(r.ok ? `Zipped ${r.files} files (${PyCmd.bytes(r.bytes)}).` : r.error);
+        go('files');
+      } }) : null,
+      /\.zip$/i.test(entry.name) ? el('button', { class: 'small', text: 'Unzip', onclick: async () => {
+        const r = await PyCmd.call('unzip', { path: entry.path });
+        PyCmd.toast(r.ok ? 'Unzipped.' : r.error);
+        go('files');
+      } }) : null,
       el('button', {
         class: 'small', text: 'Rename',
         onclick: () => renameEntry(entry),
@@ -447,49 +470,57 @@ async function Toolchains(screen) {
   setupPanel(screen);
 
   screen.appendChild(head('Toolchains',
-    'What is installed on this machine, and what each one lets PyCmd run. ' +
-    'PyCmd does not bundle compilers — a build carrying MSVC and a JDK would be gigabytes — ' +
-    'so these are yours, found on the PATH.'));
+    'Compilers and interpreters on this machine, and what each lets PyCmd run. Missing ones '
+    + 'install with one click - straight from the vendor, checked against their published hash, '
+    + 'into PyCmd’s own folder. No administrator, no package manager needed.'));
 
-  const status = el('p', { class: 'muted', text: 'Looking…' });
-  screen.appendChild(el('div', { class: 'row' },
-    el('button', {
-      class: 'small', text: 'Look again',
-      onclick: async () => {
+  const status = el('span', { class: 'muted', text: 'Looking…' });
+  const filter = el('input', { placeholder: 'Filter: a name or a language, e.g. "rust" or "haskell"',
+    value: remembered('chains.filter', '') });
+  const onlyMissing = el('input', { type: 'checkbox' });
+  screen.appendChild(card(
+    el('div', { class: 'row wrap' }, filter,
+      el('label', { class: 'row' }, onlyMissing, 'Only what is missing'),
+      el('button', { class: 'small', text: 'Look again', onclick: async () => {
         status.textContent = 'Looking…';
         const reply = await PyCmd.call('toolchains', { refresh: true });
-        if (reply.ok) {
-          PyCmd.state.toolchains = reply.toolchains;
-          PyCmd.state.toolchainSummary = reply.summary;
-        }
+        if (reply.ok) { PyCmd.state.toolchains = reply.toolchains; PyCmd.state.toolchainSummary = reply.summary; }
         draw();
-      },
-    }),
-    status,
-  ));
+      } }),
+      el('button', { class: 'small', text: 'Package managers…', onclick: managersSheet })),
+    status));
 
   const host = el('div', {});
   screen.appendChild(host);
+  filter.addEventListener('input', () => { remember('chains.filter', filter.value); draw(); });
+  onlyMissing.addEventListener('change', draw);
+
+  const portables = await PyCmd.call('portables', {});
+  const portableById = {};
+  (portables.portables || []).forEach((p) => { portableById[p.id] = p; });
+  const portableFor = (id) => (portables.portables || []).find((p) => (id === 'tsc' ? p.id === 'typescript' : p.provides.includes(id)));
 
   function draw() {
-    const rows = PyCmd.state.toolchains || [];
+    const q = filter.value.trim().toLowerCase();
+    const rows = (PyCmd.state.toolchains || []).filter((r) => !q || r.name.toLowerCase().includes(q)
+      || r.id.includes(q) || r.languages.some((l) => l.includes(q)));
     const found = rows.filter((r) => r.installed);
     const missing = rows.filter((r) => !r.installed);
-    status.textContent = found.length + ' of ' + rows.length + ' found · ' +
-      (PyCmd.state.toolchainSummary.language_count || 0) + ' languages ready';
+    const all = PyCmd.state.toolchains || [];
+    status.textContent = `${all.filter((r) => r.installed).length} of ${all.length} found · `
+      + `${PyCmd.state.toolchainSummary.language_count || 0} languages ready`
+      + (portables.supported ? ` · ${(portables.portables || []).filter((p) => p.installed).length} installed by PyCmd` : '');
 
     clear(host);
-    host.appendChild(el('h2', { text: 'Here now' }));
-    if (!found.length) {
-      host.appendChild(el('div', { class: 'empty' },
-        'None found yet. PyCmd still runs Python, C, Go, Rust and JavaScript on the ' +
-        'interpreters it carries — install anything below to use the real thing instead.'));
+    if (!onlyMissing.checked) {
+      host.appendChild(el('h2', { text: `Here now (${found.length})` }));
+      const grid = el('div', { class: 'grid' });
+      found.forEach((row) => grid.appendChild(chainCard(row)));
+      if (!found.length) host.appendChild(el('div', { class: 'empty', text: q ? 'None installed match that.'
+        : 'None found yet. PyCmd still runs Python, C, Go, Rust and JavaScript on the interpreters it carries.' }));
+      host.appendChild(grid);
     }
-    const grid = el('div', { class: 'grid' });
-    found.forEach((row) => grid.appendChild(chainCard(row)));
-    host.appendChild(grid);
-
-    host.appendChild(el('h2', { text: 'Not installed' }));
+    host.appendChild(el('h2', { text: `Not installed (${missing.length})` }));
     const rest = el('div', { class: 'grid' });
     missing.forEach((row) => rest.appendChild(chainCard(row)));
     host.appendChild(rest);
@@ -497,43 +528,80 @@ async function Toolchains(screen) {
 
   function chainCard(row) {
     const install = row.install || {};
-    const lines = [];
-    ['winget', 'scoop', 'choco'].forEach((manager) => {
-      if (install[manager]) {
-        lines.push(el('div', { class: 'row', style: 'gap:6px;margin-top:5px' },
-          el('code', { class: 'mono', style: 'flex:1 1 auto', text: install[manager] }),
-          el('button', {
-            class: 'small', text: 'Run',
-            onclick: async () => {
-              // An install streams to the console and can ask for elevation.
-              // Watching it happen beats a toast that fades in three seconds.
-              go('console');
-              PyCmd.toast('Installing ' + row.name + '…');
-              await PyCmd.call('toolchain.install', { id: row.id, with: manager });
-            },
-          }),
-        ));
+    const portable = portableFor(row.id);
+    const body = [];
+    if (!row.installed) {
+      if (portable && portables.supported) {
+        body.push(el('div', { class: 'row', style: 'margin-top:6px' },
+          el('button', { class: 'small primary', text: 'Install', title: 'Download it from ' + portable.site,
+            onclick: () => installChain(row, '') }),
+          el('span', { class: 'muted small-text', text: `direct from ${hostOf(portable.site)} · ${portable.sizeHint}` })));
       }
-    });
-
+      const managers = ['winget', 'scoop', 'choco'].filter((m) => install[m]);
+      if (managers.length) {
+        const more = el('details', { class: 'more-routes' },
+          el('summary', { class: 'muted small-text', text: portable ? 'Or with a package manager' : 'Install with' }),
+          ...managers.map((m) => el('div', { class: 'row', style: 'gap:6px;margin-top:5px' },
+            el('code', { class: 'mono', style: 'flex:1 1 auto', text: install[m] }),
+            el('button', { class: 'small' + (portable ? '' : ' primary'), text: 'Run', onclick: () => installChain(row, m) }))));
+        if (!portable) more.open = true;
+        body.push(more);
+      }
+      if (!portable && !managers.length && install.site) {
+        body.push(el('a', { href: install.site, target: '_blank', text: 'Download from its site' }));
+      }
+    } else {
+      body.push(el('div', { class: 'muted mono small-text ellipsis', title: row.path, text: row.path }));
+      if (portable && portable.installed && row.path.toLowerCase().includes('toolchains')) {
+        body.push(el('div', { class: 'row', style: 'margin-top:6px' },
+          el('span', { class: 'tag good', text: 'installed by PyCmd' }),
+          el('button', { class: 'small danger', text: 'Remove', onclick: async () => {
+            if (!confirm(`Remove ${portable.name}? It is a folder in PyCmd's own directory; nothing else changes.`)) return;
+            const r = await PyCmd.call('portable.remove', { id: portable.id });
+            PyCmd.toast(r.ok ? 'Removed.' : r.error);
+          } })));
+      }
+    }
     return card(
       el('div', { class: 'row spread' },
         el('b', { text: row.name }),
-        row.installed
-          ? el('span', { class: 'pill on', text: row.version || 'found' })
-          : el('span', { class: 'pill off', text: 'not here' }),
-      ),
-      el('div', { style: 'margin:4px 0' },
-        row.languages.map((id) => el('span', { class: 'pill', text: id }))),
-      row.installed
-        ? el('div', { class: 'muted mono', text: row.path })
-        : el('div', {}, lines),
-      row.note ? el('p', { class: 'muted', text: row.note }) : null,
-      row.builds ? el('p', { class: 'muted', text: 'Compiles first, then runs what it built.' }) : null,
-    );
+        row.installed ? el('span', { class: 'pill on', text: row.version || 'found' })
+          : el('span', { class: 'pill off', text: 'not here' })),
+      el('div', { style: 'margin:4px 0' }, row.languages.map((id) => el('span', { class: 'pill', text: id }))),
+      ...body,
+      row.note ? el('p', { class: 'muted small-text', text: row.note }) : null,
+      portable && portable.note && !row.installed ? el('p', { class: 'muted small-text', text: portable.note }) : null);
   }
 
   draw();
+}
+
+function hostOf(url) {
+  try { return new URL(url).host.replace(/^www\./, ''); } catch (e) { return url; }
+}
+
+async function installChain(row, manager) {
+  go('console');
+  PyCmd.toast('Installing ' + row.name + ' - progress is on the console.');
+  await PyCmd.call('toolchain.install', { id: row.id, with: manager });
+}
+
+PyCmd.on('install-done', (event) => {
+  PyCmd.toast(event.ok ? `${event.toolchain} is installed.` : `${event.toolchain} did not install: ${event.error || 'see the console'}`);
+});
+
+async function managersSheet() {
+  const reply = await PyCmd.call('managers', {});
+  const list = el('div', { class: 'list' });
+  (reply.managers || []).forEach((m) => list.appendChild(el('div', { class: 'row-item' },
+    el('div', { class: 'grow' }, el('b', { text: m.name }), el('div', { class: 'muted small-text', text: m.note })),
+    m.installed ? el('span', { class: 'pill on', text: 'here' })
+      : m.canBootstrap ? el('button', { class: 'small', text: 'Install', onclick: async () => {
+        PyCmd.closeSheet(); go('console'); await PyCmd.call('manager.install', { manager: m.id }); } })
+        : el('a', { href: m.site, target: '_blank', text: 'Get it' }))));
+  PyCmd.sheet('Package managers', el('div', {},
+    el('p', { class: 'muted', text: 'Optional since 4.0: most toolchains install directly. These are for the rest, '
+      + 'and for people who prefer them.' }), list));
 }
 
 // ---------------------------------------------------------------------------
@@ -1216,7 +1284,9 @@ async function Docs(screen) {
   const guides = [
     ['README.md', 'What PyCmd is', 'The tour: every screen, and what it does.'],
     ['TUTORIAL.md', 'Getting started', 'From a fresh install to a running program.'],
-    ['TOOLCHAINS.md', 'Compilers and languages', 'What runs what, and how to install the rest.'],
+    ['LEARN.md', 'PyCmd Learn', 'Fifty languages, and lessons marked by running them.'],
+    ['TOOLCHAINS.md', 'Compilers and languages', 'What runs what, and installing the rest in one click.'],
+    ['ANDROID-LAB.md', 'Android Lab', 'A real Android device on this PC, and fixing acceleration.'],
     ['PLUGINS.md', 'Writing a plugin', 'The whole plugin API, and what changes on Windows.'],
     ['MOBILE.md', 'Coming from the phone', 'What carries over, what does not, and why.'],
     ['FORKING.md', 'Forking PyCmd', 'Building the exe yourself, and where the source is.'],
@@ -1230,16 +1300,65 @@ async function Docs(screen) {
         class: 'small', text: 'Read',
         onclick: async () => {
           const reply = await fetch('/wdocs/' + file).then((r) => r.ok ? r.text() : '');
-          PyCmd.sheet(title, el('pre', {
-            class: 'out',
-            style: 'max-height:none;white-space:pre-wrap',
-            text: reply || 'That guide is not in this build.',
-          }));
+          PyCmd.sheet(title, el('div', { class: 'markdown', html: reply ? markdownHtml(reply)
+            : '<p>That guide is not in this build.</p>' }));
         },
       }),
     ));
   });
   screen.appendChild(grid);
+}
+
+/** Enough Markdown for the guides: headings, lists, tables, code, emphasis, links. */
+function markdownHtml(text) {
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const inline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<i>$2</i>')
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<span class="doc-ref">$1</span>');
+  const lines = text.replace(/\r/g, '').split('\n');
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith('```')) {
+      const body = [];
+      i += 1;
+      while (i < lines.length && !lines[i].startsWith('```')) body.push(lines[i++]);
+      out.push('<pre class="out mono">' + esc(body.join('\n')) + '</pre>');
+      i += 1;
+      continue;
+    }
+    const h = line.match(/^(#{1,4})\s+(.*)/);
+    if (h) { out.push(`<h${h[1].length + 1}>${inline(h[2])}</h${h[1].length + 1}>`); i += 1; continue; }
+    if (/^\|/.test(line)) {
+      const rows = [];
+      while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => inline(c.trim()));
+      const body = rows.filter((r) => !/^\|[\s:|-]+\|$/.test(r));
+      out.push('<table>' + body.map((r, n) => '<tr>' + cells(r).map((c) => n ? `<td>${c}</td>` : `<th>${c}</th>`).join('') + '</tr>').join('') + '</table>');
+      continue;
+    }
+    if (/^\s*([-*]|\d+\.)\s+/.test(line)) {
+      const ordered = /^\s*\d+\./.test(line);
+      const items = [];
+      while (i < lines.length && (/^\s*([-*]|\d+\.)\s+/.test(lines[i]) || (/^\s{2,}\S/.test(lines[i]) && items.length))) {
+        if (/^\s*([-*]|\d+\.)\s+/.test(lines[i])) items.push(lines[i].replace(/^\s*([-*]|\d+\.)\s+/, ''));
+        else items[items.length - 1] += ' ' + lines[i].trim();
+        i += 1;
+      }
+      out.push(`<${ordered ? 'ol' : 'ul'}>` + items.map((it) => `<li>${inline(it)}</li>`).join('') + `</${ordered ? 'ol' : 'ul'}>`);
+      continue;
+    }
+    if (/^---+$/.test(line.trim())) { out.push('<hr>'); i += 1; continue; }
+    if (!line.trim()) { i += 1; continue; }
+    const para = [];
+    while (i < lines.length && lines[i].trim() && !/^(#|```|\||\s*([-*]|\d+\.)\s)/.test(lines[i])) para.push(lines[i++]);
+    out.push('<p>' + inline(para.join(' ')) + '</p>');
+  }
+  return out.join('\n');
 }
 
 async function System(screen) {
@@ -1264,6 +1383,33 @@ async function System(screen) {
     ));
   }
 
+  const machine = await PyCmd.call('machine', {});
+  if (machine.ok) {
+    const mem = machine.memory || {};
+    const days = Math.floor((machine.uptime || 0) / 86400);
+    const hours = Math.floor(((machine.uptime || 0) % 86400) / 3600);
+    const drives = el('div', {});
+    (machine.drives || []).forEach((d) => {
+      const used = d.total ? Math.round(((d.total - d.free) / d.total) * 100) : 0;
+      drives.appendChild(el('div', { class: 'row' },
+        el('b', { class: 'mono', style: 'min-width:40px', text: d.drive }),
+        el('div', { class: 'progress grow' + (used > 90 ? ' full' : '') }, el('div', { class: 'fill', style: `width:${used}%` })),
+        el('span', { class: 'muted small-text', text: `${PyCmd.bytes(d.free)} free of ${PyCmd.bytes(d.total)}` })));
+    });
+    screen.appendChild(card(
+      el('div', { class: 'row spread' }, el('b', { text: 'This machine' }),
+        el('div', { class: 'row' },
+          el('button', { class: 'small', text: 'Export diagnostics', onclick: exportDiagnostics }),
+          el('button', { class: 'small', text: 'Keyboard shortcuts', onclick: shortcutsSheet }))),
+      el('div', { class: 'tiles' },
+        labTile('Windows', machine.os.replace(/-/g, ' ').slice(0, 40), ''),
+        labTile('Processor', `${machine.cores} cores · ${machine.machine}`, ''),
+        labTile('Memory', mem.total ? `${PyCmd.bytes(mem.total - mem.free)} of ${PyCmd.bytes(mem.total)} used` : '—', ''),
+        labTile('Up for', days ? `${days}d ${hours}h` : `${hours}h`, ''),
+        labTile('Running as', machine.admin ? 'administrator' : 'you (no admin)', machine.admin ? '' : 'good')),
+      drives));
+  }
+
   screen.appendChild(card(
     el('div', { class: 'row spread' }, el('b', { text: 'PyCmd' }),
       el('span', { class: 'pill on', text: reply.version })),
@@ -1273,7 +1419,8 @@ async function System(screen) {
   ));
 
   const grid = el('div', { class: 'grid' });
-  ['workspace', 'site-packages', 'downloads', 'plugins', 'pages', 'music', 'versions', 'cache']
+  ['workspace', 'site-packages', 'downloads', 'plugins', 'pages', 'music', 'versions', 'cache',
+   'toolchains', 'android', 'learn']
     .forEach((name) => {
       const row = store[name];
       if (!row) return;

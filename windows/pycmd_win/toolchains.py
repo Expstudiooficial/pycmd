@@ -203,9 +203,10 @@ TOOLCHAINS = [
             ("node", "{dir}/{stem}.js"),
         ),
         version_args=("--version",),
-        scoop="scoop install nodejs-lts", choco="choco install typescript",
+        choco="choco install typescript",
         site="https://www.typescriptlang.org/",
-        note="Needs Node as well, to run what it produces. `npm install -g typescript`.",
+        note="Needs Node as well, to run what it produces. PyCmd installs it with npm "
+             "into its own folder, so no administrator is needed.",
     ),
     Toolchain(
         "ruby", "Ruby", ["ruby"], "ruby", _steps_run("{exe}", "{src}"),
@@ -297,7 +298,7 @@ TOOLCHAINS = [
         "swipl", "SWI-Prolog", ["prolog"], "swipl",
         _steps_run("{exe}", "-q", "-g", "main", "-t", "halt", "{src}"),
         winget="winget install SWI-Prolog.SWI-Prolog",
-        scoop="scoop install swi-prolog", site="https://www.swi-prolog.org/",
+        scoop="scoop install extras/swipl", site="https://www.swi-prolog.org/",
         note="Runs the predicate `main`, then halts.",
     ),
     Toolchain(
@@ -397,7 +398,7 @@ TOOLCHAINS = [
         "vlang", "V", ["vlang"], "v",
         _steps_run("{exe}", "run", "{src}"),
         version_args=("version",),
-        scoop="scoop install vlang", site="https://vlang.io/",
+        scoop="scoop install v", site="https://vlang.io/",
     ),
     Toolchain(
         "dmd", "D", ["d"], "dmd",
@@ -405,6 +406,14 @@ TOOLCHAINS = [
         version_args=("--version",),
         scoop="scoop install dmd", choco="choco install dmd",
         site="https://dlang.org/download.html",
+    ),
+    Toolchain(
+        "ldc2", "D (LDC)", ["d"], "ldc2",
+        _steps_run("{exe}", "-run", "{src}"),
+        version_args=("--version",),
+        scoop="scoop install ldc", choco="choco install ldc",
+        site="https://github.com/ldc-developers/ldc/releases",
+        note="The LLVM-based D compiler. Builds and runs in one step.",
     ),
 
     # -- the JVM and .NET --------------------------------------------------
@@ -418,7 +427,7 @@ TOOLCHAINS = [
         # as version 12.
         version_pattern=r'version "?(\d+(?:\.\d+)*)',
         winget="winget install EclipseAdoptium.Temurin.21.JDK",
-        scoop="scoop install temurin-jdk", choco="choco install temurin",
+        scoop="scoop install java/temurin21-jdk", choco="choco install temurin",
         site="https://adoptium.net/",
         note="Java 11 and later run a single .java file directly, with no "
              "javac step. PyCmd uses that.",
@@ -486,8 +495,8 @@ TOOLCHAINS = [
     Toolchain(
         "racket", "Racket", ["racket"], "racket", _steps_run("{exe}", "{src}"),
         version_args=("--version",),
-        winget="winget install Racket.Racket", choco="choco install racket",
-        site="https://racket-lang.org/",
+        winget="winget install Racket.Racket", scoop="scoop install racket",
+        choco="choco install racket", site="https://racket-lang.org/",
     ),
     Toolchain(
         "elixir", "Elixir", ["elixir"], "elixir", _steps_run("{exe}", "{src}"),
@@ -499,6 +508,7 @@ TOOLCHAINS = [
         "escript", "Erlang", ["erlang"], "escript", _steps_run("{exe}", "{src}"),
         version_args=(),
         version_pattern=r"(\d+\.\d+)",
+        winget="winget install Erlang.ErlangOTP", scoop="scoop install erlang",
         choco="choco install erlang", site="https://www.erlang.org/downloads",
     ),
     Toolchain(

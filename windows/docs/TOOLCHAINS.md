@@ -15,7 +15,7 @@ Go and Rust, written in Python, and labels C++, Java, Kotlin and the rest
 Windows has no such rule. So PyCmd finds what you have installed and calls it.
 
 **65 file types. 43 of them run.
-51 toolchains it knows.**
+52 toolchains it knows, 17 of them installable in one click.**
 
 ## What happens when you press Run
 
@@ -50,19 +50,45 @@ works here".
 
 ## Installing one
 
-The Toolchains screen gives you the command and a button that runs it. PyCmd
-does not bundle compilers - a build carrying MSVC and a JDK would be several
-gigabytes - so the button runs *your* package manager with the line you would
-have typed. Nothing is downloaded by PyCmd itself.
+Press **Install**. For seventeen of them - Node.js, Go, Java, Zig, Deno, Bun,
+.NET, Rust, Kotlin, PowerShell 7, GCC, Git (with bash), Dart, Nim, Perl, PHP
+and TypeScript - that downloads the vendor's own Windows build and nothing
+else:
 
-If you have none of the three package managers:
+1. PyCmd asks the vendor which version is current - nodejs.org's release
+   index, go.dev's, the Adoptium API, the Zig index, GitHub releases - rather
+   than carrying a version number that is out of date by next month.
+2. It downloads the archive, with progress on the Console.
+3. It checks the file against the hash **the vendor publishes**. A file that
+   does not match is deleted, not used.
+4. It unpacks it into `%LOCALAPPDATA%\PyCmd\toolchains\<name>` - into a
+   scratch folder first, so a half-unpacked toolchain is never left behind,
+   and refusing any archive entry that tries to write outside its folder.
+5. It puts the toolchain's `bin` folder on PyCmd's own PATH. Nothing is
+   written to the registry or to the system PATH, so uninstalling is
+   **Remove**, which deletes that one folder.
 
-```powershell
-winget --version     # Windows 11 and recent 10 have this already
-```
+No administrator. No package manager. Rust comes as the **GNU** toolchain,
+which links with its own linker - the usual MSVC one needs Visual Studio's
+`link.exe`, and without it every Rust program fails to build. Kotlin brings
+the JDK it needs with it.
 
-`scoop` and `choco` are alternatives; every toolchain below lists whichever it
-has.
+### With a package manager instead
+
+Every card also lists its `winget`, `scoop` and `choco` lines under **Or with
+a package manager**, with a button that runs each. Since 4.0 those work too,
+which they often did not before:
+
+- **scoop is run by its full path.** It is a `.cmd` shim, and Windows only
+  finds `.exe` files by bare name - so `scoop install` used to fail with
+  "scoop is not there" on every machine that had scoop.
+- **scoop's buckets are added when a package needs one**, and git is
+  installed first, because adding a bucket is a git clone. `extras/swipl` and
+  `java/temurin21-jdk` name their bucket.
+- **scoop installs as administrator** when PyCmd is running elevated, which
+  its installer otherwise refuses.
+- **The installer's output is on the Console.** It used to go to a channel no
+  screen showed, so every install looked like it did nothing.
 
 ## Everything PyCmd knows how to drive
 

@@ -10,7 +10,7 @@ the phone carries hand-written interpreters for C, Go and Rust and honestly
 labels a dozen other languages "editable, not runnable". Windows has no such
 rule. If a compiler is on your PATH, PyCmd calls it.
 
-**65 file types. 43 of them run. 51 toolchains it knows how to find and use.**
+**65 file types. 43 of them run. 52 toolchains it knows how to find and use - 17 of which it can install by itself.**
 
 ---
 
@@ -85,11 +85,32 @@ building, and streams the output to the Console — and switches you to the
 Console, so a program that calls `input()` asks its question on the screen you
 are looking at. It always says which toolchain it used.
 
-**Toolchains** — the screen that is new on Windows, and the most useful one
-here. It lists 51 compilers and interpreters, says which are installed and
-what version, and for the rest gives you the exact `winget`, `scoop` or
-`choco` line — with a button that runs it. See
-[TOOLCHAINS.md](TOOLCHAINS.md).
+**Search** — find text in every file under a folder, plain or as a regular
+expression, limited to some file types if you like. Click a match and it opens
+in the Editor at that line. Replace across a file from the same screen.
+
+**Git** — status, stage and unstage, discard, commit, branches, pull, push,
+fetch, and the history with each commit's diff. Init or clone when the folder
+is not a repository yet.
+
+**Tasks** — the scripts a project already declares, one click each: npm
+scripts, Makefile targets, cargo, go, dotnet and Gradle. Output on the Console.
+
+**PyCmd Learn** — 50 languages and 14,700 lessons. The phone's 28 courses,
+and 22 more only a PC can run: C#, F#, Haskell, OCaml, Elixir, Erlang, Scala,
+Groovy, Clojure, R, AWK, Prolog, Fortran, Pascal, COBOL, D, Nim, Perl, Tcl,
+PowerShell, Scheme and Racket. Where the language is installed your answer is
+**marked by running it**. See [LEARN.md](LEARN.md).
+
+**Toolchains** — 52 compilers and interpreters, which are installed and what
+version. Seventeen install with one click, straight from their vendor and
+checked against the vendor's hash; the rest through `winget`, `scoop` or
+`choco`, with a button that runs the line. See [TOOLCHAINS.md](TOOLCHAINS.md).
+
+**Android Lab** — a real Android device on this PC with PyCmd Android
+installed and opened on it. It sets up Java, Google's SDK and the emulator,
+checks hardware acceleration and offers the fix, then gives you screenshots,
+logcat, keys and typing. See [ANDROID-LAB.md](ANDROID-LAB.md).
 
 **Languages** — all 65 file types, searchable, each saying whether this
 machine is ready to run it.
@@ -120,10 +141,31 @@ package with an extension will build rather than give up.
 **Plugins** — thirteen built into the app, plus any you install. Includes a
 button to bring a plugin over from the phone; see [MOBILE.md](MOBILE.md).
 
+**Tools** — the small jobs: format and check JSON, Base64, URL encoding,
+hashes of text or files, UUIDs, timestamps, a regex tester, a two-text diff,
+case conversion and counts, and colours with their contrast.
+
+**Snippets** — code you reach for again and again, yours and a starter set.
+**Notes** — a scratchpad that saves itself. **Ports** — what is listening on
+which port, whether the one you want is free, and a Stop for whatever holds it.
+
 **Guides** — these documents, in the app.
 
-**System** — what PyCmd is using and where, and whether there is a newer
-version.
+**Settings** — six themes (Classic Green, Midnight Blue, Halloween, Amber
+Terminal, Slate, Paper) or your own colours, which reach inside the console and
+editor too; zoom; a compact layout; environment variables for everything you
+run.
+
+**System** — the machine (memory, drives, uptime), what PyCmd is using and
+where, whether there is a newer version, and **Export diagnostics**: one zip
+with everything a bug report needs and none of your files.
+
+### Getting around
+
+**Ctrl+K** opens the command palette: every screen, every action, your recent
+files and every course, by typing a few letters. **Ctrl+1** to **Ctrl+9** jump
+to the first nine screens, **Ctrl+Shift+F** searches, **Ctrl+Shift+L** opens
+Learn, **Ctrl+=** and **Ctrl+-** zoom, and **F1** lists the rest.
 
 ---
 
@@ -135,7 +177,7 @@ version.
 | Runnable | 6 | **43** |
 | C, Go, Rust | built-in interpreters | **real compilers**, interpreters as the fallback |
 | C++, Java, Kotlin, C#, Haskell… | edit and serve only | **run** |
-| Toolchains | none possible | **51 found and driven** |
+| Toolchains | none possible | **52 found and driven, 17 installed directly** |
 | Where files live | app-private storage | `%LOCALAPPDATA%\PyCmd`, an ordinary folder |
 | Music tab | yes, with lock-screen controls | no — Windows has no lock screen to draw them on |
 | Updates | installs the APK over itself | downloads, verifies, and lets you replace the exe |

@@ -54,6 +54,18 @@ hiddenimports = [
     "pycmd_langs.go_values",
     "pycmd_langs.rust_interp", "pycmd_langs.rust_parser",
     "pycmd_langs.rust_stdlib", "pycmd_langs.rust_values",
+    # PyCmd Learn: the engine loads its course modules by name, and the
+    # Windows-only courses are loaded the same way from pycmd_win.courses.
+    "pycmd_teach",
+    "pycmd_teach.courses_core", "pycmd_teach.courses_systems",
+    "pycmd_teach.courses_script", "pycmd_teach.courses_markup",
+    "pycmd_teach.extra_core", "pycmd_teach.extra_systems",
+    "pycmd_teach.extra_script", "pycmd_teach.extra_markup",
+    "pycmd_win.courses", "pycmd_win.courses.functional", "pycmd_win.courses.dotnet",
+    "pycmd_win.courses.beam", "pycmd_win.courses.jvm", "pycmd_win.courses.data",
+    "pycmd_win.courses.classic", "pycmd_win.courses.scripting",
+    "pycmd_win.features", "pycmd_win.learn", "pycmd_win.fetch", "pycmd_win.portable",
+    "xml.etree.ElementTree",
     # Standard library corners the engine reaches for at runtime.
     "sqlite3", "ssl", "hashlib", "zipfile", "tarfile", "email.mime.text",
     "http.server", "socketserver", "webbrowser", "ctypes.wintypes",

@@ -1,0 +1,76 @@
+{
+  "id": "pycmd.music-pro",
+  "name": "Music Pro",
+  "version": "2.6.0",
+  "author": "PyCmd",
+  "description": "Two DJ decks with a crossfader, tempo, cue points and loops, the phone's own equaliser, bass boost, stereo widener and reverb on each deck - and a way to reach the music you keep somewhere else. It can see and drive whatever else on this phone is playing, hand a search to any music app you have installed, and search catalogues of freely licensed music you are allowed to keep. It does not stream from anybody's service and does not ask for your password to one.",
+  "entry": "main.py",
+  "panel": "ui.html",
+  "tab": {
+    "title": "Music Pro",
+    "description": "Two decks, effects, and the rest of this phone's music",
+    "icon": "music"
+  },
+  "commands": [
+    {
+      "name": "deck",
+      "help": "deck [a|b] <track> - load a track onto a deck"
+    },
+    {
+      "name": "mix",
+      "help": "mix [0-100] - where the crossfader sits"
+    },
+    {
+      "name": "nowplaying",
+      "help": "What every app on this phone is playing"
+    },
+    {
+      "name": "findmusic",
+      "help": "findmusic <words> - search the free catalogues"
+    }
+  ],
+  "permissions": [
+    "files",
+    "network"
+  ],
+  "extends": [
+    {
+      "tab": "music",
+      "title": "Music Pro",
+      "description": "Decks, effects, other apps and free catalogues",
+      "panel": "ui.html",
+      "height": "tall",
+      "open": false
+    }
+  ],
+  "settings": [
+    {
+      "name": "catalogue",
+      "type": "choice",
+      "label": "Search for free music in",
+      "options": ["both", "jamendo", "archive"],
+      "default": "both",
+      "help": "Jamendo is Creative Commons music. The Internet Archive holds live recordings and the public domain."
+    },
+    {
+      "name": "results",
+      "type": "number",
+      "label": "How many results",
+      "default": 20
+    },
+    {
+      "name": "jamendo_id",
+      "type": "text",
+      "label": "Jamendo client id",
+      "default": "",
+      "help": "Free from developer.jamendo.com. Without one, only the Internet Archive is searched."
+    }
+  ],
+  "guides": [
+    {
+      "file": "GUIDE.md",
+      "title": "Music Pro",
+      "summary": "The decks, the effects, controlling other apps, and where the free music comes from."
+    }
+  ]
+}

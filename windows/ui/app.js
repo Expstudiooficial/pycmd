@@ -184,17 +184,28 @@ const TABS = [
   { id: 'editor', name: 'Editor', key: '✎' },
   { id: 'files', name: 'Files', key: '☷' },
   { id: 'run', name: 'Run', key: '▶' },
+  { id: 'search', name: 'Search', key: '⌕' },
+  { id: 'git', name: 'Git', key: '⑂' },
+  { id: 'tasks', name: 'Tasks', key: '☰' },
+  { group: 'Learn' },
+  { id: 'learn', name: 'PyCmd Learn', key: '★' },
   { group: 'Build' },
   { id: 'toolchains', name: 'Toolchains', key: '⚙' },
   { id: 'languages', name: 'Languages', key: '℘' },
+  { id: 'android', name: 'Android Lab', key: '▲' },
   { id: 'servers', name: 'Servers', key: '≡' },
   { id: 'pages', name: 'Pages', key: '▦' },
-  { group: 'More' },
   { id: 'packages', name: 'Packages', key: '◎' },
+  { group: 'Tools' },
+  { id: 'tools', name: 'Tools', key: '⚒' },
+  { id: 'snippets', name: 'Snippets', key: '❝' },
+  { id: 'notes', name: 'Notes', key: '✐' },
+  { id: 'ports', name: 'Ports', key: '⇄' },
+  { group: 'PyCmd' },
   { id: 'plugins', name: 'Plugins', key: '◈' },
-  { id: 'android', name: 'Android Lab', key: '▲' },
   { id: 'copies', name: 'Copies', key: '⧉' },
   { id: 'docs', name: 'Guides', key: '?' },
+  { id: 'settings', name: 'Settings', key: '◐' },
   { id: 'system', name: 'System', key: '⌘' },
 ];
 
@@ -323,6 +334,7 @@ function wireShell() {
   });
   document.getElementById('btnLog').addEventListener('click', () => go('log'));
   document.getElementById('btnAbout').addEventListener('click', showAbout);
+  document.getElementById('btnPalette').addEventListener('click', () => paletteOpen());
 
   PyCmd.on('ready', (event) => {
     PyCmd.state.ready = true;

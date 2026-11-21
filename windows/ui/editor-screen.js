@@ -315,6 +315,7 @@ function edDrawBar() {
 
   host.appendChild(group(
     b('Run', 'Save it and run it (Ctrl+Enter)', edRun, has ? ' good' : ''),
+    b('Run with…', 'Arguments and input for the program', edRunWith, ''),
   ));
 
   host.appendChild(group(
@@ -505,6 +506,8 @@ async function edOpenPath(path, onDisk) {
   }
   PyCmd.closeSheet();
   const name = path.split(/[\\/]/).pop();
+  // Remembered for the command palette and the Files screen's Recent list.
+  PyCmd.call('recent.add', { path, onDisk: !!onDisk });
   edAdd({
     path, name, disk: !!onDisk,
     language: edLanguageId(reply.language, name),
@@ -576,14 +579,38 @@ function edSaveAs(which) {
   });
 }
 
-async function edRun() {
+async function edRun(options) {
   const file = edCurrent();
   if (!file) { PyCmd.toast('Nothing to run.'); return; }
   const saved = await edSave(file);
   if (!saved) return;
   go('console');
-  const reply = await PyCmd.call('run.file', { path: file.path });
+  const extra = options && options.constructor === Object ? options : {};
+  const reply = await PyCmd.call('run.file', Object.assign({ path: file.path }, extra));
   if (!reply.ok) { PyCmd.toast(reply.error || 'that would not run'); return; }
+}
+
+/** Run with arguments and input - remembered per file, so F5 after it repeats them. */
+function edRunWith() {
+  const file = edCurrent();
+  if (!file) { PyCmd.toast('Nothing to run.'); return; }
+  const key = 'pycmd.runwith.' + file.path;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { saved = {}; }
+  const args = PyCmd.el('input', { class: 'mono', placeholder: 'Arguments, e.g. --verbose "two words"', value: saved.args || '' });
+  const stdin = PyCmd.el('textarea', { class: 'plain mono', rows: '5', placeholder: 'Input the program reads (optional)' });
+  stdin.value = saved.stdin || '';
+  const go2 = () => {
+    try { localStorage.setItem(key, JSON.stringify({ args: args.value, stdin: stdin.value })); } catch (e) { /* ok */ }
+    PyCmd.closeSheet();
+    edRun({ args: args.value, stdin: stdin.value });
+  };
+  args.addEventListener('keydown', (e) => { if (e.key === 'Enter') go2(); });
+  PyCmd.sheet('Run ' + file.name + ' with…', PyCmd.el('div', {},
+    PyCmd.el('label', { class: 'field' }, PyCmd.el('span', { text: 'Arguments' }), args),
+    PyCmd.el('label', { class: 'field' }, PyCmd.el('span', { text: 'Standard input' }), stdin),
+    PyCmd.el('button', { class: 'small primary', text: 'Run', onclick: go2 })));
+  setTimeout(() => args.focus(), 50);
 }
 
 function edGoToLine() {

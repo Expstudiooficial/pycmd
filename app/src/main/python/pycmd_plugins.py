@@ -997,6 +997,30 @@ class Api:
         """Tells the app something it is showing has changed underneath it."""
         return self._ask("refresh", what=str(what).strip().lower())
 
+    def request(self, action: str, **detail) -> bool:
+        """Asks the app for something by name, for the things with no method.
+
+        The named methods above cover what most plugins need. Some things the
+        app can do are too specific to deserve one - two DJ decks, a
+        crossfader, the transport controls of whatever else is playing on this
+        phone - and a method each would be a plugin API that grew a limb every
+        time a plugin wanted something.
+
+        This is the same channel with the name passed in. Everything the
+        methods promise still holds: it is a *request*, it is delivered rather
+        than done, nothing waits on it, and an action the app has never heard
+        of is written to the debug log and ignored. A plugin cannot invent a
+        capability with it - it can only ask for one the app already has.
+
+        The answer, when there is one, comes back as an event: ask for
+        `mixer.state` and the app fires `mixer_state` at everything listening.
+        """
+        name = str(action or "").strip().lower()
+        if not name or not all(ch.isalnum() or ch in "._-" for ch in name):
+            _report("warn", f"[{self.name}] {action!r} is not an action name")
+            return False
+        return self._ask(name, **detail)
+
     # -- settings the user can change ---------------------------------------
 
     def setting(self, name: str, default=None):
@@ -1375,6 +1399,34 @@ BRIDGE = """
     (listeners.message || []).forEach(function (fn) { fn(parsed); });
   };
 
+  /*
+   * The theme the app is wearing.
+   *
+   * The app appends a block of CSS variables to every panel, so a panel that
+   * only uses `var(--accent)` and friends never has to think about this. It is
+   * here for the two or three things CSS cannot do: a canvas that has to pick
+   * its own stroke colour, and a chart that needs to know whether it is
+   * drawing on black or on white.
+   *
+   * Starts as the Classic Green answer so that a panel reading it during its
+   * first script gets something sensible rather than undefined.
+   */
+  var theme = { dark: true, motion: 'full', theme: 'classic' };
+
+  window.__pycmdOnTheme = function (t) {
+    theme = { dark: !!t.dark, motion: t.motion || 'full', theme: t.theme || '' };
+    (listeners.theme || []).forEach(function (fn) {
+      try { fn(theme); } catch (e) {}
+    });
+  };
+
+  /** One of the app's colours, by its CSS variable name without the dashes. */
+  function colour(name) {
+    var value = getComputedStyle(document.documentElement)
+      .getPropertyValue('--' + String(name).replace(/[^a-z0-9-]/gi, ''));
+    return (value || '').trim();
+  }
+
   window.pycmd = {
     call: call,
     poll: poll,
@@ -1382,7 +1434,10 @@ BRIDGE = """
     toast: function (text) { window.__pycmd_panel.toast(String(text)); },
     log: function (text) { window.__pycmd_panel.log(String(text)); },
     close: function () { window.__pycmd_panel.close(); },
-    plugin: JSON.parse(window.__pycmd_panel.manifest())
+    plugin: JSON.parse(window.__pycmd_panel.manifest()),
+    theme: function () { return theme; },
+    colour: colour,
+    color: colour
   };
 
   // Whether the finger came down on something the page scrolls itself.
@@ -1404,13 +1459,71 @@ BRIDGE = """
     return false;
   }
 
+  // Whether the finger came down on something that owns the whole drag.
+  //
+  // A slider is the case that matters. Dragging one is sideways, and the app
+  // behind the panel is a list that scrolls up and down - so the app has to
+  // be told to keep its hands off before the first move arrives, or the drag
+  // is taken away a few pixels in and the thumb stops following the finger.
+  //
+  // `touch-action: none` is the standard way a page says "this element
+  // handles its own gestures", so anything carrying it counts too, and a
+  // panel can mark anything else with `data-pycmd-drag`.
+  function grabsDrag(node) {
+    while (node && node.nodeType === 1 && node !== document.body) {
+      // Every one of these is guarded. A node that does not answer one of
+      // them - and there are more of those about than you would think: SVG
+      // elements, a shadow host, whatever a library put in the tree - used to
+      // throw, and the throw took the *other* signal down with it, so a panel
+      // with one odd element in it silently lost its scrolling as well.
+      var tag = '';
+      try { tag = String(node.tagName || '').toLowerCase(); } catch (error) { tag = ''; }
+
+      if (tag === 'input' && typeof node.getAttribute === 'function') {
+        var type = '';
+        try { type = String(node.getAttribute('type') || '').toLowerCase(); } catch (e1) { type = ''; }
+        if (type === 'range' || type === 'color') return true;
+      }
+
+      if (typeof node.hasAttribute === 'function') {
+        try {
+          if (node.hasAttribute('data-pycmd-drag')) return true;
+        } catch (e2) { /* not a node that answers; keep walking */ }
+      }
+
+      try {
+        var style = window.getComputedStyle(node);
+        if (style && style.touchAction === 'none') return true;
+      } catch (e3) { /* no style for this node; keep walking */ }
+
+      node = node.parentNode;
+    }
+    return false;
+  }
+
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('touchstart', function (event) {
-      if (!window.__pycmd_panel || !window.__pycmd_panel.innerScroll) return;
+      var panel = window.__pycmd_panel;
+      if (!panel) return;
+
+      // Worked out separately, so that one of them failing cannot take the
+      // other with it. Both default to false, which is what the app assumed
+      // before either of them existed.
+      var scrolls = false;
+      var grabs = false;
+      try { scrolls = scrollableUnder(event.target); } catch (error) { scrolls = false; }
+      try { grabs = grabsDrag(event.target); } catch (error) { grabs = false; }
+
       try {
-        window.__pycmd_panel.innerScroll(scrollableUnder(event.target));
+        if (typeof panel.ownsGesture === 'function') {
+          panel.ownsGesture(scrolls, grabs);
+        } else if (typeof panel.innerScroll === 'function') {
+          // An older host, which has one answer rather than two. A control
+          // that owns the drag is the more important of the two to report.
+          panel.innerScroll(scrolls || grabs);
+        }
       } catch (error) {
-        // An older host without this method; the app keeps its old guess.
+        // A host without either; the app keeps its old guess.
       }
     }, { passive: true });
   }
@@ -1424,8 +1537,49 @@ BRIDGE = """
 
 PANEL_CSS = """
 <style>
-:root { color-scheme: dark; }
-* { box-sizing: border-box; }
+/*
+  The house style for plugin panels.
+
+  Every colour here is a CSS variable with the Classic Green value as its
+  fallback, and the app overwrites the lot by appending a `:root` block the
+  moment the document starts (see WebTheme in Theme.kt). That is what makes a
+  panel change colour with the rest of the app instead of staying the shade it
+  was written in.
+
+  Before 2.7.0 this file had its own blue palette, and the result was exactly
+  what people said it was: the panels looked like a different app that had been
+  connected to this one. They were not a different app - they just had their
+  own colours, their own button shape and their own idea of how big a gap
+  between two cards should be. So this is the app's own vocabulary, written
+  once: a card is the app's card, a button is the app's button, and a slider is
+  the app's slider.
+
+  Plain element selectors first, so a panel written years ago with nothing but
+  `<button>` and `<input>` in it comes out looking current. Classes are for
+  the things HTML has no element for.
+*/
+:root {
+  --bg: #0B0F14;
+  --surface: #111823;
+  --surface-high: #17202D;
+  --outline: #243044;
+  --fg: #D7E0EA;
+  --muted: #8A9AAF;
+  --accent: #4DD0A0;
+  --accent-dim: #2C8A6B;
+  --accent-soft: rgba(77, 208, 160, 0.14);
+  --on-accent: #04231A;
+  --info: #7AA2F7;
+  --warning: #F2C97D;
+  --danger: #FF6B6B;
+  --radius: 14px;
+  --gap: 10px;
+  color-scheme: dark;
+}
+:root[data-pycmd-dark="false"] { color-scheme: light; }
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
 /*
   The panel is an ordinary page and the document is what scrolls.
 
@@ -1440,25 +1594,349 @@ PANEL_CSS = """
   a page, and a page taller than the screen scrolls the way pages do.
 */
 body {
-  margin: 0; padding: 16px 14px 32px;
-  background: #0B0F14; color: #DCE3EC;
+  margin: 0;
+  padding: 14px 14px 36px;
+  background: var(--bg);
+  color: var(--fg);
   font: 15px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3 { color: #F1F5FA; line-height: 1.25; margin: 1.2em 0 .5em; }
-h1 { font-size: 1.5em; } h2 { font-size: 1.2em; }
-button {
-  font: inherit; padding: 10px 16px; border-radius: 12px;
-  border: 1px solid #2E7DD1; background: #16324D; color: #DCE3EC;
+
+/* ----------------------------------------------------------- type */
+
+h1, h2, h3, h4 {
+  color: var(--fg);
+  line-height: 1.25;
+  margin: 1.15em 0 .45em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
-button:active { background: #1E4269; }
+h1 { font-size: 1.42em; }
+h2 { font-size: 1.16em; }
+h3 { font-size: 1.02em; }
+h1:first-child, h2:first-child, h3:first-child { margin-top: 0; }
+
+/*
+  A section heading, matching the one the app's own screens use: small, upper
+  case, in the muted colour, sitting above a card rather than inside it. The
+  app has looked like this since the Files tab was written; the panels had no
+  equivalent, which is half of why they read as foreign.
+*/
+.section {
+  margin: 18px 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.section:first-child { margin-top: 2px; }
+
+p { margin: .55em 0; }
+small, .muted { color: var(--muted); font-size: .88em; }
+strong { font-weight: 600; }
+hr { border: 0; border-top: 1px solid var(--outline); margin: 16px 0; }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); }
+a:active { color: var(--accent-dim); }
+
+/* ----------------------------------------------------------- cards */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: var(--gap) 0;
+}
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+
+/* A card that wants to be noticed - the one with the main action in it. */
+.card.lead { border-color: var(--accent-dim); background: var(--surface-high); }
+.card.warn { border-color: var(--warning); }
+.card.bad { border-color: var(--danger); }
+
+/*
+  A row inside a card: a label on the left, a value on the right. The app's
+  InfoRow, in CSS, so a panel reporting the same kind of thing lines up the
+  same way.
+*/
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  min-height: 28px;
+}
+.row + .row { border-top: 1px solid var(--outline); }
+.row .label { color: var(--muted); font-size: .9em; }
+.row .value { text-align: right; overflow-wrap: anywhere; }
+
+/* A horizontal strip of controls that wraps rather than overflowing. */
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: var(--gap) 0; }
+.bar.right { justify-content: flex-end; }
+.spacer { flex: 1 1 auto; }
+
+.grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+
+/* ----------------------------------------------------------- buttons */
+
+/*
+  One shape for every button, and the app's shape: a filled accent for the
+  action somebody came here to do, an outline for everything else. The old
+  stylesheet gave every button a blue fill, so a panel with six buttons shouted
+  six times and the real one was impossible to find.
+*/
+button, .btn, input[type="button"], input[type="submit"] {
+  font: inherit;
+  font-weight: 500;
+  padding: 10px 15px;
+  min-height: 42px;
+  border-radius: calc(var(--radius) - 3px);
+  border: 1px solid var(--outline);
+  background: var(--surface-high);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, transform .08s ease;
+}
+button:active, .btn:active { transform: scale(.985); background: var(--accent-soft); }
+button:disabled, .btn.disabled {
+  opacity: .45;
+  cursor: default;
+  transform: none;
+}
+button.primary, .btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+button.primary:active, .btn.primary:active { background: var(--accent-dim); border-color: var(--accent-dim); }
+button.danger, .btn.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+button.ghost, .btn.ghost { background: transparent; border-color: transparent; color: var(--accent); padding-left: 8px; padding-right: 8px; }
+button.wide, .btn.wide { width: 100%; }
+
+/* ----------------------------------------------------------- fields */
+
+label { display: block; font-size: .88em; color: var(--muted); margin: 10px 0 5px; }
+label.inline { display: flex; align-items: center; gap: 10px; margin: 8px 0; color: var(--fg); font-size: 1em; }
+
 input, textarea, select {
-  font: inherit; width: 100%; padding: 10px 12px; border-radius: 12px;
-  border: 1px solid #223041; background: #10161F; color: #DCE3EC;
+  font: inherit;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: calc(var(--radius) - 3px);
+  border: 1px solid var(--outline);
+  background: var(--bg);
+  color: var(--fg);
+  transition: border-color .12s ease;
 }
-pre, code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; }
-pre { background: #10161F; border: 1px solid #223041; border-radius: 10px; padding: 12px; overflow-x: auto; }
-.card { background: #121A24; border: 1px solid #223041; border-radius: 14px; padding: 14px; margin: 10px 0; }
-a { color: #6FB3FF; }
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
+textarea { min-height: 96px; resize: vertical; }
+select {
+  appearance: none;
+  padding-right: 34px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+                    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% + 1px), calc(100% - 13px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/*
+  Check boxes and radios, drawn rather than left to the WebView.
+  A system check box is blue on every Android build and was the single most
+  obviously-not-this-app thing in the panels.
+*/
+input[type="checkbox"], input[type="radio"] {
+  appearance: none;
+  width: 22px; height: 22px;
+  min-width: 22px;
+  padding: 0;
+  border: 1px solid var(--outline);
+  background: var(--bg);
+  position: relative;
+}
+input[type="checkbox"] { border-radius: 6px; }
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]:checked, input[type="radio"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 7px; top: 3px;
+  width: 5px; height: 10px;
+  border: solid var(--on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 6px; top: 6px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--on-accent);
+}
+
+/*
+  Sliders.
+
+  Android's own range input is a thin grey line with a blue blob on it. Six
+  plugins use sliders for things people actually drag - a volume, a tempo, an
+  equaliser band - so they are worth drawing properly. The track is the app's
+  outline colour and the thumb is the accent, which means an equaliser in the
+  Halloween theme is orange, like everything else.
+
+  `height` and `padding` are deliberate: the thumb is 22px and the row is 34px,
+  so there is a finger-sized target around a control that is otherwise a few
+  pixels tall.
+*/
+input[type="range"] {
+  appearance: none;
+  width: 100%;
+  height: 34px;
+  padding: 0;
+  margin: 2px 0;
+  background: transparent;
+  border: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--outline);
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px; height: 22px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--accent-dim);
+}
+input[type="range"]:active::-webkit-slider-thumb { background: var(--accent-dim); }
+input[type="range"]:disabled::-webkit-slider-thumb { background: var(--muted); box-shadow: none; }
+
+/* ----------------------------------------------------------- code */
+
+pre, code, kbd {
+  font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: .88em;
+}
+code { background: var(--surface-high); padding: 1px 5px; border-radius: 5px; }
+pre {
+  background: var(--bg);
+  border: 1px solid var(--outline);
+  border-radius: calc(var(--radius) - 4px);
+  padding: 12px;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+pre code { background: none; padding: 0; }
+kbd {
+  background: var(--surface-high);
+  border: 1px solid var(--outline);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+
+/* ----------------------------------------------------------- bits */
+
+/* A small label with a count or a state in it. */
+.pill, .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: .78em;
+  font-weight: 600;
+  letter-spacing: .02em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--outline);
+  color: var(--muted);
+  background: var(--surface-high);
+}
+.pill.on { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-soft); }
+.pill.warn { color: var(--warning); border-color: var(--warning); background: transparent; }
+.pill.bad { color: var(--danger); border-color: var(--danger); background: transparent; }
+
+/* The dot the app puts next to a running server. */
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.dot.on { background: var(--accent); }
+.dot.bad { background: var(--danger); }
+
+/* A list of things to choose between. */
+ul.list, ol.list { list-style: none; margin: var(--gap) 0; padding: 0; }
+ul.list li, ol.list li {
+  border: 1px solid var(--outline);
+  border-radius: calc(var(--radius) - 3px);
+  background: var(--surface);
+  padding: 11px 13px;
+  margin: 6px 0;
+}
+ul.list li.on, ol.list li.on { border-color: var(--accent); background: var(--accent-soft); }
+
+table { width: 100%; border-collapse: collapse; font-size: .92em; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--outline); }
+th { color: var(--muted); font-weight: 600; font-size: .85em; text-transform: uppercase; letter-spacing: .05em; }
+
+/* A note the panel wants read before anything is pressed. */
+.note {
+  border-left: 3px solid var(--info);
+  background: var(--surface);
+  border-radius: 0 calc(var(--radius) - 4px) calc(var(--radius) - 4px) 0;
+  padding: 10px 12px;
+  margin: var(--gap) 0;
+  color: var(--muted);
+  font-size: .92em;
+}
+.note.warn { border-left-color: var(--warning); }
+.note.bad { border-left-color: var(--danger); }
+
+/* An empty state: a panel with nothing to show yet should say so. */
+.empty { text-align: center; color: var(--muted); padding: 28px 14px; font-size: .95em; }
+
+/* Tabs along the top of a panel, matching the app's own segmented row. */
+.tabs { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; margin: 0 -2px 4px; }
+.tabs button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: .9em;
+  background: transparent;
+}
+.tabs button.on { background: var(--accent-soft); border-color: var(--accent-dim); color: var(--accent); }
+
+/* A progress bar for the panels that do slow work. */
+progress {
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--outline);
+  overflow: hidden;
+}
+progress::-webkit-progress-bar { background: var(--outline); border-radius: 3px; }
+progress::-webkit-progress-value { background: var(--accent); border-radius: 3px; }
+
+::selection { background: var(--accent-soft); }
+
+/*
+  Honours the Appearance switch. An emulator with no GPU to speak of spends
+  real time on transitions nobody asked for, and so does a five-year-old phone.
+*/
+:root[data-pycmd-motion="reduced"] * {
+  transition: none !important;
+  animation: none !important;
+}
 </style>
 """
 

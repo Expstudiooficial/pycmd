@@ -14,20 +14,44 @@ Turn it on in **More → Plugins → Creator**, and **Creator** appears in More.
 **The bar** at the top holds the project's name and a language chooser, and
 under it the three buttons - **+ Add a block**, **Code** and **Save**. They
 are at the top rather than the bottom so they are on screen the moment the tab
-opens, whatever your script is doing below. Five languages to pick from, and
+opens, whatever your script is doing below. Ten languages to pick from, and
 the language decides which blocks exist:
 
 | Language | Blocks | What it is for |
 |---|---|---|
-| Python | 154 | Runs in the app - everything the console can do |
-| JavaScript | 98 | A page's behaviour, or a script on its own |
-| HTML | 49 | The page itself |
-| CSS | 42 | How the page looks |
-| Markdown | 20 | Notes and documents |
+| Python | 202 | Runs in the app - everything the console can do |
+| Go | 108 | Runs in the app, on the Go interpreter it carries |
+| Rust | 102 | Runs in the app, on the Rust interpreter it carries |
+| C | 100 | Runs in the app, on the C interpreter it carries |
+| JavaScript | 138 | Runs in the app. A page's behaviour, or a script on its own |
+| Shell | 67 | Runs in the app. POSIX sh, which is what Android gives you |
+| HTML | 70 | The page itself |
+| CSS | 68 | How the page looks |
+| Markdown | 29 | Notes and documents |
+| JSON | 20 | Settings and data, with the commas put in for you |
 
-Three hundred and sixty-three in all. **Switching language does not throw
-anything away**: Creator keeps one script per language, so the chooser moves
-between five drafts and your Python is still there when you come back.
+Nine hundred and four in all, and the chooser says which of them this phone
+can run. **Switching language does not throw anything away**: Creator keeps
+one script per language, so the chooser moves between ten drafts and your
+Python is still there when you come back.
+
+**Every language has an example**, and the **Example** button loads it. Each
+one is a whole program rather than a fragment, because the first thing anybody
+does with a starter is press Run, and a starter that does not run teaches the
+wrong lesson about whether any of this works. An empty page is the worst place
+to start learning a language and it is exactly where switching used to leave
+you.
+
+**A word about Shell.** A `.sh` file on the phone is run by
+`/system/bin/sh`, which on Android is mksh - so `[[ ]]`, arrays and
+`function name()` are simply not there. Every shell block is written in the
+shell the device actually has, not in bash.
+
+**A word about JSON.** No JSON block carries a comma. The compiler puts them
+in, by the only rule there is: a line needs one unless it opens something, or
+unless the thing after it closes something. So the two mistakes everybody
+makes writing JSON by hand - a missing comma and one too many - cannot be made
+here. If a project still is not valid JSON, **Code** says so.
 
 **Your script** is the middle, and every row is **the line that block writes** -
 real code, from the same compiler that writes the file - with the block's
@@ -127,7 +151,7 @@ blocks save hello   # write it into the workspace
 ## What it will not do
 
 **It cannot read a file back into blocks.** Blocks go one way. Reading source
-back would mean a parser for each of the five languages, kept correct forever,
+back would mean a parser for each of the ten languages, kept correct forever,
 and the direction people actually want is this one - where the syntax errors
 are.
 

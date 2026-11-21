@@ -441,3 +441,19 @@ class Chan:
             if not ok:
                 return
             yield value
+
+
+class TypedMap(dict):
+    """A Go map that knows what its values are.
+
+    Reading a missing key gives the value type's zero, and that zero has to
+    be the right kind: `m[k] = append(m[k], 1)` on a `map[string][]int` reads
+    a nil slice, appends to it, and stores the result. A plain dict had no way
+    to know its values were slices, so it handed back 0 and append refused it.
+    """
+
+    __slots__ = ("value_type",)
+
+    def __init__(self, *args, value_type=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.value_type = value_type

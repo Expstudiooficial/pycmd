@@ -469,6 +469,19 @@ def selftest() -> int:
             if not reply.get("ok"):
                 problems.append(f"{name} answered {reply.get('error')}")
 
+        # 4.0: PyCmd Learn's courses are loaded by name, which is exactly the
+        # kind of import a bundle silently drops - so count them here.
+        catalogue = host_module.call(instance, "learn")
+        courses = catalogue.get("courses", [])
+        if len(courses) < 50:
+            problems.append(f"only {len(courses)} Learn courses were packed")
+        if catalogue.get("totals", {}).get("lessons", 0) < 10000:
+            problems.append("Learn has too few lessons - a course module is missing")
+        for name in ("android.plan", "portables", "look", "templates", "machine", "whatsnew"):
+            reply = host_module.call(instance, name)
+            if not reply.get("ok"):
+                problems.append(f"{name} answered {reply.get('error')}")
+
         roots = build_roots()
         for key in ("_ui", "web", "docs"):
             if not os.path.isdir(str(roots.get(key, ""))):
@@ -543,6 +556,8 @@ def main(argv=None) -> int:
         min_size=MINIMUM, background_color="#0B0F14",
         text_select=True,
     )
+    # The file dialogs are the window's, so the host keeps a hold of it.
+    host.window = window
     _boot(host, window)
     updates.start_background_check(host)
     webview.start(debug=bool(os.environ.get("PYCMD_DEBUG")))

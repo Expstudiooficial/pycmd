@@ -216,6 +216,8 @@ async function conSend() {
   if (Con.history[0] !== text) {
     Con.history.unshift(text);
     if (Con.history.length > CONSOLE_HISTORY_MAX) Con.history.pop();
+    // Kept on disk too, so the arrow keys still remember after a restart.
+    PyCmd.call('history.add', { line: text });
   }
 
   // Every line gets offered to the host first. Almost all of them come back
@@ -352,7 +354,14 @@ function conCelebrate(secret) {
 // Events from the engine
 // ---------------------------------------------------------------------------
 
+async function conLoadHistory() {
+  const reply = await PyCmd.call('history', {});
+  if (!reply.ok || Con.history.length) return;
+  Con.history = (reply.lines || []).slice().reverse().slice(0, CONSOLE_HISTORY_MAX);
+}
+
 function conWireEvents() {
+  PyCmd.on('ready', conLoadHistory);
   PyCmd.on('output', (event) => {
     if ((event.channel || 'console') !== 'console') return;
     conWrite(event.stream || 'stdout', event.text || '');

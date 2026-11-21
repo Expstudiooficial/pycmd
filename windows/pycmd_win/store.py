@@ -33,6 +33,9 @@ FOLDERS = (
     "versions",       # older builds, so an update can be undone
     "logs",
     "cache",
+    "toolchains",     # portable toolchains PyCmd downloaded itself, one folder each
+    "android",        # Android Lab's own SDK, JDK and emulator images
+    "learn",          # PyCmd Learn progress
 )
 
 _root = ""

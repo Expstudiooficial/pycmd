@@ -295,7 +295,19 @@ def run_command(argv, write, cwd: str = "", run_id: str = "") -> dict:
     return {"ok": code == 0, "exit": code, "run": run.as_dict()}
 
 
-def run_file(path: str, write, prefer: str = "", run_id: str = "") -> dict:
+def _feed(process, text) -> None:
+    """Writes the input a run was given, then closes stdin so the program sees EOF."""
+    def work():
+        try:
+            process.stdin.write(text)
+            process.stdin.close()
+        except (OSError, ValueError):
+            pass
+    threading.Thread(target=work, name="pycmd-stdin", daemon=True).start()
+
+
+def run_file(path: str, write, prefer: str = "", run_id: str = "", args=None,
+             stdin=None) -> dict:
     """Runs one file, streaming its output through `write`.
 
     Blocking: the caller is expected to be on a thread of its own, which is
@@ -345,10 +357,15 @@ def run_file(path: str, write, prefer: str = "", run_id: str = "") -> dict:
         commands = plan["commands"]
         for index, command in enumerate(commands):
             building = plan["builds"] and index == 0
+            last = index == len(commands) - 1
             if building:
                 write(f"[PyCmd] building...\n")
+            if last and args:
+                command = list(command) + [str(a) for a in args]
             try:
-                process = _spawn(command, plan["cwd"])
+                process = _spawn(command, plan["cwd"], stdin if last else None)
+                if last and stdin is not None:
+                    _feed(process, stdin)
             except FileNotFoundError:
                 message = f"{command[0]} is not there any more - was it uninstalled?"
                 write(f"[PyCmd] {message}\n")

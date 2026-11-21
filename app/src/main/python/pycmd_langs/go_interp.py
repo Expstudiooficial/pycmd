@@ -20,7 +20,7 @@ from .clike_lexer import LangSyntaxError
 from . import go_parser, go_stdlib
 from .go_values import (
     Array, Bound, Builtin, Chan, ErrorValue, Func, GoError, GoExit, GoPanic,
-    NIL, Nil, Package, Pointer, Rune, Slice, Struct, copy_value, go_string,
+    NIL, Nil, Package, Pointer, Rune, Slice, Struct, TypedMap, copy_value, go_string,
     type_name,
 )
 
@@ -1296,8 +1296,7 @@ class Interpreter:
             empty.backing = []
             return empty
         if kind == "map":
-            mapping = {}
-            return mapping
+            return TypedMap(value_type=declared[2] if len(declared) > 2 else None)
         return NIL
 
     def struct_type_name(self, declared) -> str:
@@ -1347,7 +1346,7 @@ class Interpreter:
             return Slice(values, 0, len(values), len(values), self.type_label(element))
 
         if kind == "map":
-            mapping = {}
+            mapping = TypedMap(value_type=resolved[2])
             for key, value_node in items:
                 if key is None:
                     raise GoError("a map literal needs keys", line)

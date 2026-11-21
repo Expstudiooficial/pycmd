@@ -103,7 +103,7 @@ uses. Now install the real thing.
 
 ## 6. Install a compiler
 
-Go to **Toolchains**. It lists 51 compilers and interpreters and says which
+Go to **Toolchains**. It lists 52 compilers and interpreters and says which
 are on this machine. Find **Go** under *Not installed* and press **Run**
 beside `winget install GoLang.Go`.
 

@@ -184,8 +184,64 @@ def _scan_values(interp, fmt: str, pointers: list) -> int:
     return assigned
 
 
+def _comparator(interp, compare, line):
+    """A user's comparison function, as something Python's sort can call.
+
+    qsort hands the comparator two `const void *`, which the program casts to
+    whatever it is sorting and dereferences. Each element is handed over in a
+    one-slot storage of its own, so the cast-and-dereference reads it back
+    exactly as it would read the real array.
+    """
+    if not (isinstance(compare, tuple) and len(compare) == 2 and compare[0] == "__function__"):
+        raise CRuntimeError("qsort's last argument has to be a function", line)
+    function = interp.functions.get(compare[1])
+    if function is None:
+        raise CRuntimeError(f"'{compare[1]}' is not a function", line)
+
+    def compare_two(a, b, base="int"):
+        result = interp.call_function(
+            function, [Pointer([a], 0, base), Pointer([b], 0, base)], line)
+        return int(result or 0)
+
+    return compare_two
+
+
 def call_builtin(interp, name, args, arg_nodes, scope, line):
     """Returns (handled, result). Unknown names fall through to the caller."""
+
+    # ---------------------------------------------------------------- stdlib
+    if name == "qsort":
+        import functools
+
+        if len(args) < 4:
+            raise CRuntimeError("qsort takes a base, a count, a size and a comparator", line)
+        base, count = args[0], int(args[1])
+        compare = _comparator(interp, args[3], line)
+        storage = base.storage
+        start = base.index
+        values = list(storage[start:start + count])
+        values.sort(key=functools.cmp_to_key(lambda a, b: compare(a, b, base.base)))
+        for offset, value in enumerate(values):
+            storage[start + offset] = value
+        return True, 0
+
+    if name == "bsearch":
+        if len(args) < 5:
+            raise CRuntimeError("bsearch takes a key, a base, a count, a size and a comparator", line)
+        key, base, count = args[0], args[1], int(args[2])
+        compare = _comparator(interp, args[4], line)
+        wanted = key.read() if hasattr(key, "read") else key
+        low, high = 0, count - 1
+        while low <= high:
+            middle = (low + high) // 2
+            order = compare(wanted, base.storage[base.index + middle], base.base)
+            if order == 0:
+                return True, Pointer(base.storage, base.index + middle, base.base)
+            if order < 0:
+                high = middle - 1
+            else:
+                low = middle + 1
+        return True, Pointer(None, 0, base.base)
 
     # ------------------------------------------------------------------ stdio
     if name == "printf":
