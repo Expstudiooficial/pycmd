@@ -609,7 +609,38 @@ def catalogue() -> list:
 
 
 def _missed_count(data: dict) -> int:
-    return sum(len(rows) for rows in data.get("missed", {}).values() if isinstance(rows, list))
+    """Wrong answers still to put right - counting only lessons that still exist.
+
+    A lesson can stop existing between versions (2.8.1 dropped the one-line
+    "spot the mistake" lessons), and a Review button promising three lessons
+    that opens two is a button that lies.
+    """
+    total = 0
+    for course_id, rows in (data.get("missed") or {}).items():
+        course_ = _courses().get(course_id)
+        if course_ is None or not isinstance(rows, list):
+            continue
+        total += sum(1 for lesson_id in rows if _find(course_, lesson_id) is not None)
+    return total
+
+
+def _nearest(course_: Course, lesson_id: str):
+    """The lesson with this id, or - if it no longer exists - the next one after
+    where it was, so Continue still lands somewhere sensible."""
+    row = _find(course_, lesson_id)
+    if row is not None:
+        return row
+    try:
+        unit, topic, kind = lesson_id.split(".")
+        here = (int(unit), int(topic), KINDS.index(kind))
+    except ValueError:
+        return None
+    for unit_row in _tree(course_):
+        for candidate in unit_row["lessons"]:
+            u, t, k = candidate["id"].split(".")
+            if (int(u), int(t), KINDS.index(k)) > here:
+                return candidate
+    return None
 
 
 def _continue_point(data: dict) -> dict:
@@ -623,7 +654,7 @@ def _continue_point(data: dict) -> dict:
     course_ = _courses().get(last.get("course", ""))
     if course_ is None:
         return {}
-    row = _find(course_, last.get("lesson", ""))
+    row = _nearest(course_, last.get("lesson", ""))
     if row is None:
         return {}
     done = _done_set(data, course_.id)
