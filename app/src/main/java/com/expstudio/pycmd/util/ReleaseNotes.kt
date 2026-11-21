@@ -41,6 +41,21 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 28,
+            versionName = "2.8.1",
+            headline = "Every \"Spot the mistake\" lesson is a real question now.",
+            fixed = listOf(
+                "\"Spot the mistake\" on a one-line program showed a single line " +
+                    "to tap, so it could not be got wrong and taught nothing. Those " +
+                    "164 lessons are gone; every one left has at least two lines " +
+                    "to choose from. PyCmdTeach has 8,874 lessons.",
+                "If you missed one of those lessons, Review no longer counts it, " +
+                    "so the number on the button matches what it opens.",
+                "If the last lesson you opened was one of them, Continue takes you " +
+                    "to the next lesson in the same topic instead of disappearing.",
+            ),
+        ),
+        ReleaseNote(
             versionCode = 27,
             versionName = "2.8.0",
             headline = "PyCmdTeach more than doubled, and Show me shows you.",

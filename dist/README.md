@@ -1,17 +1,32 @@
 # Prebuilt APK
 
-`PyCmd-2.8.0.apk` — ready to install, nothing else needed.
+`PyCmd-2.8.1.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 2.8.0 |
+| Version | 2.8.1 |
 | Size | 24 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
 The universal APK, as in 2.7.0: one file for a phone and for an emulator.
+
+## What is new in 2.8.1
+
+A small fix to PyCmdTeach.
+
+**"Spot the mistake" is always a real question.** On a program only one line
+long, the lesson showed a single line to tap - it could not be got wrong, so
+it taught nothing. Those 164 lessons are gone, and every "spot the mistake"
+left has at least two lines to choose between. PyCmdTeach has **8,874
+lessons**.
+
+Nobody loses progress over it. If you got one of those lessons wrong on 2.8.0,
+**Review** no longer counts it, so the number on the button matches what it
+opens. If it was the last lesson you opened, **Continue** takes you to the
+next lesson in the same topic rather than disappearing.
 
 ## What is new in 2.8.0
 

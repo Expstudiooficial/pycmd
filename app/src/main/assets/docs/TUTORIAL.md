@@ -789,7 +789,7 @@ that already runs, with what it needs already inside it.
 
 ## 11g. PyCmdTeach — learn the language you are writing in
 
-**More → PyCmdTeach.** 28 courses, 9,038 lessons, free, and all of it on the
+**More → PyCmdTeach.** 28 courses, 8,874 lessons, free, and all of it on the
 device — there is nothing to download and no account.
 
 Start with Python if you are not sure. Tap it, then **Start**. The course is

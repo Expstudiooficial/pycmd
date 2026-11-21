@@ -434,6 +434,30 @@ def main():
                     repeats += 1
     check("ordering lessons do repeat lines, and that is allowed", repeats > 0, repeats)
 
+    # ---- 2.8.1: "spot the mistake" always has a choice to make ------------
+    #
+    # A one-line program made a question with one line to tap. Those lessons
+    # are gone, and somebody who missed one on 2.8.0 must not be shown a
+    # Review count for a lesson that no longer exists, nor lose Continue.
+    lonely = [row["id"] for course_ in courses.values() for unit in pycmd_teach._tree(course_)
+              for row in unit["lessons"] if row["kind"] == "bug" and len(row["options"]) < 2]
+    check("no 'spot the mistake' lesson has only one line to choose", not lonely, lonely[:5])
+    gone = "0.0.bug"
+    check("a one-line topic has no bug lesson", pycmd_teach._find(courses["python"], gone) is None)
+    saved = pycmd_teach._read_progress()
+    try:
+        data = dict(saved)
+        data["missed"] = {"python": [gone, "0.0.predict"]}
+        data["last"] = {"course": "python", "lesson": gone}
+        pycmd_teach._write_progress(data)
+        totals = pycmd_teach.totals()
+        check("Review counts only lessons that still exist",
+              totals["missed"] == len(pycmd_teach.review()) == 1, totals["missed"])
+        check("Continue from a lesson that was removed lands on the next one",
+              totals["continue"].get("lesson") == "0.0.write", totals["continue"])
+    finally:
+        pycmd_teach._write_progress(saved)
+
     print(f"{len(courses)} courses, {total_topics} topics, {total_lessons} lessons")
     for course in sorted(courses.values(), key=lambda c: c.name.lower()):
         count = sum(len(u["lessons"]) for u in pycmd_teach._tree(course))

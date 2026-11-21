@@ -403,7 +403,9 @@ def _topic_lessons(course: Course, unit_index: int, topic_index: int, topic: Top
         })
 
     broken = _break(course, topic)
-    if broken:
+    # A one-line snippet would make "which line is broken?" a question with
+    # one answer to tap - finished before it is read - so it is not asked.
+    if broken and len(_lines(broken[0])) >= 2:
         broken_code, _line = broken
         made.append({
             "id": f"{base}.bug",
@@ -607,7 +609,38 @@ def catalogue() -> list:
 
 
 def _missed_count(data: dict) -> int:
-    return sum(len(rows) for rows in data.get("missed", {}).values() if isinstance(rows, list))
+    """Wrong answers still to put right - counting only lessons that still exist.
+
+    A lesson can stop existing between versions (2.8.1 dropped the one-line
+    "spot the mistake" lessons), and a Review button promising three lessons
+    that opens two is a button that lies.
+    """
+    total = 0
+    for course_id, rows in (data.get("missed") or {}).items():
+        course_ = _courses().get(course_id)
+        if course_ is None or not isinstance(rows, list):
+            continue
+        total += sum(1 for lesson_id in rows if _find(course_, lesson_id) is not None)
+    return total
+
+
+def _nearest(course_: Course, lesson_id: str):
+    """The lesson with this id, or - if it no longer exists - the next one after
+    where it was, so Continue still lands somewhere sensible."""
+    row = _find(course_, lesson_id)
+    if row is not None:
+        return row
+    try:
+        unit, topic, kind = lesson_id.split(".")
+        here = (int(unit), int(topic), KINDS.index(kind))
+    except ValueError:
+        return None
+    for unit_row in _tree(course_):
+        for candidate in unit_row["lessons"]:
+            u, t, k = candidate["id"].split(".")
+            if (int(u), int(t), KINDS.index(k)) > here:
+                return candidate
+    return None
 
 
 def _continue_point(data: dict) -> dict:
@@ -621,7 +654,7 @@ def _continue_point(data: dict) -> dict:
     course_ = _courses().get(last.get("course", ""))
     if course_ is None:
         return {}
-    row = _find(course_, last.get("lesson", ""))
+    row = _nearest(course_, last.get("lesson", ""))
     if row is None:
         return {}
     done = _done_set(data, course_.id)
@@ -720,6 +753,10 @@ def lesson(course_id: str, lesson_id: str) -> dict:
     data = _read_progress()
     out["done"] = lesson_id in _done_set(data, course_id)
     out["missed"] = lesson_id in (data.get("missed", {}).get(course_id) or [])
+    if out.get("kind") == "write" and out.get("output") and _external(found.extension):
+        # Marked by running it on this machine, so no "it starts with" crutch.
+        out["graded"] = "run"
+        out["hint"] = ""
     if data.get("last") != {"course": course_id, "lesson": lesson_id}:
         data["last"] = {"course": course_id, "lesson": lesson_id}
         _write_progress(data)
@@ -912,6 +949,24 @@ def _run_through_registry(source: str, extension: str) -> tuple:
 #: module has no way to reach it.
 RUNNABLE = {".py": "python", ".c": "registry", ".rs": "registry", ".go": "registry"}
 
+#: A build that can run more than the phone can sets this to a function
+#: `(source, extension) -> (output, error)`, with a `can(extension)` attribute
+#: saying which extensions it handles. The Windows build points it at the
+#: compilers installed on the machine, so a Haskell lesson there is marked by
+#: running Haskell rather than by comparing text. The phone leaves it None.
+EXTERNAL_RUNNER = None
+
+
+def _external(extension: str):
+    runner = EXTERNAL_RUNNER
+    if runner is None or extension in RUNNABLE:
+        return None
+    can = getattr(runner, "can", None)
+    try:
+        return runner if can is None or can(extension) else None
+    except Exception:  # noqa: BLE001 - a broken hook must not break marking
+        return None
+
 
 def check(course_id: str, lesson_id: str, answer: str) -> dict:
     """Marks an attempt, and remembers it if it was wrong.
@@ -1092,12 +1147,17 @@ def _check_written(course: Course, row: dict, answer: str) -> dict:
     wanted = (row.get("output") or "").strip()
     extension = course.extension
 
-    if row.get("graded") == "run" and extension in RUNNABLE and wanted:
-        how = RUNNABLE[extension]
-        output, error = (
-            _run_python(answer) if how == "python"
-            else _run_through_registry(answer, extension)
-        )
+    external = _external(extension) if wanted else None
+    if wanted and ((row.get("graded") == "run" and extension in RUNNABLE) or external):
+        if external is not None:
+            try:
+                output, error = external(answer, extension)
+            except Exception as failure:  # noqa: BLE001
+                output, error = "", f"{type(failure).__name__}: {failure}"
+        elif RUNNABLE[extension] == "python":
+            output, error = _run_python(answer)
+        else:
+            output, error = _run_through_registry(answer, extension)
         if error:
             return {
                 "ok": True,
