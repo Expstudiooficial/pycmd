@@ -39,6 +39,8 @@ are genuinely easy to get wrong:
 from __future__ import annotations
 
 import os
+
+from . import eol
 import re
 import shutil
 import stat
@@ -356,8 +358,8 @@ def read(path: str) -> dict:
 
     for encoding in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
         try:
-            return {"ok": True, "path": target, "text": raw.decode(encoding),
-                    "bytes": size, "encoding": encoding}
+            return {"ok": True, "path": target, "text": eol.for_editor(raw.decode(encoding)),
+                    "bytes": size, "encoding": encoding, "eol": eol.detect(raw)}
         except UnicodeDecodeError:
             continue
     return {"ok": False, "reason": "encoding",
@@ -379,6 +381,7 @@ def write(path: str, text: str) -> dict:
         return {"ok": False, "error": f"{folder} is not a folder"}
 
     temporary = target + f".pycmd-{int(time.time() * 1000)}"
+    text = eol.keep(target, text)
     try:
         with open(temporary, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)

@@ -1008,6 +1008,24 @@ check("nothing is the root listing, which has drives on it",
 
 _read = disk.read(os.path.join(_sand, "project", "notes.txt"))
 check("a text file reads", _read["ok"] and _read["text"] == "plain\n", _read)
+
+# Windows line endings: the editor must not see "\r", and a save must not
+# quietly turn a Windows file into a Unix one (or the other way round).
+_crlf = os.path.join(_sand, "project", "windows.txt")
+with open(_crlf, "wb") as _f:
+    _f.write(b"one\r\ntwo\r\n")
+_r = disk.read(_crlf)
+check("a CRLF file reaches the editor without stray \\r", _r["text"] == "one\ntwo\n" and _r["eol"] == "crlf", _r)
+disk.write(_crlf, "one\ntwo\nthree\n")
+check("and is saved back with CRLF", open(_crlf, "rb").read() == b"one\r\ntwo\r\nthree\r\n",
+      open(_crlf, "rb").read())
+_lf = os.path.join(_sand, "project", "unix.txt")
+with open(_lf, "wb") as _f:
+    _f.write(b"a\nb\n")
+disk.write(_lf, "a\nb\nc\n")
+check("an LF file stays LF", open(_lf, "rb").read() == b"a\nb\nc\n")
+disk.write(os.path.join(_sand, "project", "fresh.txt"), "x\ny\n")
+check("a new file is written with LF", open(os.path.join(_sand, "project", "fresh.txt"), "rb").read() == b"x\ny\n")
 _binary = disk.read(os.path.join(_sand, "project", "picture.bin"))
 check("a binary one is refused rather than mangled",
       not _binary["ok"] and _binary.get("reason") == "binary", _binary)

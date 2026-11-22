@@ -23,6 +23,7 @@ import shutil
 import time
 
 from . import langs, store
+from . import eol
 
 # What is shown without asking. A workspace with a node_modules in it would
 # otherwise take a second to list and fill the screen with noise.
@@ -149,12 +150,13 @@ def read(relative_path: str) -> dict:
     if size > MAX_TEXT:
         return {"ok": False, "error": f"that file is {size // 1048576} MB, too big to open here"}
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as handle:
-            text = handle.read()
+        with open(path, "rb") as handle:
+            raw = handle.read()
     except OSError as error:
         return {"ok": False, "error": str(error)}
+    text = eol.for_editor(raw.decode("utf-8", errors="replace"))
     return {"ok": True, "path": relative(path), "text": text, "bytes": size,
-            "language": language}
+            "language": language, "eol": eol.detect(raw)}
 
 
 def write(relative_path: str, text: str) -> dict:
@@ -168,6 +170,7 @@ def write(relative_path: str, text: str) -> dict:
         # file rather than half of the new one. Same reasoning as the plugin
         # installer, and the same fix.
         temporary = path + f".pycmd-{int(time.time() * 1000)}"
+        text = eol.keep(path, text)
         with open(temporary, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
         os.replace(temporary, path)
