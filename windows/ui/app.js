@@ -234,7 +234,9 @@ function pluginTabs() {
 }
 
 function drawTabs() {
-  const rail = PyCmd.clear(document.getElementById('tabs'));
+  const rail = document.getElementById('tabs');
+  const scrollTop = rail.scrollTop;
+  PyCmd.clear(rail);
   const panels = pluginTabs();
   const entries = panels.length
     ? TABS.concat([{ group: 'Plugins' }], panels)
@@ -260,6 +262,7 @@ function drawTabs() {
       count ? PyCmd.el('span', { class: 'c', text: String(count) }) : null,
     ));
   });
+  rail.scrollTop = scrollTop;
 }
 
 function go(id) {

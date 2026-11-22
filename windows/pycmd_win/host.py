@@ -36,8 +36,8 @@ import traceback
 
 from . import (android, builtins, bundle, copies, disk, files, install, known,
                langs, portable, runner, setup_all, store, toolchains)
-VERSION = "4.0"
-BUILD = 6
+VERSION = "4.0.5"
+BUILD = 7
 
 _engine_ready = False
 

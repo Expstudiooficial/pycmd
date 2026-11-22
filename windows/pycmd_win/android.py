@@ -38,12 +38,14 @@ One fix per thing that used to go wrong:
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager
 import os
 import platform
 import re
 import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 import xml.etree.ElementTree as ElementTree
@@ -401,6 +403,25 @@ def _quiet(command, timeout=60, env=None) -> tuple:
     return done.returncode == 0, (done.stdout or "") + (done.stderr or "")
 
 
+@contextmanager
+def _sdk_package_file(packages):
+    """Writes SDK package IDs without passing semicolons through a .bat file."""
+    path = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", newline="\n", delete=False,
+                dir=store.folder("android"), prefix="sdk-packages-", suffix=".txt") as handle:
+            path = handle.name
+            handle.write("\n".join(packages) + "\n")
+        yield path
+    finally:
+        if path:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+
+
 # ---------------------------------------------------------------------------
 # The command-line tools, straight from Google
 # ---------------------------------------------------------------------------
@@ -534,11 +555,16 @@ def ensure_packages(write, java: str, api: int, job=None) -> bool:
         return True
     write("[PyCmd] downloading " + ", ".join(missing) + ". The system image is about "
           "2.5 GB and is downloaded once.\n")
-    ok, output = _run(
-        [_tool("sdkmanager"), f"--sdk_root={root}", "--install", *missing], write,
-        IMAGE_TIMEOUT, feed="y\n" * 60, env=_env(root, java), stall=IMAGE_STALL,
-        progress=(lambda p: setattr(job, "percent", p)) if job else None,
-        cancelled=(lambda: job.cancel) if job else None)
+    # Package IDs contain semicolons. Passing them as positional arguments
+    # through sdkmanager.bat makes the Windows CLI split them into separate
+    # package names. Its package-file option preserves each full SDK path.
+    with _sdk_package_file(missing) as package_file:
+        ok, output = _run(
+            [_tool("sdkmanager"), f"--sdk_root={root}",
+             f"--package_file={package_file}"], write,
+            IMAGE_TIMEOUT, feed="y\n" * 60, env=_env(root, java), stall=IMAGE_STALL,
+            progress=(lambda p: setattr(job, "percent", p)) if job else None,
+            cancelled=(lambda: job.cancel) if job else None)
     _sdk_folders(root)
     still = [p for p in wanted if p not in installed_packages(root)]
     if still:
@@ -593,8 +619,9 @@ def fix_accel(how: str = "whpx") -> dict:
         script = os.path.join(root, "extras", "google", "Android_Emulator_Hypervisor_Driver",
                               "silent_install.bat")
         if not os.path.isfile(script):
-            _quiet([_tool("sdkmanager"), f"--sdk_root={root}",
-                    "extras;google;Android_Emulator_Hypervisor_Driver"], 900, env=_env(root))
+            with _sdk_package_file(["extras;google;Android_Emulator_Hypervisor_Driver"]) as package_file:
+                _quiet([_tool("sdkmanager"), f"--sdk_root={root}",
+                        f"--package_file={package_file}"], 900, env=_env(root))
         if not os.path.isfile(script):
             return {"ok": False, "error": "the hypervisor driver could not be downloaded"}
         target, arguments = script, ""

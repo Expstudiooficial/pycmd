@@ -217,20 +217,14 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "4.0",
-    "title": "PyCmd for Windows 4.0",
+    "version": "4.0.5",
+    "title": "PyCmd for Windows 4.0.5",
     "items": [
-        ["PyCmd Learn", "50 courses and 14,700 lessons - 22 languages only the PC can run, "
-                        "marked by actually running your answer."],
-        ["Toolchains that install", "Direct downloads from each vendor, checked against "
-                                    "their published hashes. No package manager needed."],
-        ["Android Lab that works", "Java, the SDK and the emulator set up for you; it "
-                                   "checks acceleration, installs PyCmd and opens it."],
-        ["Command palette", "Ctrl+K finds any screen, file, lesson or action."],
-        ["Themes", "Classic Green, Halloween, Amber, Slate, Paper - or your own colours."],
-        ["Git, Tasks, Search, Tools", "Four new screens for the everyday jobs."],
-        ["And more", "Project templates, snippets, text tools, ports, notes, "
-                     "diagnostics, history that survives a restart."],
+        ["Sidebar navigation", "Changing screens keeps your place in the tab list."],
+        ["Android Lab", "SDK packages with semicolons in their IDs now install correctly "
+                        "on Windows."],
+        ["Windows releases", "A windows-<version> tag builds, verifies and publishes "
+                             "PyCmd.exe automatically."],
     ],
 }
 

@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Version | 4.0 |
+| Version | 4.0.5 |
 | Works on | Windows 10 and newer, 64-bit |
 | Runtime | Edge WebView2, which Windows 10 and 11 already have |
 | Installer | none — it is one exe |
@@ -23,8 +23,9 @@ To make one:
 
 - **On your own machine:**
   `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`
-- **Or push a tag** `windows-v4.0` and let the workflow do it — it builds on
-  a Windows runner, proves the exe starts, writes this manifest with the real
+- **Or push a tag** such as `windows-4.0.5` (the older `windows-v4.0.0`
+  spelling is also supported) and let the workflow do it — it builds on a
+  Windows runner, proves the exe starts, writes this manifest with the real
   hash, and attaches the exe to a release.
 
 ## Where the exe lives
@@ -36,6 +37,15 @@ release for the tag that built it, which is what `latest.json` points at.
 describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
+
+## What is new in 4.0.5
+
+- Fixed sidebar navigation resetting to the top whenever the tab rail is
+  redrawn.
+- Fixed Android Lab SDK package installation on Windows by passing package
+  IDs with semicolons through sdkmanager's package-file option.
+- Windows release automation accepts the `windows-4.0.5` tag spelling and
+  builds, verifies, and attaches `PyCmd.exe` to that GitHub release.
 
 ## What is new in 4.0
 

@@ -5,15 +5,15 @@
 # result can be started to see whether it opens. So the repository holds the
 # source and the recipe, and this makes the artefact.
 #
-# Push a tag like `windows-v1.0.0` and it builds, checks, hashes and attaches
-# the exe to a release. Run it by hand from the Actions tab to get a build
-# without publishing one.
+# Push a tag like `windows-v1.0.0` or `windows-4.0.5` and it builds, checks,
+# hashes and attaches the exe to a release. Run it by hand from the Actions
+# tab to get a build without publishing one.
 
 name: PyCmd for Windows
 
 on:
   push:
-    tags: ["windows-v*"]
+    tags: ["windows-*"]
     branches: [windowsmain]
     paths:
       - "windows/**"
@@ -21,14 +21,16 @@ on:
       - "app/src/main/assets/**"
       - "tools/test_windows.py"
       - ".github/workflows/windows.yml"
+  release:
+    types: [published]
   pull_request:
     paths: ["windows/**", "app/src/main/python/**"]
   workflow_dispatch:
     inputs:
       release:
         description: >-
-          Publish to this release, e.g. windows-v4.0. The tag is moved onto the
-          commit being built, so a release made against the wrong branch is
+          Publish to this release, e.g. windows-4.0.5. The tag is moved onto
+          the commit being built, so a release made against the wrong branch is
           fixed rather than left pointing at it. Leave empty to only build.
         required: false
         default: ""
@@ -45,7 +47,7 @@ jobs:
     # The release this run publishes: the tag that was pushed, or the one asked
     # for when started by hand. Empty means build and check, publish nothing.
     env:
-      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/windows-v') && github.ref_name || inputs.release }}
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/windows-') && github.ref_name || inputs.release }}
     steps:
       - uses: actions/checkout@v4
 
@@ -68,11 +70,14 @@ jobs:
         if: env.RELEASE_TAG != ''
         shell: pwsh
         run: |
-          if ("$env:RELEASE_TAG" -notmatch '^windows-v') { throw "a Windows release tag starts with windows-v, not '$env:RELEASE_TAG'" }
+          if ("$env:RELEASE_TAG" -notmatch '^windows-(v)?\d') { throw "a Windows release tag must be windows-<version> or windows-v<version>, not '$env:RELEASE_TAG'" }
           python tools/make_latest_windows.py --agrees-with-tag "$env:RELEASE_TAG"
 
       - name: Check
         run: python tools/test_windows.py
+
+      - name: Check Windows UI navigation
+        run: node tools/test_windows_ui.js
 
       - name: Build
         run: python -m PyInstaller windows/build/pycmd.spec --noconfirm --distpath dist-windows/build
@@ -146,7 +151,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = "$env:RELEASE_TAG"
-          $version = $tag -replace "^windows-v", ""
+          $version = $tag -replace "^windows-(v)?", ""
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # Started by hand: put the tag on the commit that was just built. A

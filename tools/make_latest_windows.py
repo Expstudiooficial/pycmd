@@ -5,7 +5,7 @@ The Windows twin of `tools/make_latest.py`, and separate from it on purpose:
 the exe and the APK are different artefacts on different schedules, and one
 manifest describing both would eventually offer somebody the wrong one.
 
-    python tools/make_latest_windows.py dist-windows/PyCmd-1.0.0.exe --notes "..."
+    python tools/make_latest_windows.py dist-windows/PyCmd-1.0.0.exe --notes "..." --tag windows-1.0.0
     python tools/make_latest_windows.py          # just check what is there
 
 Called with no arguments it verifies rather than writes: that the manifest
@@ -104,7 +104,7 @@ def agrees_with_tag(tag: str) -> int:
     two numbers side by side.
     """
     version, build = source_version()
-    wanted = tag[len("windows-v"):] if tag.startswith("windows-v") else tag
+    wanted = re.sub(r"^windows-(?:v)?", "", tag)
     # Compared as numbers, not as text. "2.0" and "2.0.0" are the same version
     # written two ways, and a release should not be blocked over a trailing
     # zero - which is exactly what happened, on a tag that was perfectly fine.
@@ -116,7 +116,7 @@ def agrees_with_tag(tag: str) -> int:
         print("  attached to one release and the manifest would point at another.",
               file=sys.stderr)
         print(f"  Set VERSION = \"{wanted}\" and raise BUILD, or tag "
-              f"windows-v{version}.", file=sys.stderr)
+              f"windows-{version} (or windows-v{version}).", file=sys.stderr)
         return 1
     print(f"the tag and the source agree: {version} (build {build})")
     return 0
@@ -178,7 +178,7 @@ def build_manifest(exe: str, notes: str, tag: str = "") -> dict:
     }
 
 
-def seed(notes: str) -> int:
+def seed(notes: str, tag: str = "") -> int:
     """Writes a manifest for a build that does not exist yet.
 
     The exe is built on Windows, by CI or by somebody running build.ps1, and
@@ -195,7 +195,7 @@ def seed(notes: str) -> int:
         "name": "PyCmd for Windows",
         "version": version,
         "build": build,
-        **release_urls(version, "PyCmd.exe"),
+        **release_urls(version, "PyCmd.exe", tag),
         "sha256": "",
         "bytes": 0,
         "notes": notes,
@@ -225,7 +225,7 @@ def seed(notes: str) -> int:
     with open(SUMS, "w", encoding="utf-8") as handle:
         handle.write(f"# PyCmd for Windows {version} (build {build}) "
                      "has not been built yet.\n")
-        handle.write("# The checksum appears here when a windows-v tag "
+        handle.write("# The checksum appears here when a Windows release tag "
                      "builds it.\n")
     print(f"seeded dist-windows/latest.json for {version} (build {build}), not yet built")
     return 0
@@ -289,7 +289,7 @@ def check() -> int:
             return _report(problems)
         print(f"dist-windows/latest.json is seeded for {version} (build {build}) "
               "and has no build behind it yet.")
-        print("  Build one with windows\\build\\build.ps1, or push a windows-v tag.")
+        print("  Build one with windows\\build\\build.ps1, or push a windows-<version> tag.")
         return 0
     elif not os.path.isfile(exe):
         # Not a failure on its own. The exe is built on Windows and this check
@@ -335,7 +335,7 @@ def main(argv=None) -> int:
     if args.agrees_with_tag:
         return agrees_with_tag(args.agrees_with_tag)
     if args.seed:
-        return seed(args.notes)
+        return seed(args.notes, args.tag)
     return write(args.exe, args.notes, args.tag) if args.exe else check()
 
 

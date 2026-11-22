@@ -1,1 +1,2 @@
-9f7b1347d3f778a1c50b6830ad38f44b8ff0a61a505b14f7983925b2e30ae694  PyCmd.exe
+# PyCmd for Windows 4.0.5 (build 7) has not been built yet.
+# The checksum appears here when a Windows release tag builds it.

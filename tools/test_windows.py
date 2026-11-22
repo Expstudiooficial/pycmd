@@ -706,8 +706,12 @@ def _gate(tag):
 _source_version = _live.VERSION
 check("the tag as the source spells it is accepted",
       _gate("windows-v" + _source_version) == 0)
+check("the windows-<version> release tag spelling is accepted",
+      _gate("windows-" + _source_version) == 0)
 check("and the same version with a trailing zero is too",
       _gate("windows-v" + _source_version + ".0") == 0)
+check("the windows- tag accepts a trailing zero too",
+      _gate("windows-" + _source_version + ".0") == 0)
 check("but a genuinely different version is still refused",
       _gate("windows-v99.1") == 1)
 
@@ -722,8 +726,18 @@ check("a given tag is used verbatim in the download address",
       _mod.release_urls("2.0.0", "PyCmd.exe", "windows-v2.0")["url"]
       .endswith("windows-v2.0/PyCmd.exe"),
       _mod.release_urls("2.0.0", "PyCmd.exe", "windows-v2.0")["url"])
+check("the windows- tag is used verbatim in the release address",
+      _mod.release_urls("4.0.5", "PyCmd.exe", "windows-4.0.5")["url"]
+      .endswith("windows-4.0.5/PyCmd.exe"))
 check("and only guessed when there is no tag to use",
       _mod.release_urls("2.0", "PyCmd.exe")["url"].endswith("windows-v2.0/PyCmd.exe"))
+_workflow = open(os.path.join(ROOT, ".github", "workflows", "windows.yml"),
+                 encoding="utf-8").read()
+check("Windows release tags trigger the build workflow",
+      'tags: ["windows-*"]' in _workflow
+      and "refs/tags/windows-" in _workflow)
+check("publishing an existing Windows release triggers the build workflow",
+      "  release:\n    types: [published]" in _workflow)
 
 say("\n== the update manifest ==")
 manifest = subprocess.run(
@@ -1323,6 +1337,81 @@ _ct = android_lab.cmdline_tools_plan(_xml, "windows")
 check("the newest stable command-line tools are chosen, not an alpha", _ct["version"] == "12.0", _ct)
 check("and checked against Google's SHA-1", _ct["sha1"] == "bbb")
 check("with a full download URL", _ct["url"] == android_lab.REPOSITORY + "commandlinetools-win-2_latest.zip")
+_android_originals = (android_lab.sdk_root, android_lab._tool,
+                      android_lab.installed_packages, android_lab._run,
+                      android_lab._sdk_folders, android_lab._quiet,
+                      android_lab._env, android_lab.WINDOWS)
+_android_seen = {}
+_android_sdk = os.path.join(_HOME, "android-sdk-test")
+os.makedirs(_android_sdk, exist_ok=True)
+
+
+def _android_fake_run(command, write, *args, **kwargs):
+    _android_seen["command"] = command
+    _package_file = command[-1].split("=", 1)[1]
+    with open(_package_file, encoding="utf-8") as _handle:
+        _android_seen["packages"] = _handle.read().splitlines()
+    _android_seen["package_file"] = _package_file
+    return True, "installed"
+
+
+try:
+    android_lab.sdk_root = lambda: _android_sdk
+    android_lab._tool = lambda name: "sdkmanager.bat"
+    android_lab.installed_packages = lambda root: set(_android_seen.get("packages", []))
+    android_lab._run = _android_fake_run
+    android_lab._sdk_folders = lambda root: []
+    _android_install_ok = android_lab.ensure_packages(lambda text: None, "", 34)
+    _expected_android_packages = [
+        "platform-tools", "emulator", "platforms;android-34",
+        "system-images;android-34;google_apis;x86_64",
+    ]
+    check("Android SDK installs preserve semicolon package IDs",
+          _android_install_ok and _android_seen.get("packages") == _expected_android_packages,
+          _android_seen)
+    check("Android SDK package-file installation uses the documented invocation",
+          _android_seen.get("command", [])[-1].startswith("--package_file=")
+          and "--install" not in _android_seen.get("command", []),
+          _android_seen.get("command"))
+    check("the SDK package list is removed after installation",
+          not os.path.exists(_android_seen.get("package_file", "")),
+          _android_seen.get("package_file"))
+
+    _driver_dir = os.path.join(
+        _android_sdk, "extras", "google", "Android_Emulator_Hypervisor_Driver")
+    _driver_script = os.path.join(_driver_dir, "silent_install.bat")
+    _driver_seen = {}
+
+    def _android_fake_quiet(command, *args, **kwargs):
+        if command[0] == "sdkmanager.bat":
+            _driver_seen["command"] = command
+            _package_file = command[-1].split("=", 1)[1]
+            with open(_package_file, encoding="utf-8") as _handle:
+                _driver_seen["packages"] = _handle.read().splitlines()
+            _driver_seen["package_file"] = _package_file
+            os.makedirs(_driver_dir, exist_ok=True)
+            open(_driver_script, "w", encoding="utf-8").close()
+        return True, ""
+
+    android_lab.WINDOWS = True
+    android_lab._quiet = _android_fake_quiet
+    android_lab._env = lambda *args, **kwargs: {}
+    _driver_result = android_lab.fix_accel("aehd")
+    check("the hypervisor-driver install also preserves its SDK package ID",
+          _driver_result.get("ok")
+          and _driver_seen.get("packages") == ["extras;google;Android_Emulator_Hypervisor_Driver"],
+          _driver_seen)
+    check("the hypervisor-driver package-file invocation is documented",
+          _driver_seen.get("command", [])[-1].startswith("--package_file=")
+          and "--install" not in _driver_seen.get("command", []),
+          _driver_seen.get("command"))
+    check("the hypervisor package list is removed after installation",
+          not os.path.exists(_driver_seen.get("package_file", "")),
+          _driver_seen.get("package_file"))
+finally:
+    (android_lab.sdk_root, android_lab._tool, android_lab.installed_packages,
+     android_lab._run, android_lab._sdk_folders, android_lab._quiet,
+     android_lab._env, android_lab.WINDOWS) = _android_originals
 _ok = android_lab.parse_accel("accel:\n0\nWHPX(10.0.22631) is installed and usable.\naccel\n", True)
 _bad = android_lab.parse_accel("accel:\n1\nWHPX is not enabled.\naccel\n", False)
 _bios = android_lab.parse_accel("accel:\n7\nVT-x is disabled in BIOS\naccel\n", False)
