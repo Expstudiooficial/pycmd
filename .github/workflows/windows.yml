@@ -24,6 +24,14 @@ on:
   pull_request:
     paths: ["windows/**", "app/src/main/python/**"]
   workflow_dispatch:
+    inputs:
+      release:
+        description: >-
+          Publish to this release, e.g. windows-v4.0. The tag is moved onto the
+          commit being built, so a release made against the wrong branch is
+          fixed rather than left pointing at it. Leave empty to only build.
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -34,6 +42,10 @@ jobs:
     # A ceiling, because a hung step is otherwise six hours of somebody's
     # runner minutes. Everything here should finish inside fifteen.
     timeout-minutes: 30
+    # The release this run publishes: the tag that was pushed, or the one asked
+    # for when started by hand. Empty means build and check, publish nothing.
+    env:
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/windows-v') && github.ref_name || inputs.release }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,9 +65,11 @@ jobs:
           pip install -r windows/build/requirements.txt
 
       - name: A tag must agree with the version in the source
-        if: startsWith(github.ref, 'refs/tags/windows-v')
+        if: env.RELEASE_TAG != ''
         shell: pwsh
-        run: python tools/make_latest_windows.py --agrees-with-tag "${{ github.ref_name }}"
+        run: |
+          if ("$env:RELEASE_TAG" -notmatch '^windows-v') { throw "a Windows release tag starts with windows-v, not '$env:RELEASE_TAG'" }
+          python tools/make_latest_windows.py --agrees-with-tag "$env:RELEASE_TAG"
 
       - name: Check
         run: python tools/test_windows.py
@@ -127,31 +141,41 @@ jobs:
         timeout-minutes: 12
         run: python tools/test_toolchains_live.py
 
-      - name: Publish it, if this is a tag
-        if: startsWith(github.ref, 'refs/tags/windows-v')
+      - name: Publish it, if this is a release
+        if: env.RELEASE_TAG != ''
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}" -replace "^windows-v", ""
+          $tag = "$env:RELEASE_TAG"
+          $version = $tag -replace "^windows-v", ""
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Started by hand: put the tag on the commit that was just built. A
+          # release created on GitHub with the wrong branch selected points at
+          # code this exe was not built from; moving the tag makes the release's
+          # source downloads match the exe attached to it.
+          if ("${{ github.ref_type }}" -ne "tag") {
+            git tag -f $tag HEAD
+            git push -f origin "refs/tags/$tag"
+          }
+          $notes = python -c "import json; print(json.load(open('dist-windows/latest.json', encoding='utf-8'))['notes'] or '')"
+          if (-not $notes) { $notes = "PyCmd for Windows $version" }
           # Describes the exe that is about to be attached to this release,
           # and points the manifest at it there. The binary itself is not
           # committed - see .gitignore - so this commit is one small JSON
           # file and a checksum, whatever the size of the build.
-          python tools/make_latest_windows.py dist-windows/build/PyCmd.exe `
-            --notes "PyCmd for Windows $version" --tag "${{ github.ref_name }}"
+          python tools/make_latest_windows.py dist-windows/build/PyCmd.exe --notes "$notes" --tag $tag
           python tools/make_latest_windows.py   # and prove what it wrote is true
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          python tools/release_notes_windows.py $version $env:PYCMD_SHA > release-notes.md
+          "PYCMD_VERSION=$version" >> $env:GITHUB_ENV
           git add dist-windows/latest.json dist-windows/SHA256SUMS.txt
           git commit -m "PyCmd for Windows $version"
           git push origin HEAD:windowsmain
 
       - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/windows-v')
+        if: env.RELEASE_TAG != ''
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: PyCmd for Windows ${{ env.PYCMD_VERSION }}
+          body_path: release-notes.md
+          make_latest: true
           files: dist-windows/build/PyCmd.exe
-          body: |
-            PyCmd for Windows.
-
-            One exe, nothing to install. Windows 10 or newer, 64-bit.
-
-            SHA-256: `${{ env.PYCMD_SHA }}`
