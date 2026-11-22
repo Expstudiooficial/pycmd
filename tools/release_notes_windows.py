@@ -20,8 +20,15 @@ def main(argv) -> int:
     digest = argv[1] if len(argv) > 1 else ""
     with open(os.path.join(HERE, "dist-windows", "README.md"), encoding="utf-8") as handle:
         text = handle.read()
-    found = re.search(r"^## What is new in " + re.escape(version) + r"\n(.*?)(?=^## |\Z)",
-                      text, re.S | re.M)
+    # A tag of 4.0.0 is version 4.0: trailing ".0"s are dropped to find the
+    # changelog section, which is headed with the short form.
+    short = re.sub(r"(\.0)+$", "", version) or version
+    found = None
+    for name in dict.fromkeys((version, short, short + ".0")):
+        found = re.search(r"^## What is new in " + re.escape(name) + r"\n(.*?)(?=^## |\Z)",
+                          text, re.S | re.M)
+        if found:
+            break
     body = found.group(1).strip() if found else "See dist-windows/README.md."
     sys.stdout.reconfigure(encoding="utf-8")
     print(f"**PyCmd for Windows {version}.** One exe, nothing to install. "
