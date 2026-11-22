@@ -334,6 +334,8 @@ TOOLCHAINS = [
         _steps_build(("{exe}", "{src}", "-o", "{out}", "-std=c++20")),
         winget="winget install LLVM.LLVM", scoop="scoop install llvm",
         choco="choco install llvm", site="https://releases.llvm.org/",
+        note="On Windows, Clang++ needs MSVC's headers, libraries and linker. "
+             "Start PyCmd from a Visual Studio Developer Command Prompt.",
     ),
     Toolchain(
         "msvc", "MSVC", ["c", "cpp"], "cl",

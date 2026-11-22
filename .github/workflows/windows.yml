@@ -29,9 +29,9 @@ on:
     inputs:
       release:
         description: >-
-          Publish to this release, e.g. windows-4.0.5. The tag is moved onto
-          the commit being built, so a release made against the wrong branch is
-          fixed rather than left pointing at it. Leave empty to only build.
+          Publish to this release, e.g. windows-4.0.5. Use after this workflow
+          is installed on the repository's default branch. Otherwise push the
+          Windows tag to start a release build. Leave empty to only build.
         required: false
         default: ""
 
@@ -47,7 +47,7 @@ jobs:
     # The release this run publishes: the tag that was pushed, or the one asked
     # for when started by hand. Empty means build and check, publish nothing.
     env:
-      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/windows-') && github.ref_name || inputs.release }}
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/windows-') && github.ref_name || github.event.release.tag_name || inputs.release }}
     steps:
       - uses: actions/checkout@v4
 
@@ -136,13 +136,12 @@ jobs:
       # the toolchains a real user might have, and PyCmd should drive the ones
       # this runner ships with.
       #
-      # After the exe and allowed to fail, deliberately. It tests *this
-      # machine's* compilers, not the build - whether the runner's Kotlin is
-      # having a bad day should not cost anybody a release. What it finds is
-      # worth reading; what it finds is not worth blocking on. The suite above
-      # is the gate.
+      # Clang++ on Windows uses the Visual Studio headers, libraries and
+      # linker. A plain runner shell does not set those paths, even though
+      # clang++ is on PATH.
+      - uses: ilammy/msvc-dev-cmd@v1
+
       - name: Compile and run in every language the runner has
-        continue-on-error: true
         timeout-minutes: 12
         run: python tools/test_toolchains_live.py
 
@@ -184,3 +183,5 @@ jobs:
           body_path: release-notes.md
           make_latest: true
           files: dist-windows/build/PyCmd.exe
+          overwrite_files: true
+          fail_on_unmatched_files: true

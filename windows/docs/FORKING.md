@@ -93,7 +93,12 @@ engine, the web assets, the bundled plugins and the guides inside it.
 `.github/workflows/windows.yml` builds on a Windows runner, runs the checks,
 proves the exe starts, and prints its hash. Push a tag like `windows-v1.0.1`
 and it also writes `dist-windows/latest.json` and attaches the exe to a
-release.
+release. To rebuild an existing release, move its `windows-<version>` tag to
+the Windows commit and push that tag; a release created from an existing tag
+does not itself start this branch's workflow. GitHub only runs release and
+manual-dispatch events for workflows present on the repository's default
+branch, so those event paths become available only if this workflow is also
+installed there.
 
 That workflow exists because the exe cannot honestly be built anywhere else:
 Windows is where PyInstaller makes a Windows binary, and the only place the
