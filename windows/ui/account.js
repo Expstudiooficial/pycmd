@@ -61,6 +61,7 @@ function accountCard(onChange) {
           if (reply.ok && onChange) onChange(reply);
         } }),
         progressMenu(onChange),
+        el('button', { class: 'small', text: 'Cloud files', onclick: cloudSheet }),
         el('button', { class: 'small', text: 'Account', onclick: () => accountSheet(draw, onChange) })));
   };
   PyCmd.call('account', {}).then((st) => {
@@ -298,4 +299,39 @@ function accountSheet(draw, onChange) {
       + 'pycmd.pages.dev. The lessons on this PC stay. This cannot be undone.' }),
     field('Password', delPass.node), delError,
     el('div', { class: 'row' }, del)));
+}
+
+// ---------------------------------------------------------------------------
+// Cloud storage: 800 KB of files on pycmd.pages.dev, for every account
+// ---------------------------------------------------------------------------
+
+async function cloudSheet() {
+  const reply = await PyCmd.call('cloud.files', {});
+  if (!reply.ok) { PyCmd.toast(reply.error || 'Cloud storage is not reachable.'); return; }
+  const kb = (n) => (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
+  const pct = Math.min(100, Math.round((reply.used / reply.quota) * 100));
+  const list = el('div', { class: 'list' });
+  (reply.files || []).forEach((f) => list.appendChild(el('div', { class: 'row-item' },
+    el('span', { class: 'grow mono', text: f.path }),
+    el('span', { class: 'muted', text: kb(f.size) }),
+    el('button', { class: 'small', text: 'Save to PC', onclick: async () => {
+      const r = await PyCmd.call('cloud.download', { name: f.path });
+      PyCmd.toast(r.ok ? `Saved to ${r.path}` : (r.error || 'That did not work.'));
+    } }),
+    el('button', { class: 'small danger', text: 'Delete', onclick: async () => {
+      const r = await PyCmd.call('cloud.delete', { name: f.path });
+      if (!r.ok) PyCmd.toast(r.error || 'That did not work.'); else cloudSheet();
+    } }))));
+  if (!(reply.files || []).length) list.appendChild(el('div', { class: 'empty', text: 'Nothing here yet.' }));
+  PyCmd.sheet('Cloud files', el('div', {},
+    el('p', { class: 'muted', text: `${kb(reply.used)} of ${kb(reply.quota)} used. Small code, notes and `
+      + 'configs, on every device you sign in on. Downloads go to workspace\\cloud.' }),
+    el('div', { class: 'progress' }, el('div', { class: 'fill', style: `width:${pct}%` })),
+    el('div', { class: 'row', style: 'margin:10px 0' },
+      el('button', { class: 'small primary', text: 'Upload a file…', onclick: async () => {
+        const r = await PyCmd.call('cloud.upload', {});
+        if (r.cancelled) return;
+        if (!r.ok) PyCmd.toast(r.error || 'That did not upload.'); else cloudSheet();
+      } })),
+    list));
 }

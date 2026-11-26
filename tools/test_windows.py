@@ -1551,6 +1551,33 @@ check("a missing file is an answer, not a crash",
       not _c("progress.import", {"path": os.path.join(_HOME, "nope.json")}).get("ok"))
 _learn45.reset("")
 
+# -- 5.0: MCP, plugins, Erlang -------------------------------------------------
+say()
+say("== 5.0: MCP, plugins, cloud ==")
+from pycmd_win import mcp as _mcp50  # noqa: E402
+import pycmd_mcp as _proto  # noqa: E402
+
+_reg = _mcp50.build(_h)
+check("the MCP server has over 150 tools", len(_reg.tools) > 150, len(_reg.tools))
+check("every tool has a description and a schema",
+      all(t.description and t.schema.get("type") == "object" for t in _reg.tools.values()))
+_init = _proto.handle(_reg, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                             "params": {"protocolVersion": "2025-06-18"}})
+check("initialize answers", _init["result"]["serverInfo"]["name"] == "pycmd-windows", _init)
+_listed = _proto.handle(_reg, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+check("tools/list lists them", len(_listed["result"]["tools"]) == len(_reg.tools))
+_called = _proto.handle(_reg, {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                               "params": {"name": "pycmd_hash", "arguments": {"text": "abc"}}})
+check("a tool call runs the app's call", "ba7816bf" in _called["result"]["content"][0]["text"])
+_reg.read_only = True
+_blocked = _reg.call("pycmd_notes_save", {"text": "x"})
+check("read-only mode blocks changes", _blocked["isError"], _blocked)
+check("cloud calls are tools", "pycmd_cloud_files" in _reg.tools)
+check("installed plugins can be switched", "plugin.set" in host_module.HANDLERS)
+check("the MCP tab is wired", all(n in host_module.HANDLERS for n in ("mcp", "mcp.set")))
+_png = _mcp50.png(b"\x00\x00\xff\xff" * 4, 2, 2)
+check("screenshots encode as PNG", _png.startswith(b"\x89PNG") and b"IEND" in _png)
+
 say()
 if FAILURES:
     say(f"{len(FAILURES)} of {CHECKS[0]} checks failed: {FAILURES[:6]}")

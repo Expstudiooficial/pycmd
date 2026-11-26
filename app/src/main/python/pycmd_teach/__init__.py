@@ -1524,7 +1524,8 @@ def api(name: str, first: str = "", second: str = "", third: str = "") -> str:
 
 #: The account calls, which talk to pycmd.pages.dev.
 _CLOUD_CALLS = {"account", "username", "signup", "login", "logout", "sync", "password",
-                "delete_account", "export", "import", "device"}
+                "delete_account", "export", "import", "device", "cloud_files", "cloud_get",
+                "cloud_put", "cloud_delete", "cloud_upload", "cloud_download"}
 
 
 def _cloud_module():
@@ -1558,6 +1559,22 @@ def _cloud(name: str, first: str, second: str) -> dict:
             return cloud.import_text(first, second or "merge")
         if name == "device":
             return cloud.set_device(first, second)
+        if name == "cloud_files":
+            return cloud.files_list()
+        if name == "cloud_get":
+            reply = cloud.file_get(first)
+            reply.pop("bytes", None)
+            return reply
+        if name == "cloud_put":
+            import base64
+
+            return cloud.file_put(first, base64.b64decode(second or ""))
+        if name == "cloud_delete":
+            return cloud.file_delete(first)
+        if name == "cloud_upload":
+            return cloud.file_upload(first, second)
+        if name == "cloud_download":
+            return cloud.file_download(first, second)
     except cloud.CloudError as error:
         return {"ok": False, "error": str(error)}
     return {"ok": False, "error": f"no such call: {name}"}

@@ -175,6 +175,50 @@ def _h_progress_import(host, payload):
     return learn.account("import", text, mode)
 
 
+# -- 5.0: cloud storage, 800 KB per account --------------------------------
+
+def _h_cloud_files(host, payload):
+    """Lists the files in your 800 KB of PyCmd cloud storage, with space used."""
+    return learn.account("cloud_files")
+
+
+def _h_cloud_get(host, payload):
+    """Reads one cloud file (text, and content_b64 for any file)."""
+    return learn.account("cloud_get", str(payload.get("name", "")))
+
+
+def _h_cloud_put(host, payload):
+    """Saves text as a cloud file (replacing one of the same name)."""
+    import base64
+
+    return learn.account("cloud_put", str(payload.get("name", "")),
+                         base64.b64encode(str(payload.get("text", "")).encode()).decode())
+
+
+def _h_cloud_upload(host, payload):
+    """Copies a file from this PC into cloud storage (a file dialog if no path)."""
+    path = str(payload.get("path", ""))
+    if not path:
+        chosen = _h_pick_file(host, {"kinds": ["any"]})
+        if not chosen.get("path"):
+            return {"ok": True, "cancelled": True}
+        path = chosen["path"]
+    return learn.account("cloud_upload", path, str(payload.get("name", "")))
+
+
+def _h_cloud_download(host, payload):
+    """Copies a cloud file onto this PC, into workspace/cloud unless a path is given."""
+    name = str(payload.get("name", ""))
+    target = str(payload.get("path", "")) or os.path.join(store.folder("workspace"), "cloud",
+                                                         *name.split("/"))
+    return learn.account("cloud_download", name, target)
+
+
+def _h_cloud_delete(host, payload):
+    """Deletes a cloud file."""
+    return learn.account("cloud_delete", str(payload.get("name", "")))
+
+
 def _h_learn_try(host, payload):
     return learn.try_code(str(payload.get("course", "")), str(payload.get("code", "")))
 
@@ -303,25 +347,23 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "4.5",
-    "title": "PyCmd for Windows 4.5",
+    "version": "5.0",
+    "title": "PyCmd for Windows 5.0",
     "items": [
-        ["About 1,800 lessons in every course",
-         "90,129 lessons in 50 languages. The small courses grew from about 100 to about "
-         "1,800 with practice rounds, checked on real compilers and parsers before "
-         "release."],
-        ["A PyCmd account",
-         "Sign up with a username and password, and your Learn progress follows you "
-         "between this PC and PyCmd on your phone. Your password never leaves the PC."],
-        ["Export and import",
-         "Save your progress as a .json file, and load it on another PC or phone - "
-         "added to what is there, or replacing it."],
-        ["A cleaner Learn",
-         "Your courses first, units that fold, practice in a section of its own, and "
-         "answer choices that do not give the answer away."],
-        ["One look everywhere",
-         "The last colours from the old palette are gone, so every theme now reaches "
-         "every panel, dialog and message."],
+        ["MCP: AI agents drive PyCmd",
+         "A new MCP tab: switch it on and Claude Code, Claude Desktop, Antigravity, Cursor, "
+         "VS Code, Gemini or Codex get 170+ tools - files, console, toolchains, Learn, "
+         "plugins, Android Lab and the window itself (read, click, type, screenshot)."],
+        ["800 KB of cloud storage",
+         "Every PyCmd account can keep small files online: Cloud files on the account card."],
+        ["Plugins work",
+         "Installed plugins load (Creator's buttons did nothing before), switch on and off, "
+         "and follow the theme you pick."],
+        ["Guides scroll",
+         "Long guides and dialogs scroll to the end; screens no longer flicker or draw twice."],
+        ["Smaller fixes",
+         "Erlang shows its real version, Learn progress takes a tenth of the space online, "
+         "and Clang++ builds against newer Visual Studio."],
     ],
 }
 
@@ -1238,6 +1280,12 @@ HANDLERS = {
     "account.password": _h_account_password,
     "account.delete": _h_account_delete,
     "progress.export": _h_progress_export,
+    "cloud.files": _h_cloud_files,
+    "cloud.get": _h_cloud_get,
+    "cloud.put": _h_cloud_put,
+    "cloud.upload": _h_cloud_upload,
+    "cloud.download": _h_cloud_download,
+    "cloud.delete": _h_cloud_delete,
     "progress.import": _h_progress_import,
     "pick.file": _h_pick_file,
     "look": _h_look,

@@ -54,11 +54,13 @@ GROUPS = {
     "toolchain": "compilers and interpreters",
     "whatsnew": "release notes",
     "env": "environment variables for programs PyCmd runs",
+    "cloud": "your 800 KB of PyCmd cloud storage (needs a signed-in account)",
 }
 SKIP = {"drain", "hello", "pick.file", "mcp.ui.result"}
 READ_WORDS = {"read", "plan", "log", "info", "inspect", "settings", "guide", "panel", "course",
               "lesson", "search", "review", "devices", "logcat", "screenshot", "check", "state",
-              "active", "runnable", "completions", "kept", "username", "job", "diagnose"}
+              "active", "runnable", "completions", "kept", "username", "job", "diagnose",
+              "files", "get"}
 
 _lock = threading.Lock()
 _pending: dict = {}

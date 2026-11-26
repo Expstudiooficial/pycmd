@@ -547,3 +547,74 @@ def import_text(text: str, mode: str = "merge") -> dict:
     sync_soon(force=True)
     return {"ok": True, "lessons": after, "added": max(0, after - before), "mode": mode,
             **teach.totals()}
+
+
+# ------------------------------------------------------------ cloud storage
+#
+# 800 KB of files per account on pycmd.pages.dev: small code, notes, configs.
+# Paths are relative ("notes/todo.md"); content travels as base64 so any file
+# works, and the website stores it compressed.
+
+import base64 as _base64
+
+
+def _signed_token():
+    token = _token()
+    if not token:
+        raise CloudError("Sign in to use cloud storage.")
+    return token
+
+
+def _quoted(path: str) -> str:
+    return urllib.parse.quote(path.strip().lstrip("/"), safe="")
+
+
+def files_list() -> dict:
+    _, reply = _call("GET", "files", token=_signed_token())
+    return reply
+
+
+def file_get(path: str) -> dict:
+    _, reply = _call("GET", "files/" + _quoted(path), token=_signed_token())
+    data = _base64.b64decode(reply.get("content_b64", ""))
+    try:
+        reply["text"] = data.decode("utf-8")
+    except UnicodeDecodeError:
+        reply["text"] = None
+    reply["bytes"] = data
+    return reply
+
+
+def file_put(path: str, data: bytes) -> dict:
+    code, reply = _call("PUT", "files/" + _quoted(path),
+                        {"content_b64": _base64.b64encode(data).decode("ascii")},
+                        token=_signed_token(), allow=(413, 400))
+    if code != 200:
+        return {"ok": False, "error": reply.get("error", "That did not save.")}
+    return reply
+
+
+def file_delete(path: str) -> dict:
+    code, reply = _call("DELETE", "files/" + _quoted(path), token=_signed_token(),
+                        allow=(404,))
+    return reply if code == 200 else {"ok": False, "error": reply.get("error", "")}
+
+
+def file_upload(local_path: str, remote_path: str = "") -> dict:
+    """A file from this device into cloud storage."""
+    local_path = os.path.expanduser(local_path)
+    if os.path.getsize(local_path) > 800 * 1024:
+        return {"ok": False, "error": "That file is over 800 KB, the whole of cloud storage."}
+    with open(local_path, "rb") as handle:
+        data = handle.read()
+    return file_put(remote_path or os.path.basename(local_path), data)
+
+
+def file_download(remote_path: str, local_path: str) -> dict:
+    """A file from cloud storage onto this device."""
+    reply = file_get(remote_path)
+    local_path = os.path.expanduser(local_path)
+    os.makedirs(os.path.dirname(os.path.abspath(local_path)), exist_ok=True)
+    with open(local_path, "wb") as handle:
+        handle.write(reply["bytes"])
+    return {"ok": True, "path": local_path, "size": len(reply["bytes"])}

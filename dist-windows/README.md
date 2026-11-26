@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Version | 4.5 |
+| Version | 5.0 |
 | Works on | Windows 10 and newer, 64-bit |
 | Runtime | Edge WebView2, which Windows 10 and 11 already have |
 | Installer | none — it is one exe |
@@ -37,7 +37,50 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
-## What is new in 4.5
+## What is new in 5.0
+
+### MCP: AI agents drive PyCmd
+
+A new **MCP** tab (under Tools) switches on a Model Context Protocol server,
+so an AI app can use PyCmd: **Claude Code, Claude Desktop, Antigravity,
+Cursor, VS Code, Windsurf, Gemini CLI, Codex** and anything else that speaks
+MCP over HTTP. Each has its set-up ready to copy.
+
+- **170+ tools**: every call the app makes (files, console, toolchains,
+  servers, packages, Learn, plugins, Android Lab, git, cloud files...), with
+  readable descriptions and their arguments, plus **ui_*** tools that drive
+  the window like a person: open a tab, read what is on screen with every
+  button and field numbered, click, type, scroll, press keys, change the
+  theme - and **ui_screenshot**, a PNG of the window.
+- **Safe by default**: off until you switch it on; only this PC can connect
+  (127.0.0.1); every request needs the token; requests from web pages are
+  refused; **read-only** mode lets agents look without changing anything.
+  The tab shows the last calls.
+
+### 800 KB of cloud storage
+
+Every PyCmd account gets 800 KB of files on pycmd.pages.dev - small code,
+notes, configs - on every device you sign in on. **Cloud files** on the
+account card uploads, saves to `workspace\cloud`, and deletes. Agents can use
+it too.
+
+### Fixed
+
+- **Guides and dialogs scroll.** A long guide stopped at the first screen:
+  the dialog's body could not shrink to scroll.
+- **Screens no longer flicker or draw twice** when a slow screen finished
+  loading after you had already moved on.
+- **Plugins load.** Installed plugins' Python was never started on Windows, so
+  Creator opened with nothing behind its buttons. Each installed plugin now
+  has an on/off switch, and only the ones that are on get a tab.
+- **Plugins follow the theme** from their first frame, instead of a mix of
+  the old default colours and the new theme.
+- **Erlang** showed "escript: Missing filename" as its version; it shows the
+  real one now.
+- **Learn progress takes a tenth of the space** in the database: the website
+  compresses it.
+- **Clang++** builds against a Visual Studio newer than itself.
+
 
 ### About 1,800 lessons in every course
 
