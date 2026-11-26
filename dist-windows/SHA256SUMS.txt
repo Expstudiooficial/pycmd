@@ -1,2 +1,1 @@
-# PyCmd for Windows 5.0 (build 9) has not been built yet.
-# The checksum appears here when a Windows release tag builds it.
+71e15e4ca6dde8d8c4764b6d0a0cbeb5ce74812c2191bc63790da06282fd708a  PyCmd.exe
