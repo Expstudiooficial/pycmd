@@ -90,6 +90,91 @@ def _h_learn_reset(host, payload):
     return learn.reset(str(payload.get("course", "")))
 
 
+# -- a PyCmd account (pycmd_teach/cloud.py does the work) --------------------
+
+def _h_account(host, payload):
+    return learn.account("account")
+
+
+def _h_account_username(host, payload):
+    return learn.account("username", str(payload.get("name", "")))
+
+
+def _h_account_signup(host, payload):
+    return learn.account("signup", str(payload.get("username", "")),
+                         str(payload.get("password", "")))
+
+
+def _h_account_login(host, payload):
+    return learn.account("login", str(payload.get("username", "")),
+                         str(payload.get("password", "")))
+
+
+def _h_account_logout(host, payload):
+    return learn.account("logout")
+
+
+def _h_account_sync(host, payload):
+    return learn.account("sync")
+
+
+def _h_account_password(host, payload):
+    return learn.account("password", str(payload.get("old", "")), str(payload.get("new", "")))
+
+
+def _h_account_delete(host, payload):
+    return learn.account("delete_account", str(payload.get("password", "")))
+
+
+def _h_progress_export(host, payload):
+    """Progress to a .json file: the save dialog, or a path when there is no window."""
+    reply = learn.account("export", "PyCmd for Windows")
+    if not reply.get("ok"):
+        return reply
+    path = str(payload.get("path", ""))
+    if not path:
+        window = getattr(host, "window", None)
+        if window is None:
+            return {"ok": False, "error": "there is no window to open a save dialog in"}
+        import webview
+
+        chosen = window.create_file_dialog(webview.SAVE_DIALOG,
+                                           save_filename=reply["filename"],
+                                           file_types=(_KINDS["json"],))
+        if not chosen:
+            return {"ok": True, "cancelled": True}
+        path = chosen if isinstance(chosen, str) else list(chosen)[0]
+    if not path.lower().endswith(".json"):
+        path += ".json"
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(reply["text"])
+    return {"ok": True, "path": path, "lessons": reply.get("lessons", 0)}
+
+
+def _h_progress_import(host, payload):
+    mode = "replace" if payload.get("mode") == "replace" else "merge"
+    path = str(payload.get("path", ""))
+    if not path:
+        window = getattr(host, "window", None)
+        if window is None:
+            return {"ok": False, "error": "there is no window to open a file dialog in"}
+        import webview
+
+        chosen = window.create_file_dialog(webview.OPEN_DIALOG, file_types=(
+            _KINDS["json"], _KINDS["any"]))
+        if not chosen:
+            return {"ok": True, "cancelled": True}
+        path = chosen if isinstance(chosen, str) else list(chosen)[0]
+    try:
+        if os.path.getsize(path) > 5 * 1024 * 1024:
+            return {"ok": False, "error": "That file is too big to be PyCmd progress."}
+        with open(path, "r", encoding="utf-8-sig") as handle:
+            text = handle.read()
+    except (OSError, UnicodeDecodeError) as error:
+        return {"ok": False, "error": f"could not read {os.path.basename(path)}: {error}"}
+    return learn.account("import", text, mode)
+
+
 def _h_learn_try(host, payload):
     return learn.try_code(str(payload.get("course", "")), str(payload.get("code", "")))
 
@@ -102,6 +187,7 @@ _KINDS = {
     "apk": "Android packages (*.apk)",
     "zip": "Zip archives (*.zip)",
     "code": "Code (*.py;*.js;*.ts;*.c;*.cpp;*.cs;*.go;*.rs;*.java;*.kt;*.rb;*.php;*.lua)",
+    "json": "PyCmd progress (*.json)",
     "any": "All files (*.*)",
 }
 
@@ -217,14 +303,25 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "4.0.5",
-    "title": "PyCmd for Windows 4.0.5",
+    "version": "4.5",
+    "title": "PyCmd for Windows 4.5",
     "items": [
-        ["Sidebar navigation", "Changing screens keeps your place in the tab list."],
-        ["Android Lab", "SDK packages with semicolons in their IDs now install correctly "
-                        "on Windows."],
-        ["Windows releases", "A windows-<version> tag builds, verifies and publishes "
-                             "PyCmd.exe automatically."],
+        ["About 1,800 lessons in every course",
+         "90,129 lessons in 50 languages. The small courses grew from about 100 to about "
+         "1,800 with practice rounds, checked on real compilers and parsers before "
+         "release."],
+        ["A PyCmd account",
+         "Sign up with a username and password, and your Learn progress follows you "
+         "between this PC and PyCmd on your phone. Your password never leaves the PC."],
+        ["Export and import",
+         "Save your progress as a .json file, and load it on another PC or phone - "
+         "added to what is there, or replacing it."],
+        ["A cleaner Learn",
+         "Your courses first, units that fold, practice in a section of its own, and "
+         "answer choices that do not give the answer away."],
+        ["One look everywhere",
+         "The last colours from the old palette are gone, so every theme now reaches "
+         "every panel, dialog and message."],
     ],
 }
 
@@ -1132,6 +1229,16 @@ HANDLERS = {
     "learn.goal": _h_learn_goal,
     "learn.reset": _h_learn_reset,
     "learn.try": _h_learn_try,
+    "account": _h_account,
+    "account.username": _h_account_username,
+    "account.signup": _h_account_signup,
+    "account.login": _h_account_login,
+    "account.logout": _h_account_logout,
+    "account.sync": _h_account_sync,
+    "account.password": _h_account_password,
+    "account.delete": _h_account_delete,
+    "progress.export": _h_progress_export,
+    "progress.import": _h_progress_import,
     "pick.file": _h_pick_file,
     "look": _h_look,
     "look.set": _h_look_set,

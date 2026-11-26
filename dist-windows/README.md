@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Version | 4.0.5 |
+| Version | 4.5 |
 | Works on | Windows 10 and newer, 64-bit |
 | Runtime | Edge WebView2, which Windows 10 and 11 already have |
 | Installer | none — it is one exe |
@@ -23,8 +23,7 @@ To make one:
 
 - **On your own machine:**
   `powershell -ExecutionPolicy Bypass -File windows\build\build.ps1`
-- **Or push a tag** such as `windows-4.0.5` (the older `windows-v4.0.0`
-  spelling is also supported) and let the workflow do it — it builds on a
+- **Or push a tag** such as `windows-v4.5.0` (or `windows-4.5.0`) and let the workflow do it — it builds on a
   Windows runner, proves the exe starts, writes this manifest with the real
   hash, and attaches the exe to a release.
 
@@ -37,6 +36,70 @@ release for the tag that built it, which is what `latest.json` points at.
 describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
+
+## What is new in 4.5
+
+### About 1,800 lessons in every course
+
+PyCmd Learn has **90,129 lessons in 50 languages** - every course now has
+about 1,800. The big courses used to have over a thousand and the small ones
+about a hundred; the small ones grew the most.
+
+The new lessons are **practice rounds**, after each course's hand-written
+units: every kind of exercise again (precedence, remainders, loops, lists,
+functions, strings...) with new code each round, written in each language's
+own idiom. For JSON, YAML, TOML, XML, CSV, INI, regular expressions,
+.gitignore, Makefiles, Dockerfiles, HTML, CSS and Markdown the rounds ask a
+question about a document instead: which value a key holds, how many rows a
+CSV has, whether a file would load at all, how wide a box is on screen.
+
+None of it is guessed. Before release the practice programs were run on the
+real compilers and interpreters (GCC, rustc, Go, javac, kotlinc, GHC, OCaml,
+dotnet, GnuCOBOL, SWI-Prolog and the rest) and had to print exactly what the
+lesson says; the documents were loaded with real parsers, the Makefiles run
+with make, the .gitignore files asked of git and the CSS laid out in
+Chromium. The one exception is Swift: there was no Swift compiler to run its
+practice on, so those follow the same tested patterns but were checked by
+reading them.
+
+### A PyCmd account
+
+- **Sign up** with a username and password on the Learn screen (or in
+  Settings). Usernames are unique - if one is taken, PyCmd says so while you
+  type and you pick another.
+- **Your progress syncs** between this PC and PyCmd on your phone: lessons
+  finished on either stay finished, the streak comes from whichever saw the
+  later day, and resetting a course on one resets it on the other.
+- **Your password never leaves this PC.** PyCmd stretches it (PBKDF2-SHA256,
+  600,000 rounds) and sends the result; pycmd.pages.dev stretches that again
+  before keeping it. The app holds no database key: it talks to the website,
+  and only the website talks to the database.
+- **Account** lets you sign out, change the password (your other devices sign
+  in again) or delete the account and everything saved with it.
+
+### Export and import
+
+**Export** saves your Learn progress as a `.json` file; **Import** loads one -
+added to your progress, or replacing it. The same file works on Android.
+
+### A cleaner Learn
+
+- The course list starts with the courses you have started, then the
+  languages most people come for.
+- Units fold, and the one with your next lesson starts open. A course's
+  map used to draw all of its lessons at once.
+- Practice rounds have their own section with a **Practise** button.
+- A question about a document shows the question with its answer, and the
+  wrong answers on offer are the same kind of thing as the right one - a
+  number for "how many", a city for `city`.
+- Learn opens faster: lessons are counted without being built.
+
+### One look everywhere
+
+The last colours left from the first palette (a dark blue on hover, in
+output boxes, toasts and dialogs) are theme colours now, so every theme
+reaches every panel. Dialogs blur what is behind them, and sign-in forms
+have show/hide on passwords, inline errors and a live username check.
 
 ## What is new in 4.0.5
 

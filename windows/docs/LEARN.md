@@ -1,6 +1,7 @@
 # PyCmd Learn
 
-Fifty languages and 14,700 lessons, on the same engine as the phone's
+Fifty languages and 90,129 lessons - about 1,800 in every course - on the
+same engine as the phone's
 PyCmdTeach - so the lessons are the same lessons, and the Windows build adds
 what only a PC can do.
 
@@ -50,6 +51,43 @@ Every run has a time limit and an output limit, so `while True` gets you the
 tab back. Runs use the invariant culture - on a German or French Windows,
 C# would otherwise print 3.5 as `3,5` and mark a right answer wrong.
 
+## Practice rounds
+
+After each course's hand-written units come **practice rounds**: every kind
+of exercise the course teaches (precedence, remainders, loops, lists,
+functions, strings...) again, with new code each round, written the way that
+language writes it. They are what took the small courses from about 100
+lessons to about 1,800. They have a section of their own on the course map,
+with a **Practise** button that opens the next one you have not done.
+
+For the formats (JSON, YAML, TOML, XML, CSV, INI, regular expressions,
+.gitignore, Makefiles, Dockerfiles, HTML, CSS and Markdown) a practice round
+asks a question about a document - which value a key holds, how many rows a
+CSV has, whether a TOML file would load, how wide a box is on screen. The
+read step shows the question with its answer.
+
+Practice is generated from a seed, so the same version always has the same
+lessons in the same places, and your progress points at the same ones.
+
+## A PyCmd account, export and import
+
+The card at the top of Learn (also in Settings):
+
+- **Create account** - a username nobody has (checked while you type) and a
+  password of at least 8 characters. **Sign in** on another PC or on the
+  Android app with the same account, and your progress follows you.
+- Syncing merges, it never overwrites: lessons finished anywhere stay
+  finished, the streak comes from the device that saw the later day, and a
+  course reset on one device is reset on the others.
+- The password never leaves the PC. PyCmd stretches it with PBKDF2-SHA256
+  (600,000 rounds, salted with the username) and sends the result to
+  pycmd.pages.dev, which stretches it again with a random salt before keeping
+  it. The app holds no database key: it talks to the website, and only the
+  website talks to the database.
+- **Export** writes your progress to a `.json` file; **Import** reads one,
+  added to what you have or replacing it. No account needed, and the file
+  works on Android too.
+
 ## Getting around
 
 - **Continue** picks up at the lesson after the last one you opened.
@@ -66,6 +104,9 @@ Keys in a lesson: **1-9** pick a choice, **Enter** checks or moves on,
 
 `tools/test_learn.py` runs every snippet that says what it prints through the
 same runner the app uses, with the real toolchain, and fails if the output
-differs - 1,800 snippets across the PC courses, plus the phone courses that
-can run here. It also checks every lesson opens, every ordering and bug
+differs - about 7,000 snippets across the PC courses, practice included, plus
+the phone courses that can run here (the Android repository's
+`tools/test_teach.py` and `tools/test_practice.py` check those, and every
+practice question about a document, with real parsers, git, make and
+Chromium). It also checks every lesson opens, every ordering and bug
 lesson can be answered, and nothing is too wide to read.

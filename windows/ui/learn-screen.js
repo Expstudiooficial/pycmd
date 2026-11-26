@@ -55,6 +55,12 @@ async function learnHome(screen) {
   screen.appendChild(head('PyCmd Learn',
     `${(t.courses || 0)} languages, ${(t.lessons || 0).toLocaleString()} lessons. `
     + 'Where the language is installed, your answer is marked by running it.'));
+  // Redraw only when a sync or an import really changed the lessons done:
+  // a redraw for nothing would throw away what is being typed in Search.
+  screen.appendChild(accountCard((reply) => {
+    const done = reply && (reply.totals ? reply.totals.done : reply.done);
+    if (done === undefined || done !== t.done) go('learn');
+  }));
 
   const pct = t.lessons ? Math.round((t.done / t.lessons) * 1000) / 10 : 0;
   const goalPct = Math.min(100, Math.round(((t.today_count || 0) / (t.goal || 10)) * 100));
@@ -198,22 +204,50 @@ async function learnCourse(screen) {
         } }))),
     el('div', { class: 'progress' }, el('div', { class: 'fill', style: `width:${pct}%` }))));
 
+  // Practice rounds (2.9.0 / 4.5) come after the hand-written units, under a
+  // heading of their own. A unit's chips are only built when it is opened:
+  // a course is about 1,800 lessons now, and drawing every one of them made
+  // the map slow to open and impossible to read.
+  const isPractice = (unit) => /^Practice round \d+$/.test(unit.title);
+  const practice = c.units.filter(isPractice);
+  let headed = false;
   c.units.forEach((unit, index) => {
+    if (isPractice(unit) && !headed) {
+      headed = true;
+      const lessons = practice.flatMap((u) => u.lessons);
+      const doneHere = lessons.filter((l) => l.done).length;
+      const next = lessons.find((l) => !l.done);
+      screen.appendChild(el('div', { class: 'row spread practice-head' },
+        el('div', {},
+          el('h2', { text: `Practice · ${practice.length} rounds` }),
+          el('div', { class: 'muted', text: 'Every kind of exercise again, with new code each '
+            + `round. ${doneHere} of ${lessons.length} done.` })),
+        next ? el('button', { class: 'small primary', text: doneHere ? 'Keep practising' : 'Practise',
+          onclick: () => learnOpen(c.id, next.id) }) : el('span', { class: 'tag good', text: 'All done' })));
+    }
     const done = unit.lessons.filter((l) => l.done).length;
-    const body = el('div', { class: 'lchips' });
-    unit.lessons.forEach((l) => {
-      body.appendChild(el('button', {
-        class: 'lchip' + (l.done ? ' done' : ''), title: `${KIND_LABEL[l.kind] || l.kind}: ${l.title}`,
-        onclick: () => learnOpen(c.id, l.id),
-      }, el('span', { class: 'k', text: KIND_MARK[l.kind] || '·' }), el('span', { text: l.title })));
-    });
     const allDone = done === unit.lessons.length;
-    const details = el('details', { class: 'card unit', open: !allDone && index < 12 },
+    const holdsNext = firstOpen && unit.lessons.some((l) => l.id === firstOpen.id);
+    const body = el('div', { class: 'lchips' });
+    const fill = () => {
+      if (body.childNodes.length) return;
+      unit.lessons.forEach((l) => {
+        body.appendChild(el('button', {
+          class: 'lchip' + (l.done ? ' done' : ''), title: `${KIND_LABEL[l.kind] || l.kind}: ${l.title}`,
+          onclick: () => learnOpen(c.id, l.id),
+        }, el('span', { class: 'k', text: KIND_MARK[l.kind] || '·' }), el('span', { text: l.title })));
+      });
+    };
+    const open = holdsNext || (!allDone && !isPractice(unit) && index < 3);
+    const details = el('details', { class: 'card unit' + (isPractice(unit) ? ' practice' : ''), open },
       el('summary', {},
         el('span', { class: 'grow' }, el('b', { text: unit.title }),
-          unit.goal ? el('span', { class: 'muted', text: '  ' + unit.goal }) : null),
+          unit.goal && !isPractice(unit) ? el('span', { class: 'muted', text: '  ' + unit.goal }) : null),
+        allDone ? el('span', { class: 'tag good', text: 'done' }) : null,
         el('span', { class: 'muted small-text', text: `${done}/${unit.lessons.length}` })),
       body);
+    if (open) fill();
+    details.addEventListener('toggle', () => { if (details.open) fill(); });
     screen.appendChild(details);
   });
 }
@@ -259,13 +293,16 @@ async function learnLesson(screen) {
   if (kind === 'read') {
     body.appendChild(el('p', { class: 'teach', html: learnInline(l.teach) }));
     body.appendChild(learnTry(l, l.code));
-    if (l.output) body.appendChild(el('div', {}, el('div', { class: 'muted small-text', text: 'It prints' }),
+    // A question about a document (how many rows, which value) shows the
+    // question with its answer; a program shows what it prints.
+    if (l.output) body.appendChild(el('div', {},
+      el('div', { class: 'muted small-text', html: l.ask ? `${learnInline(l.ask)} Answer:` : 'It prints' }),
       learnCode(l.output, 'printed')));
     if (l.note) body.appendChild(el('p', { class: 'muted', text: l.note }));
     actions.appendChild(el('button', { class: 'small primary', text: 'Got it - next (Enter)',
       onclick: () => learnAnswer('', feedback, actions) }));
   } else if (kind === 'predict' || kind === 'fill' || kind === 'which') {
-    body.appendChild(el('p', { class: 'teach', text: l.prompt }));
+    body.appendChild(el('p', { class: 'teach', html: learnInline(l.prompt) }));
     if (l.code) body.appendChild(learnCode(l.code));
     const opts = el('div', { class: 'options' + (kind === 'which' ? ' code-options' : '') });
     l.options.forEach((option, index) => {

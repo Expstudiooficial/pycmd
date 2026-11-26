@@ -1495,6 +1495,62 @@ check("diagnostics export to a zip", _diag.get("ok") and _zf.is_zipfile(_diag["z
 check("every handler 4.0 added is reachable",
       all(name in host_module.HANDLERS for name in _features.HANDLERS))
 
+
+# -- 4.5: practice rounds, accounts, export and import ------------------------
+#
+# The account calls are checked end to end against the real website handler in
+# the Android repository's tools/test_account.py; here, that every one reaches
+# the engine and answers, and that export and import round-trip through a
+# file - offline, with no account, the way somebody moving PCs would use them.
+say()
+say("== 4.5: practice, accounts, export and import ==")
+from pycmd_win import learn as _learn45  # noqa: E402
+
+_teach45 = _learn45._engine()
+_cat45 = _teach45.catalogue()
+_small = [(row["id"], row["lessons"]) for row in _cat45 if row["lessons"] < 1700]
+check("every course has about 1,800 lessons, Windows-only ones too", not _small, _small)
+check("there are 50 courses", len(_cat45) == 50, len(_cat45))
+_total45 = sum(row["lessons"] for row in _cat45)
+check("and about 90,000 lessons in all", 85_000 < _total45 < 95_000, _total45)
+from pycmd_teach import practice as _practice45  # noqa: E402
+
+_missing45 = sorted(set(_learn45.windows_course_ids()) - set(_practice45.MORE_LANGS))
+check("every Windows-only language has its practice templates", not _missing45, _missing45)
+for _name in ("account", "account.username", "account.signup", "account.login",
+              "account.logout", "account.sync", "account.password", "account.delete",
+              "progress.export", "progress.import"):
+    check(f"the {_name} call is wired up", _name in host_module.HANDLERS, _name)
+_acct = _c("account")
+check("signed out to begin with", _acct.get("ok") and not _acct.get("signed_in"), _acct)
+check("a username that breaks the rules is refused without asking the server",
+      _c("account.username", {"name": "a b"}).get("available") is False)
+check("a weak password is refused before anything is sent",
+      not _c("account.signup", {"username": "someone", "password": "short"}).get("ok"))
+check("sync while signed out is a no-op, not an error",
+      _c("account.sync").get("ok") and not _c("account.sync").get("signed_in"))
+
+_learn45.complete("python", "0.0.read")
+_export_path = os.path.join(_HOME, "progress-export.json")
+_exp = _c("progress.export", {"path": _export_path})
+check("progress exports to a .json file", _exp.get("ok") and os.path.isfile(_export_path), _exp)
+with open(_export_path, encoding="utf-8") as _handle:
+    _doc = json.load(_handle)
+check("the file says what it is", _doc.get("format") == "pycmd-learn-progress", _doc.keys())
+check("and has the lesson in it", "0.0.read" in _doc["progress"]["done"].get("python", []))
+_learn45.reset("")
+check("after a reset the lesson is gone", _learn45.catalogue()["totals"]["done"] == 0)
+_imp = _c("progress.import", {"path": _export_path, "mode": "merge"})
+check("import brings it back", _imp.get("ok") and _imp.get("added") == 1, _imp)
+_junk = os.path.join(_HOME, "not-progress.json")
+with open(_junk, "w", encoding="utf-8") as _handle:
+    _handle.write('{"hello": 1}')
+check("a JSON file that is not progress is refused",
+      not _c("progress.import", {"path": _junk}).get("ok"))
+check("a missing file is an answer, not a crash",
+      not _c("progress.import", {"path": os.path.join(_HOME, "nope.json")}).get("ok"))
+_learn45.reset("")
+
 say()
 if FAILURES:
     say(f"{len(FAILURES)} of {CHECKS[0]} checks failed: {FAILURES[:6]}")

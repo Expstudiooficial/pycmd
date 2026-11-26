@@ -69,9 +69,28 @@ def _engine():
             sys.modules[f"pycmd_teach.{alias}"] = module
             names.append(alias)
         pycmd_teach.COURSE_MODULES_MORE = tuple(names)
+        # Practice rounds for the Windows-only languages: the engine knows how
+        # to write the exercises in the phone's languages, these are the rest.
+        try:
+            from pycmd_teach import practice
+            from .courses import practice_more
+
+            practice.MORE_LANGS.update(practice_more.LANGS)
+        except ImportError:
+            pass
         pycmd_teach._COURSES = None
         pycmd_teach.EXTERNAL_RUNNER = run_snippet
         pycmd_teach.configure(store.folder("learn"))
+        try:
+            from pycmd_teach import cloud
+
+            from . import host as host_module
+
+            # A generic name, on purpose: the computer's own name often has
+            # somebody's real name in it, and it would be stored on the server.
+            cloud.set_device("Windows PC", f"PyCmd-Windows/{host_module.VERSION}")
+        except ImportError:
+            pass
         _teach = pycmd_teach
         return _teach
 
@@ -290,6 +309,11 @@ def course(course_id: str) -> dict:
         reply["blurb"] = PC_BLURBS.get(course_id, reply.get("blurb", ""))
         reply["runsHere"] = reply["extension"] in _engine().RUNNABLE or can_run(reply["extension"])
     return reply
+
+
+def account(name: str, first: str = "", second: str = "") -> dict:
+    """The PyCmd account calls - sign in, sync, export - through the engine."""
+    return _call(name, first, second)
 
 
 def lesson(course_id: str, lesson_id: str) -> dict:

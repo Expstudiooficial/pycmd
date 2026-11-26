@@ -475,9 +475,17 @@ def selftest() -> int:
         courses = catalogue.get("courses", [])
         if len(courses) < 50:
             problems.append(f"only {len(courses)} Learn courses were packed")
-        if catalogue.get("totals", {}).get("lessons", 0) < 10000:
-            problems.append("Learn has too few lessons - a course module is missing")
-        for name in ("android.plan", "portables", "look", "templates", "machine", "whatsnew"):
+        if catalogue.get("totals", {}).get("lessons", 0) < 85000:
+            problems.append(
+                f"Learn has {catalogue.get('totals', {}).get('lessons', 0)} lessons, not about "
+                "90,000 - a course module or the practice rounds are missing")
+        thin = [row.get("id") for row in courses if row.get("lessons", 0) < 1700]
+        if thin:
+            problems.append(f"these courses have no practice rounds: {thin}")
+        # 4.5: accounts, export and import go through pycmd_teach.cloud, which
+        # the engine imports lazily - so ask it something.
+        for name in ("android.plan", "portables", "look", "templates", "machine", "whatsnew",
+                     "account"):
             reply = host_module.call(instance, name)
             if not reply.get("ok"):
                 problems.append(f"{name} answered {reply.get('error')}")

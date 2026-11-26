@@ -96,11 +96,14 @@ is not a repository yet.
 **Tasks** — the scripts a project already declares, one click each: npm
 scripts, Makefile targets, cargo, go, dotnet and Gradle. Output on the Console.
 
-**PyCmd Learn** — 50 languages and 14,700 lessons. The phone's 28 courses,
+**PyCmd Learn** — 50 languages and 90,129 lessons, about 1,800 in each. The
+phone's 28 courses,
 and 22 more only a PC can run: C#, F#, Haskell, OCaml, Elixir, Erlang, Scala,
 Groovy, Clojure, R, AWK, Prolog, Fortran, Pascal, COBOL, D, Nim, Perl, Tcl,
 PowerShell, Scheme and Racket. Where the language is installed your answer is
-**marked by running it**. See [LEARN.md](LEARN.md).
+**marked by running it**. Sign in with a PyCmd account and your progress
+syncs with the Android app, or export it to a `.json` file and import it
+anywhere. See [LEARN.md](LEARN.md).
 
 **Toolchains** — 52 compilers and interpreters, which are installed and what
 version. Seventeen install with one click, straight from their vendor and

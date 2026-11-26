@@ -489,6 +489,11 @@ async function Settings(screen) {
   screen.appendChild(head('Settings', 'How PyCmd looks, and the few things it remembers.'));
   await lookLoad();
 
+  // The account lives on Learn, where the progress is; it is here as well
+  // because Settings is where people look for "sign out".
+  screen.appendChild(el('h2', { text: 'Account and progress' }));
+  screen.appendChild(accountCard(null));
+
   const themes = el('div', { class: 'theme-grid' });
   Object.entries(Look.themes).concat([['custom', Object.assign({}, Look.custom || lookPalette(), { name: 'Your own' })]])
     .forEach(([id, t]) => {

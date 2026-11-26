@@ -85,13 +85,19 @@ body {
   font-size: 11px;
   padding: 3px 9px;
   border-radius: 20px;
-  background: #102A1E;
+  background: color-mix(in srgb, var(--good) 12%, var(--bg));
   color: var(--good);
-  border: 1px solid #1D4634;
+  border: 1px solid color-mix(in srgb, var(--good) 35%, var(--line));
   white-space: nowrap;
 }
-.chip.bad { background: #2A1010; color: var(--bad); border-color: #4A1F1F; }
-.chip.warn { background: #2A2310; color: var(--warn); border-color: #4A3D1F; }
+.chip.bad {
+  background: color-mix(in srgb, var(--bad) 12%, var(--bg)); color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 35%, var(--line));
+}
+.chip.warn {
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg)); color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--line));
+}
 
 .icon {
   position: relative;
@@ -223,9 +229,16 @@ button.small:active, .btn:active { transform: translateY(1px); }
 button.small.primary, .btn.primary {
   background: var(--accent-bg); border-color: var(--accent-line); color: var(--bright);
 }
-button.small.primary:hover, .btn.primary:hover { background: #17406A; border-color: var(--accent); }
-button.small.danger { border-color: #5A2A2A; color: #F0A5A5; }
-button.small.danger:hover { background: #2A1212; border-color: var(--bad); }
+button.small.primary:hover, .btn.primary:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--accent-bg)); border-color: var(--accent);
+}
+button.small.danger {
+  border-color: color-mix(in srgb, var(--bad) 40%, var(--line));
+  color: color-mix(in srgb, var(--bad) 60%, var(--bright));
+}
+button.small.danger:hover {
+  background: color-mix(in srgb, var(--bad) 14%, var(--bg)); border-color: var(--bad);
+}
 button.small:disabled { opacity: .4; cursor: default; }
 button.small:disabled:hover { background: var(--bg); border-color: var(--line); }
 
@@ -255,7 +268,7 @@ label.field > span { display: block; font-size: 12px; color: var(--dim); margin-
 
 code, pre { font-family: Consolas, "Cascadia Mono", ui-monospace, monospace; }
 pre.out {
-  background: #10161F; border: 1px solid var(--line);
+  background: var(--sunken); border: 1px solid var(--line);
   border-radius: 10px; padding: 11px; overflow: auto;
   font-size: 12.5px; margin: 8px 0;
   max-height: 340px;
@@ -268,8 +281,11 @@ pre.out {
   border: 1px solid var(--line); background: var(--bg); color: var(--dim);
   margin: 2px 4px 2px 0;
 }
-.pill.on { background: #102A1E; border-color: #1D4634; color: var(--good); }
-.pill.off { color: #5D6E82; }
+.pill.on {
+  background: color-mix(in srgb, var(--good) 12%, var(--bg));
+  border-color: color-mix(in srgb, var(--good) 35%, var(--line)); color: var(--good);
+}
+.pill.off { color: var(--faint); }
 
 .switch {
   width: 40px; height: 22px; border-radius: 20px;
@@ -306,15 +322,17 @@ pre.out {
 
 .toast {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
-  background: #16202C; border: 1px solid var(--line);
-  border-radius: 10px; padding: 10px 16px; z-index: 40;
+  background: var(--raised); border: 1px solid var(--accent-line);
+  color: var(--bright);
+  border-radius: 10px; padding: 10px 16px; z-index: 70;
   box-shadow: 0 8px 28px rgba(0,0,0,.5);
   max-width: 70ch;
 }
 
 .sheet {
   position: fixed; inset: 0; z-index: 50;
-  background: rgba(4, 8, 12, .74);
+  background: rgba(0, 0, 0, .62);
+  backdrop-filter: blur(3px);
   display: grid; place-items: center;
   padding: 24px;
 }
@@ -333,7 +351,7 @@ pre.out {
 
 /* -- the debug log ----------------------------------------------------- */
 
-.log-line { border-bottom: 1px solid #182231; padding: 5px 2px; font-size: 12.5px; }
+.log-line { border-bottom: 1px solid var(--line-soft); padding: 5px 2px; font-size: 12.5px; }
 .log-line .lvl { display: inline-block; width: 52px; color: var(--dim); }
 .log-line.error .lvl { color: var(--bad); }
 .log-line.warn .lvl { color: var(--warn); }
@@ -571,8 +589,8 @@ textarea.plain {
   color: var(--dim);
   white-space: nowrap;
 }
-.tag.warn { color: var(--warn); border-color: #4A3D1F; }
-.tag.good { color: var(--good); border-color: #1D4634; }
+.tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+.tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, var(--line)); }
 
 /* An empty state should look deliberate rather than like something failed to
    load, which is what an unstyled line of grey text looks like. */
@@ -763,3 +781,69 @@ input[type="range"], input[type="radio"] { accent-color: var(--accent); }
 .markdown ul, .markdown ol { padding-left: 22px; }
 .markdown hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 .markdown .doc-ref { color: var(--accent); }
+
+/* -- 4.5 ---------------------------------------------------------------- */
+/*
+  Colours above this line that were written out by hand (a dark blue here, a
+  dark green there) are tokens now: they were left from the first palette,
+  did not follow the theme you picked, and were most of why some panels
+  looked like they belonged to another app.
+*/
+
+.sheet-card { box-shadow: 0 24px 64px -18px rgba(0, 0, 0, .75); }
+.sheet-card:has(.account-form) { width: min(520px, 100%); }
+
+/* The account card at the top of Learn. */
+.account-card { display: flex; align-items: center; gap: 14px; }
+.account-card b { color: var(--bright); }
+.account-mark {
+  flex: 0 0 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--sunken); border: 1px solid var(--line);
+  color: var(--dim); font-size: 18px;
+}
+.account-mark.on {
+  background: var(--accent-bg); border-color: var(--accent-line);
+  color: var(--bright); font-weight: 650; font-size: 16px;
+}
+.account-actions { justify-content: flex-end; gap: 6px; }
+
+/* Forms: sign in, sign up, change password. */
+.account-form label.field:first-child { margin-top: 0; }
+.input-with { gap: 6px; }
+.input-with input { flex: 1 1 auto; }
+button.small.ghost { background: none; border-color: transparent; color: var(--dim); }
+button.small.ghost:hover { background: none; border-color: transparent; color: var(--accent); }
+.form-error {
+  margin: 10px 0; padding: 8px 11px; font-size: 13px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line));
+  background: color-mix(in srgb, var(--bad) 10%, var(--surface));
+  color: color-mix(in srgb, var(--bad) 70%, var(--bright));
+}
+.field-note { font-size: 12px; margin-top: 5px; min-height: 1.3em; }
+.good-text { color: var(--good); }
+.warn-text { color: var(--warn); }
+
+/* A list of big choices, each a sentence long. */
+.choice-list { display: grid; gap: 8px; margin-top: 10px; }
+.choice {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  font: inherit; color: var(--text); cursor: pointer;
+  background: var(--sunken); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 11px 14px;
+  transition: border-color .12s ease, background .12s ease;
+}
+.choice:hover { border-color: var(--accent-line); background: var(--raised); }
+.choice b { color: var(--bright); }
+.danger-choice:hover { border-color: var(--bad); }
+
+/* Cards lift a little on the screens people spend longest on. */
+.course-card:focus-visible, .choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card.lesson { border-color: var(--line); }
+h1 + .lead, .head .lead { margin-bottom: 14px; }
+.input-with button { flex: 0 0 auto; min-width: 60px; text-align: center; overflow: visible; }
+.practice-head { margin: 26px 0 4px; align-items: flex-end; gap: 16px; }
+.practice-head h2 { margin: 0 0 2px; }
+details.unit.practice { padding-top: 10px; padding-bottom: 10px; margin: 6px 0; }
+details.unit.practice summary b { font-weight: 560; }
