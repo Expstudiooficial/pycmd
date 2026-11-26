@@ -232,6 +232,13 @@ class Host:
         # opened, and every button that needed its own code did nothing
         # (Creator, most visibly).
         load_installed_plugins(self)
+        try:
+            from . import mcp
+
+            if mcp._settings()["on"]:
+                mcp.apply(self)
+        except Exception as error:  # noqa: BLE001 - never stop the app over it
+            self.log("warn", "the MCP server did not start", str(error))
 
         _engine_ready = True
         self.log("info", f"PyCmd for Windows {VERSION} ready", store.root())
@@ -1293,6 +1300,28 @@ HANDLERS = {
 from . import features as _features  # noqa: E402
 
 HANDLERS.update(_features.HANDLERS)
+
+
+# 5.0: the MCP server, so AI agents can drive PyCmd (see mcp.py).
+def _h_mcp(host, payload):
+    from . import mcp
+
+    return mcp.status(host)
+
+
+def _h_mcp_set(host, payload):
+    from . import mcp
+
+    return mcp.set_options(host, payload)
+
+
+def _h_mcp_ui_result(host, payload):
+    from . import mcp
+
+    return mcp.ui_result(payload)
+
+
+HANDLERS.update({"mcp": _h_mcp, "mcp.set": _h_mcp_set, "mcp.ui.result": _h_mcp_ui_result})
 
 
 def call(host: Host, name: str, payload=None) -> dict:

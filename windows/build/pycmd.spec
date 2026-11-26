@@ -65,7 +65,7 @@ hiddenimports = [
     # try/except ImportError, so a build without them would not fail - it
     # would quietly ship 14,700 lessons instead of 90,000 and no sign-in.
     "pycmd_teach.practice", "pycmd_teach.practice_docs", "pycmd_teach.cloud",
-    "pycmd_win.courses.practice_more",
+    "pycmd_win.courses.practice_more", "pycmd_mcp", "pycmd_win.mcp",
     "pycmd_win.courses", "pycmd_win.courses.functional", "pycmd_win.courses.dotnet",
     "pycmd_win.courses.beam", "pycmd_win.courses.jvm", "pycmd_win.courses.data",
     "pycmd_win.courses.classic", "pycmd_win.courses.scripting",

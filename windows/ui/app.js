@@ -203,6 +203,7 @@ const TABS = [
   { id: 'ports', name: 'Ports', key: '⇄' },
   { group: 'PyCmd' },
   { id: 'plugins', name: 'Plugins', key: '◈' },
+  { id: 'mcp', name: 'MCP · AI agents', key: '✦' },
   { id: 'copies', name: 'Copies', key: '⧉' },
   { id: 'docs', name: 'Guides', key: '?' },
   { id: 'settings', name: 'Settings', key: '◐' },

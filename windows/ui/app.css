@@ -855,3 +855,4 @@ details.unit.practice summary b { font-weight: 560; }
    window and nothing could reach the rest of it. */
 .sheet-card { max-height: calc(100vh - 48px); min-height: 0; }
 .sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.wrap-code { white-space: pre-wrap; word-break: break-all; }
