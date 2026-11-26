@@ -16,7 +16,7 @@ It also teaches them. **PyCmdTeach** is 28 courses and 50,466 lessons covering
 every language in that list and every file type the app knows, and for Python,
 C, Rust and Go it marks what you write by running it.
 
-Version 2.9.0. Kotlin and Jetpack Compose for the app, JavaScript for the
+Version 3.0.0. Kotlin and Jetpack Compose for the app, JavaScript for the
 console and editor. Runs on a phone and on an emulator from the same APK.
 
 ---

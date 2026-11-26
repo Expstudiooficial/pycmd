@@ -100,6 +100,15 @@ fun MoreScreen(
         }
         item {
             DestinationRow(
+                icon = PyIcons.Terminal,
+                title = "MCP · AI agents",
+                subtitle = "Let Claude Code, Antigravity, Cursor and others drive PyCmd",
+                badge = null,
+                onClick = { onSelect(Tab.MCP) },
+            )
+        }
+        item {
+            DestinationRow(
                 icon = PyIcons.Palette,
                 title = "Appearance",
                 subtitle = "Themes, including the Halloween one, and your own colours",

@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.Job
@@ -89,6 +90,7 @@ enum class Tab(val label: String) {
     PAGES("Pages"),
     MUSIC("Music"),
     TEACH("PyCmdTeach"),
+    MCP("MCP"),
     APPEARANCE("Appearance"),
     SYSTEM("System");
 
@@ -113,7 +115,7 @@ enum class Tab(val label: String) {
             APPEARANCE -> "appearance"
             // The console and the editor are a full-screen WebView each, with
             // nowhere to put a card that would not be in the way.
-            CONSOLE, EDITOR, MORE, TOOL, PLUGIN_PANEL -> null
+            CONSOLE, EDITOR, MORE, TOOL, PLUGIN_PANEL, MCP -> null
         }
 }
 
@@ -1465,6 +1467,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         "music" -> Tab.MUSIC
         "teach", "pycmdteach" -> Tab.TEACH
         "appearance", "themes" -> Tab.APPEARANCE
+        "mcp", "agents", "ai" -> Tab.MCP
         "more" -> Tab.MORE
         else -> null
     }
@@ -1882,6 +1885,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (tab == Tab.SYSTEM) refreshSystem()
         if (tab == Tab.TEACH && _teach.value.courses.isEmpty()) refreshTeach()
         if (tab == Tab.TEACH) refreshAccount()
+        if (tab == Tab.MCP) refreshMcp()
         if (tab == Tab.PLUGINS) refreshCustomPlugins(reload = false)
         _tab.value = tab
         when (tab) {
@@ -3706,6 +3710,96 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _teachBusy = MutableStateFlow(false)
     val teachBusy: StateFlow<Boolean> = _teachBusy.asStateFlow()
 
+    // -------------------------------------------------------------------- mcp
+
+    private val mcpPrefs = application.getSharedPreferences("mcp", 0)
+    private val _mcp = MutableStateFlow(McpState())
+    val mcp: StateFlow<McpState> = _mcp.asStateFlow()
+
+    init {
+        // Back on at start if it was on when the app closed.
+        viewModelScope.launch {
+            engine.status.first { it.ready }
+            if (mcpPrefs.getBoolean("on", false)) applyMcp()
+        }
+    }
+
+    /** A tab by the name an agent (or a plugin) uses for it. */
+    fun tabByName(name: String): Tab? = tabNamed(name.lowercase())
+
+    private suspend fun mcpToken(): String {
+        val saved = mcpPrefs.getString("token", "").orEmpty()
+        if (saved.isNotEmpty()) return saved
+        val made = engine.mcp("new_token")
+        mcpPrefs.edit().putString("token", made).apply()
+        return made
+    }
+
+    private fun lanAddress(): String = runCatching {
+        java.net.NetworkInterface.getNetworkInterfaces().toList()
+            .flatMap { it.inetAddresses.toList() }
+            .firstOrNull { !it.isLoopbackAddress && it is java.net.Inet4Address && it.isSiteLocalAddress }
+            ?.hostAddress
+    }.getOrNull() ?: "127.0.0.1"
+
+    private suspend fun applyMcp() {
+        val on = mcpPrefs.getBoolean("on", false)
+        val lan = mcpPrefs.getBoolean("lan", false)
+        if (on) {
+            engine.mcp("start", workspace.root.absolutePath, mcpToken(), 8765, lan,
+                mcpPrefs.getBoolean("readOnly", false), BuildConfig.VERSION_NAME)
+        } else {
+            engine.mcp("stop")
+        }
+        refreshMcp()
+    }
+
+    fun refreshMcp() {
+        viewModelScope.launch {
+            val lan = mcpPrefs.getBoolean("lan", false)
+            val token = mcpToken()
+            val json = JSONObject(engine.mcp("status", token, 8765, if (lan) lanAddress() else "127.0.0.1"))
+            val setups = json.optJSONArray("setups")
+            val calls = json.optJSONArray("calls")
+            _mcp.value = McpState(
+                on = mcpPrefs.getBoolean("on", false), lan = lan,
+                readOnly = mcpPrefs.getBoolean("readOnly", false),
+                running = json.optBoolean("running"), url = json.optString("url"),
+                error = json.optString("error"), tools = json.optInt("tools"), token = token,
+                calls = (0 until (calls?.length() ?: 0)).mapNotNull { calls?.optJSONObject(it) }.map {
+                    "${if (it.optBoolean("ok")) "ok " else "err"}  ${it.optString("tool")}  ${it.optInt("ms")} ms"
+                },
+                setups = (0 until (setups?.length() ?: 0)).mapNotNull { setups?.optJSONObject(it) }.map {
+                    McpSetup(it.optString("app"), it.optString("where"), it.optString("text"))
+                },
+            )
+        }
+    }
+
+    fun setMcp(on: Boolean? = null, lan: Boolean? = null, readOnly: Boolean? = null) {
+        mcpPrefs.edit().apply {
+            on?.let { putBoolean("on", it) }
+            lan?.let { putBoolean("lan", it) }
+            readOnly?.let { putBoolean("readOnly", it) }
+        }.apply()
+        viewModelScope.launch { applyMcp() }
+    }
+
+    fun newMcpToken() {
+        viewModelScope.launch {
+            mcpPrefs.edit().putString("token", engine.mcp("new_token")).apply()
+            applyMcp()
+            showToast("New token: apps with the old one are disconnected.")
+        }
+    }
+
+    fun workspaceRootPath(): String = workspace.root.absolutePath
+
+    /** What the MCP bridge needs to read for ui_state. */
+    fun mcpScreenState(): JSONObject = JSONObject()
+        .put("ok", true).put("tab", _tab.value.name.lowercase())
+        .put("file", editor.value.fileName)
+
     // ---------------------------------------------------------------- account
 
     /**
@@ -3865,6 +3959,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     formError = reply.optString("error").ifEmpty { "That did not work." },
                 )
             }
+        }
+    }
+
+    // ---------------------------------------------------------- cloud storage
+
+    fun refreshCloud() {
+        viewModelScope.launch {
+            val reply = engine.teachAccount("cloud_files")
+            if (!reply.optBoolean("ok")) {
+                showToast(reply.optString("error").ifEmpty { "Cloud storage is not reachable." })
+                return@launch
+            }
+            val rows = reply.optJSONArray("files")
+            _account.value = _account.value.copy(
+                cloudUsed = reply.optLong("used"),
+                cloudQuota = reply.optLong("quota", 800 * 1024),
+                cloudFiles = (0 until (rows?.length() ?: 0)).mapNotNull { rows?.optJSONObject(it) }
+                    .map { CloudFile(it.optString("path"), it.optLong("size")) },
+            )
+        }
+    }
+
+    fun uploadCloud(source: Uri) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val name = Imports.displayName(app, source) ?: "file"
+            val bytes = withContext(Dispatchers.IO) {
+                runCatching { app.contentResolver.openInputStream(source)?.use { it.readBytes() } }
+                    .getOrNull()
+            }
+            if (bytes == null) { showToast("Could not read that file."); return@launch }
+            if (bytes.size > 800 * 1024) { showToast("That file is over 800 KB."); return@launch }
+            val reply = engine.teachAccount("cloud_put", name,
+                android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+            showToast(if (reply.optBoolean("ok")) "Uploaded $name." else reply.optString("error"))
+            refreshCloud()
+        }
+    }
+
+    fun saveCloud(name: String) {
+        viewModelScope.launch {
+            val target = File(workspace.root, "cloud/$name")
+            val reply = engine.teachAccount("cloud_download", name, target.absolutePath)
+            showToast(if (reply.optBoolean("ok")) "Saved to workspace/cloud/$name" else reply.optString("error"))
+        }
+    }
+
+    fun deleteCloud(name: String) {
+        viewModelScope.launch {
+            val reply = engine.teachAccount("cloud_delete", name)
+            if (!reply.optBoolean("ok")) showToast(reply.optString("error"))
+            refreshCloud()
         }
     }
 

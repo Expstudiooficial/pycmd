@@ -115,6 +115,11 @@ const DAY = 24 * 60 * 60 * 1000;
 const SESSION_DAYS = 90;
 const SERVER_ROUNDS = 1000;
 const MAX_BODY = 400 * 1024;
+// Cloud storage: what each account may keep, in bytes before compression.
+export const QUOTA = 800 * 1024;
+const MAX_FILES = 500;
+const MAX_FILE_BODY = 1200 * 1024;  // 800 KB as base64, with room for the JSON
+const FILE_PATH = /^(?!\/)(?!.*\.\.)[A-Za-z0-9 _.\-\/]{1,200}$/;
 const MAX_PROGRESS = 300 * 1024;
 const USERNAME = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{1,22})[A-Za-z0-9]$/;
 const KEY = /^[0-9a-f]{64}$/;
@@ -156,6 +161,13 @@ const SCHEMA = [
      version INTEGER NOT NULL,
      updated_at INTEGER NOT NULL,
      device TEXT NOT NULL DEFAULT '')`,
+  `CREATE TABLE IF NOT EXISTS pycmd_files (
+     user_id INTEGER NOT NULL,
+     path TEXT NOT NULL,
+     data TEXT NOT NULL,
+     size INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL,
+     PRIMARY KEY (user_id, path))`,
   `CREATE TABLE IF NOT EXISTS pycmd_attempts (
      bucket TEXT NOT NULL,
      at INTEGER NOT NULL)`,
@@ -234,16 +246,53 @@ function fail(status, error, extra = {}) {
   return reply(status, { ok: false, error, ...extra });
 }
 
-async function readJson(request) {
+// Stored compressed: Learn progress is long lists of lesson ids, which gzip
+// shrinks about tenfold, and the database is 500 MB for everybody. Rows
+// written before this are plain JSON and still read.
+function b64(bytes) {
+  let text = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(text);
+}
+
+function unb64(text) {
+  const raw = atob(text);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+async function gzip(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function gunzip(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+export async function pack(text) {
+  return "gz:" + b64(await gzip(encoder.encode(text)));
+}
+
+export async function unpack(stored) {
+  if (!String(stored).startsWith("gz:")) return stored;
+  return new TextDecoder().decode(await gunzip(unb64(stored.slice(3))));
+}
+
+async function readJson(request, max = MAX_BODY) {
   const length = Number(request.headers.get("content-length") || 0);
-  if (length > MAX_BODY) return { error: fail(413, "That is too big to send.") };
+  if (length > max) return { error: fail(413, "That is too big to send.") };
   let text;
   try {
     text = await request.text();
   } catch {
     return { error: fail(400, "The request could not be read.") };
   }
-  if (text.length > MAX_BODY) return { error: fail(413, "That is too big to send.") };
+  if (text.length > max) return { error: fail(413, "That is too big to send.") };
   try {
     const value = JSON.parse(text || "{}");
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error();
@@ -419,11 +468,13 @@ async function me(db, who) {
     .bind(who.id).first();
   const sessions = await db.prepare(
     "SELECT COUNT(*) AS n FROM pycmd_sessions WHERE user_id = ?").bind(who.id).first();
+  const used = await storageUsed(db, who.id);
   return reply(200, {
     ok: true, username: who.username, created_at: who.created,
     progress: row ? { version: row.version, updated_at: row.updated_at, device: row.device }
       : null,
     sessions: sessions?.n || 0,
+    storage: { used, quota: QUOTA },
   });
 }
 
@@ -432,7 +483,7 @@ async function getProgress(db, who) {
     "SELECT data, version, updated_at, device FROM pycmd_progress WHERE user_id = ?")
     .bind(who.id).first();
   if (!row) return reply(200, { ok: true, version: 0, data: null, updated_at: 0, device: "" });
-  return reply(200, { ok: true, version: row.version, data: JSON.parse(row.data),
+  return reply(200, { ok: true, version: row.version, data: JSON.parse(await unpack(row.data)),
     updated_at: row.updated_at, device: row.device });
 }
 
@@ -443,8 +494,9 @@ async function putProgress(db, request, who, now) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return fail(400, "Progress has to be an object.");
   }
-  const text = JSON.stringify(data);
-  if (text.length > MAX_PROGRESS) return fail(413, "That progress file is too big.");
+  const plain = JSON.stringify(data);
+  if (plain.length > MAX_PROGRESS) return fail(413, "That progress file is too big.");
+  const text = await pack(plain);
   const base = Number.isInteger(value.base_version) ? value.base_version : -1;
   const deviceName = device(value.device);
   let result;
@@ -468,7 +520,7 @@ async function putProgress(db, request, who, now) {
     return reply(409, { ok: false, conflict: true,
       error: "Another device saved first. Merge and try again.",
       version: current ? current.version : 0,
-      data: current ? JSON.parse(current.data) : null,
+      data: current ? JSON.parse(await unpack(current.data)) : null,
       updated_at: current ? current.updated_at : 0 });
   }
   return reply(200, { ok: true, version: base + 1, updated_at: now });
@@ -514,10 +566,87 @@ async function deleteAccount(db, request, who, now) {
   }
   await db.batch([
     db.prepare("DELETE FROM pycmd_progress WHERE user_id = ?").bind(who.id),
+    db.prepare("DELETE FROM pycmd_files WHERE user_id = ?").bind(who.id),
     db.prepare("DELETE FROM pycmd_sessions WHERE user_id = ?").bind(who.id),
     db.prepare("DELETE FROM pycmd_users WHERE id = ?").bind(who.id),
   ]);
   return reply(200, { ok: true });
+}
+
+// ----------------------------------------------------------- cloud storage
+
+async function storageUsed(db, userId) {
+  const row = await db.prepare(
+    "SELECT COALESCE(SUM(size), 0) AS used, COUNT(*) AS n FROM pycmd_files WHERE user_id = ?")
+    .bind(userId).first();
+  return row?.used || 0;
+}
+
+function filePath(raw) {
+  let path;
+  try {
+    path = decodeURIComponent(raw);
+  } catch {
+    path = raw;
+  }
+  return FILE_PATH.test(path) ? path : "";
+}
+
+async function listFiles(db, who) {
+  const rows = await db.prepare(
+    "SELECT path, size, updated_at FROM pycmd_files WHERE user_id = ? ORDER BY path")
+    .bind(who.id).all();
+  const files = rows.results || [];
+  return reply(200, { ok: true, files, used: files.reduce((n, f) => n + f.size, 0),
+    quota: QUOTA });
+}
+
+async function getFile(db, who, path) {
+  const row = await db.prepare(
+    "SELECT data, size, updated_at FROM pycmd_files WHERE user_id = ? AND path = ?")
+    .bind(who.id, path).first();
+  if (!row) return fail(404, "There is no such file in your cloud storage.");
+  const bytes = await gunzip(unb64(row.data));
+  return reply(200, { ok: true, path, size: row.size, updated_at: row.updated_at,
+    content_b64: b64(bytes) });
+}
+
+async function putFile(db, request, who, path, now) {
+  const { value, error } = await readJson(request, MAX_FILE_BODY);
+  if (error) return error;
+  let bytes;
+  try {
+    bytes = unb64(String(value.content_b64 || ""));
+  } catch {
+    return fail(400, "content_b64 has to be base64.");
+  }
+  const old = await db.prepare(
+    "SELECT size FROM pycmd_files WHERE user_id = ? AND path = ?").bind(who.id, path).first();
+  const count = await db.prepare(
+    "SELECT COUNT(*) AS n FROM pycmd_files WHERE user_id = ?").bind(who.id).first();
+  if (!old && (count?.n || 0) >= MAX_FILES) {
+    return fail(413, `Cloud storage holds at most ${MAX_FILES} files.`);
+  }
+  const used = await storageUsed(db, who.id) - (old ? old.size : 0);
+  if (used + bytes.length > QUOTA) {
+    return fail(413, `That does not fit: ${Math.ceil((QUOTA - used) / 1024)} KB of your `
+      + `${QUOTA / 1024} KB is free, and the file is ${Math.ceil(bytes.length / 1024)} KB.`,
+    { used, quota: QUOTA });
+  }
+  await db.prepare(
+    `INSERT INTO pycmd_files (user_id, path, data, size, updated_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, path) DO UPDATE SET data = excluded.data, size = excluded.size,
+       updated_at = excluded.updated_at`)
+    .bind(who.id, path, b64(await gzip(bytes)), bytes.length, now).run();
+  return reply(200, { ok: true, path, size: bytes.length, used: used + bytes.length,
+    quota: QUOTA });
+}
+
+async function deleteFile(db, who, path) {
+  const result = await db.prepare("DELETE FROM pycmd_files WHERE user_id = ? AND path = ?")
+    .bind(who.id, path).run();
+  if (!result.meta.changes) return fail(404, "There is no such file in your cloud storage.");
+  return reply(200, { ok: true, used: await storageUsed(db, who.id), quota: QUOTA });
 }
 
 // ------------------------------------------------------------------- router
@@ -551,7 +680,7 @@ export async function handle(request, db, path) {
     if (route === "login" && method === "POST") return await login(db, request, now);
 
     const who = await signedIn(db, request, now);
-    const known = ["logout", "me", "progress", "password", "account"];
+    const known = ["logout", "me", "progress", "password", "account", "files"];
     if (!known.includes(route)) return fail(404, "There is no such call.");
     if (!who) return fail(401, "Sign in again.", { signed_out: true });
 
@@ -565,6 +694,17 @@ export async function handle(request, db, path) {
     if (route === "progress" && method === "PUT") return await putProgress(db, request, who, now);
     if (route === "password" && method === "POST") {
       return await changePassword(db, request, who, now);
+    }
+    if (route === "files") {
+      if (parts.length === 1 && method === "GET") return await listFiles(db, who);
+      const path = filePath(parts.slice(1).join("/"));
+      if (!path) {
+        return fail(400, "A file name is 1-200 letters, digits, spaces and _ . - /, "
+          + "with no .. in it.");
+      }
+      if (method === "GET") return await getFile(db, who, path);
+      if (method === "PUT") return await putFile(db, request, who, path, now);
+      if (method === "DELETE") return await deleteFile(db, who, path);
     }
     if (route === "account" && parts[1] === "delete" && method === "POST") {
       return await deleteAccount(db, request, who, now);

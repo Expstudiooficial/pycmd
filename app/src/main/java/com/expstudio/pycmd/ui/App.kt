@@ -127,6 +127,17 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
     val teachSearch by viewModel.teachSearch.collectAsState()
     val teachQueue by viewModel.teachQueue.collectAsState()
     val teachAccount by viewModel.account.collectAsState()
+    val mcpState by viewModel.mcp.collectAsState()
+
+    // The MCP server's hands on this screen (see mcp/McpBridge.kt): while the
+    // app is showing, an agent's ui_* tools land here, on the main thread.
+    val mcpActivity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    androidx.compose.runtime.DisposableEffect(viewModel, mcpActivity) {
+        com.expstudio.pycmd.mcp.McpBridge.handler = { action, args ->
+            mcpAction(action, args, viewModel, mcpActivity)
+        }
+        onDispose { com.expstudio.pycmd.mcp.McpBridge.handler = null }
+    }
     val updateSource by viewModel.updateSource.collectAsState()
 
     // Worth a dot on More: a newer build found but not yet installed is the
@@ -173,6 +184,9 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
         contract = ActivityResultContracts.CreateDocument("application/json"),
     ) { uri -> if (uri != null) viewModel.exportProgressTo(uri) }
     var pendingImportMode by remember { mutableStateOf("merge") }
+    val cloudUploadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) viewModel.uploadCloud(uri) }
     val progressImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) viewModel.importProgressFrom(uri, pendingImportMode) }
@@ -300,7 +314,7 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
         // A destination reached through More goes back to More first.
         val parent = if (tab in setOf(
                 Tab.PACKAGES, Tab.DOWNLOADS, Tab.PLUGINS, Tab.DOCS, Tab.SYSTEM,
-                Tab.PAGES, Tab.MUSIC, Tab.TEACH, Tab.APPEARANCE,
+                Tab.PAGES, Tab.MUSIC, Tab.TEACH, Tab.APPEARANCE, Tab.MCP,
             )
         ) {
             Tab.MORE
@@ -621,6 +635,10 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                             )
                         },
                         clearError = viewModel::clearAccountError,
+                        cloudRefresh = viewModel::refreshCloud,
+                        cloudUpload = { cloudUploadLauncher.launch(arrayOf("*/*")) },
+                        cloudSave = viewModel::saveCloud,
+                        cloudDelete = viewModel::deleteCloud,
                     ),
                     pluginSections = {
                         PluginSections(
@@ -631,6 +649,15 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                 )
 
                 Tab.APPEARANCE -> AppearanceScreen()
+
+                Tab.MCP -> McpScreen(
+                    state = mcpState,
+                    onToggle = { viewModel.setMcp(on = it) },
+                    onLan = { viewModel.setMcp(lan = it) },
+                    onReadOnly = { viewModel.setMcp(readOnly = it) },
+                    onNewToken = viewModel::newMcpToken,
+                    onCopied = { viewModel.showToast("Copied.") },
+                )
 
                 Tab.SYSTEM -> SystemScreen(
                     info = systemInfo,
@@ -1116,4 +1143,60 @@ private fun describeExisting(file: File): String {
 private fun copyToClipboard(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     clipboard?.setPrimaryClip(ClipData.newPlainText("PyCmd", text))
+}
+
+
+/** One ui_* tool from the MCP server, done on the main thread. */
+private fun mcpAction(
+    action: String,
+    args: org.json.JSONObject,
+    viewModel: MainViewModel,
+    activity: android.app.Activity?,
+): org.json.JSONObject {
+    val ok = { org.json.JSONObject().put("ok", true) }
+    return when (action) {
+        "tabs" -> ok().put("open", viewModel.mcpScreenState().optString("tab"))
+            .put("tabs", org.json.JSONArray(Tab.entries.filter { it != Tab.TOOL && it != Tab.PLUGIN_PANEL }
+                .map { it.name.lowercase() }))
+        "state" -> viewModel.mcpScreenState()
+        "navigate" -> {
+            val tab = viewModel.tabByName(args.optString("tab"))
+                ?: return org.json.JSONObject().put("ok", false)
+                    .put("error", "no tab called ${args.optString("tab")} - ui_tabs lists them")
+            viewModel.selectTab(tab)
+            ok().put("tab", tab.name.lowercase())
+        }
+        "screenshot" -> {
+            val view = activity?.window?.decorView?.rootView
+                ?: return org.json.JSONObject().put("ok", false).put("error", "no screen")
+            val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height,
+                android.graphics.Bitmap.Config.ARGB_8888)
+            view.draw(android.graphics.Canvas(bitmap))
+            val bytes = java.io.ByteArrayOutputStream()
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes)
+            bitmap.recycle()
+            ok().put("image", android.util.Base64.encodeToString(bytes.toByteArray(),
+                android.util.Base64.NO_WRAP)).put("width", view.width).put("height", view.height)
+        }
+        "toast" -> { viewModel.showToast(args.optString("text").take(200)); ok() }
+        "open_file" -> {
+            val root = java.io.File(viewModel.workspaceRootPath())
+            val file = java.io.File(root, args.optString("path").trimStart('/'))
+            if (!file.canonicalPath.startsWith(root.canonicalPath) || !file.isFile) {
+                org.json.JSONObject().put("ok", false).put("error", "no such file in the workspace")
+            } else {
+                viewModel.openInEditor(file); ok()
+            }
+        }
+        "back" -> {
+            (activity as? androidx.activity.ComponentActivity)?.onBackPressedDispatcher?.onBackPressed()
+            ok()
+        }
+        "console" -> {
+            viewModel.selectTab(Tab.CONSOLE)
+            viewModel.runConsole(args.optString("line"))
+            ok()
+        }
+        else -> org.json.JSONObject().put("ok", false).put("error", "unknown action $action")
+    }
 }

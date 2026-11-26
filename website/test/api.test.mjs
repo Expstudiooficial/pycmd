@@ -243,3 +243,50 @@ test("the tables are made on first use, and making them twice is harmless", asyn
   const r = await call(db, "GET", "username/someone");
   assert.equal(r.status, 200);
 });
+
+test("progress is stored compressed, and read back the same", async () => {
+  const db = freshDb();
+  const t = (await call(db, "POST", "signup", { username: "mia", key: KEY_A })).body.token;
+  const ids = Array.from({ length: 1800 }, (_, i) => `${i % 60}.${i % 30}.predict`);
+  const data = { done: { python: ids, go: ids }, xp: 36000 };
+  await call(db, "PUT", "progress", { data, base_version: 0 }, { token: t });
+  const stored = db.db.prepare("SELECT data FROM pycmd_progress").get().data;
+  assert.ok(stored.startsWith("gz:"));
+  assert.ok(stored.length * 5 < JSON.stringify(data).length, `${stored.length} stored`);
+  const r = await call(db, "GET", "progress", undefined, { token: t });
+  assert.deepEqual(r.body.data, data);
+  // A row written by the previous version, uncompressed, still reads.
+  db.db.prepare("UPDATE pycmd_progress SET data = ?").run(JSON.stringify({ xp: 5 }));
+  assert.deepEqual((await call(db, "GET", "progress", undefined, { token: t })).body.data, { xp: 5 });
+});
+
+test("cloud storage: 800 KB each, files in and out, quota enforced", async () => {
+  const db = freshDb();
+  const t = (await call(db, "POST", "signup", { username: "noa", key: KEY_A })).body.token;
+  const put = (path, bytes) => call(db, "PUT", "files/" + encodeURIComponent(path),
+    { content_b64: Buffer.from(bytes).toString("base64") }, { token: t });
+  let r = await put("notes/hello.py", "print('hi')\n");
+  assert.equal(r.status, 200);
+  assert.equal(r.body.size, 12);
+  r = await call(db, "GET", "files", undefined, { token: t });
+  assert.deepEqual([r.body.files.length, r.body.used, r.body.quota], [1, 12, 800 * 1024]);
+  r = await call(db, "GET", "files/" + encodeURIComponent("notes/hello.py"), undefined, { token: t });
+  assert.equal(Buffer.from(r.body.content_b64, "base64").toString(), "print('hi')\n");
+  r = await put("big.bin", new Uint8Array(800 * 1024));
+  assert.equal(r.status, 413);
+  assert.match(r.body.error, /does not fit/);
+  r = await put("fits.bin", new Uint8Array(800 * 1024 - 12));
+  assert.equal(r.status, 200);
+  r = await put("notes/hello.py", "x");  // replacing frees the old size first
+  assert.equal(r.status, 200);
+  assert.equal((await put("../escape", "x")).status, 400);
+  assert.equal((await put("/abs", "x")).status, 400);
+  assert.equal((await call(db, "GET", "files")).status, 401);
+  r = await call(db, "DELETE", "files/fits.bin", undefined, { token: t });
+  assert.equal(r.body.used, 1);
+  assert.equal((await call(db, "DELETE", "files/fits.bin", undefined, { token: t })).status, 404);
+  r = await call(db, "GET", "me", undefined, { token: t });
+  assert.deepEqual(r.body.storage, { used: 1, quota: 800 * 1024 });
+  await call(db, "POST", "account/delete", { key: KEY_A }, { token: t });
+  assert.equal(db.db.prepare("SELECT COUNT(*) AS n FROM pycmd_files").get().n, 0);
+});

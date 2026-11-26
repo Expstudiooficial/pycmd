@@ -268,6 +268,27 @@ def server_checks(port):
     check("the account file holds no password",
           "brand new passphrase" not in account_text and "correct horse" not in account_text)
 
+    # ---- cloud storage
+    with phone:
+        reply = phone.api("cloud_put", "code/hi.py", __import__("base64").b64encode(b"print(1)\n").decode())
+    check("a file goes into cloud storage", reply.get("ok") and reply.get("size") == 9, reply)
+    reply = pc.api("cloud_files")
+    check("the other device lists it", [f["path"] for f in reply.get("files", [])] == ["code/hi.py"],
+          reply)
+    reply = pc.api("cloud_get", "code/hi.py")
+    check("and reads it back", reply.get("text") == "print(1)\n", reply)
+    folder = tempfile.mkdtemp()
+    reply = pc.api("cloud_download", "code/hi.py", os.path.join(folder, "hi.py"))
+    check("download writes the file", open(os.path.join(folder, "hi.py")).read() == "print(1)\n",
+          reply)
+    big = os.path.join(folder, "big.bin")
+    with open(big, "wb") as handle:
+        handle.write(b"x" * (810 * 1024))
+    reply = pc.api("cloud_upload", big)
+    check("a file bigger than the quota is refused", not reply.get("ok"), reply)
+    reply = pc.api("cloud_delete", "code/hi.py")
+    check("delete frees the space", reply.get("ok") and reply.get("used") == 0, reply)
+
     # ---- log out and delete
     reply = pc.api("logout")
     check("log out", reply.get("ok") and not reply.get("signed_in"), reply)

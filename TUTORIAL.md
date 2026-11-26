@@ -858,6 +858,16 @@ and the website stretches that again before keeping it. **Account** signs you
 out, changes the password (your other devices sign in again), or deletes the
 account and its saved progress - the lessons on the phone stay.
 
+**Cloud files** on the account card is 800 KB of storage on pycmd.pages.dev
+for small code, notes and configs, on every device you sign in on.
+
+**More → MCP** lets an AI app on your computer (Claude Code, Antigravity,
+Cursor, VS Code, Gemini, Codex...) use PyCmd on this phone: files, Python,
+PyCmdTeach, cloud storage, and the screen itself - tabs, the console, the
+editor, screenshots. Switch it on, turn on **Allow Wi-Fi** if the computer is
+not the phone, and copy the set-up for your app. Every request needs the
+token; **Read-only** lets an agent look without changing anything.
+
 **Export** saves your progress as a `.json` file anywhere the system picker
 can reach; **Import** loads one, added to what you have or replacing it. The
 same file works in PyCmd for Windows.

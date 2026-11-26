@@ -1013,6 +1013,14 @@ object PythonEngine {
         }
     }
 
+    /** The MCP server (pycmd_mcp_android.py): start, stop, status, new_token. */
+    suspend fun mcp(name: String, vararg args: Any): String = withContext(Dispatchers.IO) {
+        if (!_status.value.ready) return@withContext "{\"ok\":false,\"error\":\"starting\"}"
+        runCatching {
+            Python.getInstance().getModule("pycmd_mcp_android").callAttr(name, *args).toString()
+        }.getOrElse { JSONObject().put("ok", false).put("error", it.message ?: "failed").toString() }
+    }
+
     /** Every file type the new-file menu offers. */
     suspend fun languageCatalogue(includeAll: Boolean): List<LanguageInfo> =
         withContext(pythonDispatcher) {

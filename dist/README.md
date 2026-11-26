@@ -1,17 +1,44 @@
 # Prebuilt APK
 
-`PyCmd-2.9.0.apk` — ready to install, nothing else needed.
+`PyCmd-3.0.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 2.9.0 |
+| Version | 3.0.0 |
 | Size | 25 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
 The universal APK, as in 2.7.0: one file for a phone and for an emulator.
+
+## What is new in 3.0.0
+
+### MCP: AI agents drive PyCmd
+
+**More → MCP** switches on a Model Context Protocol server, so an AI app on
+your computer - **Claude Code, Claude Desktop, Antigravity, Cursor, VS Code,
+Windsurf, Gemini CLI, Codex** - can use PyCmd on this phone: the workspace's
+files, Python in the app's interpreter, PyCmdTeach, your cloud storage, and
+the screen itself: switch tabs, type into the Console, open files in the
+Editor, take screenshots. Each app's set-up is one Copy away.
+
+Off until you switch it on; only the phone itself can connect unless you turn
+on **Allow Wi-Fi**; every request needs the token; **Read-only** lets an agent
+look without changing anything. PyCmd for Windows 5.0 has the same, with 170+
+tools.
+
+### 800 KB of cloud storage
+
+Every PyCmd account gets 800 KB of files on pycmd.pages.dev. **Cloud files**
+on the account card uploads from anywhere the system picker reaches, saves
+into `workspace/cloud`, and deletes.
+
+### Smaller progress online
+
+The website stores Learn progress compressed - about a tenth of the space.
+Nothing changes in the app, and older versions keep working.
 
 ## What is new in 2.9.0
 

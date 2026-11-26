@@ -64,7 +64,13 @@ data class TeachAccount(
     val formError: String = "",
     /** The answer to "is this username free", for the name being typed. */
     val nameCheck: NameCheck? = null,
+    /** Cloud storage: the files, and bytes used of the 800 KB. */
+    val cloudFiles: List<CloudFile> = emptyList(),
+    val cloudUsed: Long = 0,
+    val cloudQuota: Long = 800 * 1024,
 )
+
+data class CloudFile(val path: String, val size: Long)
 
 data class NameCheck(val name: String, val available: Boolean, val reason: String)
 
@@ -81,6 +87,10 @@ class AccountActions(
     /** "merge" or "replace": the file picker opens after. */
     val import: (String) -> Unit = {},
     val clearError: () -> Unit = {},
+    val cloudRefresh: () -> Unit = {},
+    val cloudUpload: () -> Unit = {},
+    val cloudSave: (String) -> Unit = {},
+    val cloudDelete: (String) -> Unit = {},
 )
 
 fun syncedText(seconds: Long): String {
@@ -96,7 +106,7 @@ fun syncedText(seconds: Long): String {
     }
 }
 
-private enum class AccountDialog { NONE, SIGN_IN, SIGN_UP, MANAGE, IMPORT }
+private enum class AccountDialog { NONE, SIGN_IN, SIGN_UP, MANAGE, IMPORT, CLOUD }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -177,6 +187,10 @@ fun AccountCard(account: TeachAccount, actions: AccountActions) {
                     onClick = actions.sync,
                     enabled = !account.syncing,
                 )
+                GhostButton("Cloud files", PyIcons.Cloud, onClick = {
+                    actions.cloudRefresh()
+                    dialog = AccountDialog.CLOUD
+                })
                 GhostButton("Account", PyIcons.Person, onClick = {
                     actions.clearError()
                     dialog = AccountDialog.MANAGE
@@ -231,6 +245,8 @@ fun AccountCard(account: TeachAccount, actions: AccountActions) {
             },
             onDismiss = { dialog = AccountDialog.NONE },
         )
+
+        AccountDialog.CLOUD -> CloudDialog(account, actions) { dialog = AccountDialog.NONE }
 
         AccountDialog.NONE -> Unit
     }
@@ -568,4 +584,54 @@ private fun ImportChoice(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/** 800 KB of files on pycmd.pages.dev, on every device signed in. */
+@Composable
+private fun CloudDialog(account: TeachAccount, actions: AccountActions, onDismiss: () -> Unit) {
+    val kb = { bytes: Long -> if (bytes < 10240) "%.1f KB".format(bytes / 1024f) else "${bytes / 1024} KB" }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(18.dp),
+        title = { Text("Cloud files", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    "${kb(account.cloudUsed)} of ${kb(account.cloudQuota)} used. Small code, " +
+                        "notes and configs, on every device you sign in on. Saved files go to " +
+                        "workspace/cloud.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { (account.cloudUsed.toFloat() / account.cloudQuota).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                ActionButton("Upload a file", PyIcons.FileUpload, onClick = actions.cloudUpload)
+                Spacer(Modifier.height(8.dp))
+                if (account.cloudFiles.isEmpty()) {
+                    Text("Nothing here yet.", style = MaterialTheme.typography.bodySmall)
+                }
+                for (file in account.cloudFiles) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 4.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(file.path, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                            Text(kb(file.size), style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { actions.cloudSave(file.path) }) { Text("Save") }
+                        TextButton(onClick = { actions.cloudDelete(file.path) }) {
+                            Text("Delete", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
 }

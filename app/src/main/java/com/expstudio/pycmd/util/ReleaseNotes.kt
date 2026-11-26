@@ -41,6 +41,26 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 30,
+            versionName = "3.0.0",
+            headline = "AI agents can drive PyCmd, and every account gets 800 KB of cloud storage.",
+            added = listOf(
+                "MCP (More > MCP): switch it on and an AI app on your computer - Claude Code, " +
+                    "Antigravity, Cursor, VS Code, Gemini, Codex - can use PyCmd on this " +
+                    "phone: the workspace's files, Python, PyCmdTeach, cloud storage, and the " +
+                    "screen itself (tabs, console, editor, screenshots). Set-up for each app " +
+                    "is one Copy away.",
+                "MCP is safe by default: off until switched on, on this phone only unless " +
+                    "Allow Wi-Fi is on, a token on every request, and a read-only mode.",
+                "800 KB of cloud storage for every PyCmd account: Cloud files on the account " +
+                    "card uploads, saves into workspace/cloud, and deletes.",
+            ),
+            fixed = listOf(
+                "Learn progress takes about a tenth of the space online: the website stores " +
+                    "it compressed. Nothing changes in the app.",
+            ),
+        ),
+        ReleaseNote(
             versionCode = 29,
             versionName = "2.9.0",
             headline = "About 1,800 lessons in every course, and a PyCmd account.",
