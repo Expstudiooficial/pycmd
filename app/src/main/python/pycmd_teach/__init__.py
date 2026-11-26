@@ -659,11 +659,14 @@ def _tree(course: Course):
 
 
 def _find(course: Course, lesson_id: str):
-    for unit in _tree(course):
-        for row in unit["lessons"]:
-            if row["id"] == lesson_id:
-                return row
-    return None
+    """The lesson with this id, or None. Indexed: every open, check and
+    finish looks one up, and a course is 1,800 lessons long now."""
+    key = (course.id, "by-id")
+    index = _POOLS.get(key)
+    if index is None:
+        index = {row["id"]: row for unit in _tree(course) for row in unit["lessons"]}
+        _POOLS[key] = index
+    return index.get(lesson_id)
 
 
 # ----------------------------------------------------------------- progress

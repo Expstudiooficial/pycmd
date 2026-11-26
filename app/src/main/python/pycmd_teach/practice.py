@@ -585,8 +585,8 @@ PHP = Lang(
     list_sum=lambda p: f'<?php\n$xs = [{_nums(p["xs"])}];\necho array_sum($xs), "\\n";',
     fact=lambda p: (f'<?php\n$f = 1;\nfor ($i = 2; $i <= {p["n"]}; $i++) {{\n'
                     f'    $f *= $i;\n}}\necho $f, "\\n";'),
-    count_even=lambda p: (f'<?php\n$evens = array_filter(range(1, {p["n"]}), '
-                          f'fn($i) => $i % 2 === 0);\necho count($evens), "\\n";'),
+    count_even=lambda p: (f'<?php\n$evens = array_filter(\n    range(1, {p["n"]}),\n'
+                          f'    fn($i) => $i % 2 === 0\n);\necho count($evens), "\\n";'),
     max2=lambda p: f'<?php\necho max({p["a"]}, {p["b"]}), "\\n";',
 )
 
@@ -764,7 +764,7 @@ def _program_rounds(course, lang: Lang, need: int):
                 if written is None:
                     break
                 code, out = written
-                if code in seen:
+                if code in seen or max(len(line) for line in code.split("\n")) > 58:
                     continue
                 seen.add(code)
                 topic = Topic(f"{title} {round_no}", teach, code, out)
@@ -798,7 +798,8 @@ def _document_rounds(course, makers, need: int):
                 if row is None:
                     continue
                 title, teach, code, ask, out = row
-                if (code, ask) in seen:
+                # Wider than a phone shows, and the lesson scrolls sideways.
+                if (code, ask) in seen or max(len(line) for line in code.split("\n")) > 58:
                     continue
                 seen.add((code, ask))
                 topic = Topic(f"{title} {round_no}", teach, code, out, ask=ask)

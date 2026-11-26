@@ -940,8 +940,8 @@ def _html_list(r):
 
 def _html_link(r):
     word = r.choice(WORDS)
-    url = f"https://example.com/{r.choice(WORDS)}"
-    lines = ["<p>", f'  Read the <a href="{url}">{word} guide</a> first.', "</p>"]
+    url = f"/docs/{r.choice(WORDS)}"
+    lines = ["<p>", "  Read the", f'  <a href="{url}">{word} guide</a>', "  first.", "</p>"]
     if r.random() < 0.5:
         return ("Links", "href is where a link goes; the text between the tags is what it "
                 "shows.", "\n".join(lines), "Where does the link go?", url)
@@ -960,7 +960,7 @@ def _html_heading(r):
 def _html_table(r):
     cols, rows = r.randint(2, 4), r.randint(1, 4)
     lines = ["<table>", "  <tr>" + "".join(f"<th>{c}</th>" for c in
-                                            r.sample(["id", "name", "qty", "city"], cols))
+                                            r.sample(["id", "qty", "day", "age"], cols))
              + "</tr>"]
     for _ in range(rows):
         lines.append("  <tr>" + "".join(f"<td>{r.randint(1, 99)}</td>" for _ in range(cols))
@@ -1074,8 +1074,8 @@ def _md_heading(r):
 
 def _md_link(r):
     word = r.choice(WORDS)
-    url = f"https://example.com/{r.choice(WORDS)}"
-    text = f"See the [{word} notes]({url}) for more."
+    url = f"/docs/{r.choice(WORDS)}"
+    text = f"See the [{word} notes]({url}).\n\nThen carry on."
     if r.random() < 0.5:
         return ("Links", "[text](address): the text in square brackets, the address in "
                 "round ones.", text, "Where does the link go?", url)
