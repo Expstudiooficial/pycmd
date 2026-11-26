@@ -224,7 +224,7 @@ const TABS = [
 function pluginTabs() {
   const installed = ((PyCmd.state.plugins || {}).installed) || [];
   return installed
-    .filter((plugin) => plugin.panel && !plugin.broken)
+    .filter((plugin) => plugin.panel && !plugin.broken && plugin.on !== false)
     .map((plugin) => ({
       id: 'panel:' + plugin.id,
       name: plugin.name || plugin.id,
@@ -268,9 +268,15 @@ function drawTabs() {
 function go(id) {
   PyCmd.state.tab = id;
   drawTabs();
-  const screen = document.getElementById('screen');
-  screen.classList.remove('flush');
-  PyCmd.clear(screen);
+  // A fresh element for every draw. Screens draw asynchronously, so a second
+  // go() arriving before the first finished used to let both write into the
+  // same element: half of one screen under the other, content appearing
+  // twice, or flickering in and out - the "reloads and glitches". A draw that
+  // finishes late now lands on a detached node nobody can see.
+  const old = document.getElementById('screen');
+  const screen = old.cloneNode(false);
+  screen.className = 'screen';
+  old.replaceWith(screen);
 
   // A plugin panel is a screen like any other; it just is not in the table,
   // because which ones exist depends on what is installed.
@@ -278,9 +284,20 @@ function go(id) {
     const wanted = String(id).slice(6);
     const found = pluginTabs().find((entry) => entry.plugin.id === wanted);
     if (!found) {
-      screen.appendChild(PyCmd.el('div', { class: 'empty',
-        text: 'That plugin is not loaded any more.' }));
-      return;
+      // Asked for before the plugin list arrived (a panel was the last tab
+      // when PyCmd closed, say): fetch it once and try again.
+      if (!screen.dataset.retried) {
+        screen.appendChild(PyCmd.el('div', { class: 'empty', text: 'Loading the plugin…' }));
+        PyCmd.call('plugins').then((reply) => {
+          if (reply.ok) PyCmd.state.plugins = reply;
+          if (PyCmd.state.tab !== id) return;
+          const again = pluginTabs().find((entry) => entry.plugin.id === wanted);
+          if (again) { go(id); return; }
+          PyCmd.clear(screen).appendChild(PyCmd.el('div', { class: 'empty',
+            text: 'That plugin is switched off or not installed. The Plugins tab has it.' }));
+        });
+        return;
+      }
     }
     Promise.resolve(window.drawPanelScreen(screen, found.plugin)).catch((error) => {
       screen.appendChild(PyCmd.el('div', { class: 'empty', text: String(error) }));

@@ -847,3 +847,11 @@ h1 + .lead, .head .lead { margin-bottom: 14px; }
 .practice-head h2 { margin: 0 0 2px; }
 details.unit.practice { padding-top: 10px; padding-bottom: 10px; margin: 6px 0; }
 details.unit.practice summary b { font-weight: 560; }
+
+/* -- 5.0 ---------------------------------------------------------------- */
+/* A sheet's body scrolls. It did not: a flex child keeps its content's
+   height unless told min-height: 0, and max-height: 100% means nothing on a
+   card sized by an auto grid row - so a long guide ran off the bottom of the
+   window and nothing could reach the rest of it. */
+.sheet-card { max-height: calc(100vh - 48px); min-height: 0; }
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }

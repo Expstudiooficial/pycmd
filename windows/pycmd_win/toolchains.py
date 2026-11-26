@@ -514,8 +514,12 @@ TOOLCHAINS = [
     ),
     Toolchain(
         "escript", "Erlang", ["erlang"], "escript", _steps_run("{exe}", "{src}"),
-        version_args=(),
-        version_pattern=r"(\d+\.\d+)",
+        # escript has no version flag: run bare it says "escript: Missing
+        # filename", which the Toolchains screen showed as the version. erl,
+        # installed beside it, knows the release.
+        version_args=("erl", "-noshell", "-eval",
+                      'io:format("OTP ~s~n", [erlang:system_info(otp_release)]), halt().'),
+        version_pattern=r"OTP (\d+)",
         winget="winget install Erlang.ErlangOTP", scoop="scoop install erlang",
         choco="choco install erlang", site="https://www.erlang.org/downloads",
     ),
@@ -685,6 +689,11 @@ def detect(toolchain_id: str, refresh: bool = False) -> dict:
 
     if not refresh:
         remembered = known.recall(toolchain_id)
+        # A remembered "version" that is really an error message (4.5 kept
+        # Erlang's "escript: Missing filename") is asked again, not shown.
+        if remembered is not None and re.search(
+                r"(?i)missing|usage|error|not recognized", str(remembered.get("version", ""))):
+            remembered = None
         if remembered is not None:
             found = {"path": remembered["path"], "version": remembered["version"],
                      "checked_at": int(time.time()), "remembered": True}
@@ -698,13 +707,22 @@ def detect(toolchain_id: str, refresh: bool = False) -> dict:
     # under a lock. CPython would make it atomic anyway; saying so is cheaper
     # than relying on it.
     if path:
-        text = _probe_version(path, chain.version_args)
+        args = chain.version_args
+        probe = path
+        if args and args[0] == "erl":
+            # Asked of a sibling program (see Erlang above).
+            sibling = os.path.join(os.path.dirname(path), "erl" + (".exe" if WINDOWS else ""))
+            probe = sibling if os.path.exists(sibling) else (_which("erl") or path)
+            args = args[1:]
+        text = _probe_version(probe, args)
         match = re.search(chain.version_pattern, text) if chain.version_pattern else None
         if match and match.groups():
             found["version"] = match.group(1)
-        elif text:
+        elif text and not re.search(r"(?i)missing|usage|error|not recognized|unknown option",
+                                    text.splitlines()[0]):
             # No pattern matched, so show the first line rather than nothing:
-            # "it is here and it said something" beats a blank.
+            # "it is here and it said something" beats a blank - unless what
+            # it said is a complaint, which is not a version.
             found["version"] = text.splitlines()[0][:60]
     with _found_lock:
         _found[toolchain_id] = found

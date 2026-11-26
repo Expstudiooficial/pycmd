@@ -708,6 +708,7 @@ async function Plugins(screen) {
         plugin.broken
           ? el('p', { class: 'muted', text: 'This one will not load: ' + (plugin.error || '') })
           : el('div', { class: 'row', style: 'margin-top:8px' },
+              installedSwitch(plugin),
               plugin.panel
                 ? el('button', {
                     class: 'small primary', text: 'Open',
@@ -790,6 +791,20 @@ async function openSettings(plugin) {
       row.help ? el('span', { class: 'muted', text: row.help }) : null));
   });
   PyCmd.sheet(plugin.name || plugin.id, body);
+}
+
+/** On and off for an installed plugin: off unloads it and hides its tab. */
+function installedSwitch(plugin) {
+  const toggle = el('div', { class: 'switch' + (plugin.on !== false ? ' on' : ''),
+    title: plugin.on !== false ? 'On - click to switch it off' : 'Off - click to switch it on' });
+  toggle.addEventListener('click', async () => {
+    const wanted = !toggle.classList.contains('on');
+    toggle.classList.toggle('on', wanted);
+    const done = await PyCmd.call('plugin.set', { id: plugin.id, on: wanted });
+    if (!done.ok) PyCmd.toast(`${plugin.name || plugin.id} did not load: ${done.error || 'see the log'}`);
+    go('plugins');
+  });
+  return toggle;
 }
 
 async function importMobile() {
@@ -920,6 +935,8 @@ async function panelFrame(plugin, panelFile, style, onClose) {
     document_.open();
     document_.write(reply.html);
     document_.close();
+    // In the theme from its first frame, not only after the next change.
+    if (window.lookFrame) window.lookFrame(frame);
   });
 
   return frame;

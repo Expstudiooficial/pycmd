@@ -227,6 +227,11 @@ class Host:
         if staged.get("installed"):
             self.log("info", "bundled plugins installed",
                      ", ".join(staged["installed"]))
+        # 5.0: installed plugins are loaded. Until now nothing ever called
+        # load_all on Windows, so a plugin's Python never ran - its panel
+        # opened, and every button that needed its own code did nothing
+        # (Creator, most visibly).
+        load_installed_plugins(self)
 
         _engine_ready = True
         self.log("info", f"PyCmd for Windows {VERSION} ready", store.root())
@@ -554,9 +559,43 @@ def _h_plugins(host, payload):
     installed = _json_call(host.engine["plugins"], "listing")
     return {
         "builtin": builtins.listing(),
-        "installed": installed.get("plugins", []),
+        "installed": [dict(row, on=row.get("id") not in set(_plugins_off()))
+                      for row in installed.get("plugins", [])],
         "enabled": builtins.enabled_ids(),
     }
+
+
+def _plugins_off() -> list:
+    from .features import _settings_get
+
+    return _settings_get("pluginsOff", [])
+
+
+def load_installed_plugins(host) -> dict:
+    """Loads every installed plugin that is not switched off; unloads the rest."""
+    listing = _json_call(host.engine["plugins"], "listing")
+    off = set(_plugins_off())
+    wanted = [row["id"] for row in listing.get("plugins", [])
+              if row.get("id") and row["id"] not in off and not row.get("broken")]
+    reply = _json_call(host.engine["plugins"], "load_all", ",".join(wanted))
+    for row in reply.get("results", []):
+        if not row.get("ok"):
+            host.log("warn", f"plugin {row.get('id')} did not load", row.get("error", ""))
+    return reply
+
+
+def _h_plugin_set(host, payload):
+    """Switches an installed plugin on or off, and loads or unloads it now."""
+    from .features import _settings_put
+
+    plugin_id = str(payload.get("id", ""))
+    off = [i for i in _plugins_off() if i != plugin_id]
+    if not payload.get("on"):
+        off.append(plugin_id)
+    _settings_put("pluginsOff", off)
+    reply = load_installed_plugins(host)
+    failed = [r for r in reply.get("results", []) if r.get("id") == plugin_id and not r.get("ok")]
+    return {"ok": not failed, "error": failed[0].get("error", "") if failed else ""}
 
 
 def _h_builtin_set(host, payload):
@@ -1199,6 +1238,7 @@ HANDLERS = {
     "shell": _h_shell,
     "plugins": _h_plugins,
     "builtin.set": _h_builtin_set,
+    "plugin.set": _h_plugin_set,
     "builtin.reset": _h_builtin_reset,
     "plugin.inspect": _h_plugin_inspect,
     "plugin.install": _h_plugin_install,

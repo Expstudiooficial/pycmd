@@ -58,6 +58,22 @@ function lookFrame(frame) {
   set('--gutter-bg', p.surface);
   set('--gutter-fg', p.faint);
   set('--gutter-active', p.text);
+  // The plugin panels' own names - the same ones the phone sets (Theme.kt).
+  // Without these a panel kept the default palette under whatever theme was
+  // picked: the "old, ugly" look, half one theme and half another.
+  set('--surface', p.surface);
+  set('--surface-high', p.raised || p.surface);
+  set('--outline', p.line);
+  set('--muted', p.dim);
+  set('--accent', p.accent);
+  set('--accent-dim', p.accentBg || hexAlpha(p.accent, 0.3));
+  set('--accent-soft', hexAlpha(p.accent, 0.14));
+  set('--on-accent', p.light ? '#FFFFFF' : (p.bg || '#000000'));
+  set('--info', p.accent);
+  set('--warning', '#E5A945');
+  set('--danger', '#E8635F');
+  set('--radius', '12px');
+  doc.documentElement.setAttribute('data-pycmd-dark', p.light ? 'false' : 'true');
   if (p.light) {
     [['--kw', '#7A3E9D'], ['--str', '#1E7A4C'], ['--num', '#A0522D'], ['--comment', '#8E958F'],
      ['--def', '#1F5FAF'], ['--builtin', '#9A6700'], ['--decorator', '#B03A2E'], ['--self', '#6B4FA0'],
