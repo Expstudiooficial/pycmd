@@ -82,6 +82,8 @@ it too.
 - **Clang++** builds against a Visual Studio newer than itself.
 
 
+## What is new in 4.5
+
 ### About 1,800 lessons in every course
 
 PyCmd Learn has **90,129 lessons in 50 languages** - every course now has
