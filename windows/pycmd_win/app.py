@@ -561,7 +561,8 @@ def main(argv=None) -> int:
     window = webview.create_window(
         TITLE, url, js_api=api,
         width=WINDOW[0], height=WINDOW[1],
-        min_size=MINIMUM, background_color="#0B0F14",
+        # The default theme's --bg, so the window does not flash blue at start.
+        min_size=MINIMUM, background_color="#080D0A",
         text_select=True,
     )
     # The file dialogs are the window's, so the host keeps a hold of it.
