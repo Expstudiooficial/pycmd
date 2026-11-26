@@ -201,8 +201,8 @@ def _kotlinc_version():
 #: What an old kotlinc (Debian's is 1.3) calls the functions the courses use.
 #: Test-only, like the clojure and scala shims in the Windows tests: the
 #: lessons are written for the Kotlin people install today.
-_OLD_KOTLIN = {".uppercase()": ".toUpperCase()", ".lowercase()": ".toLowerCase()",
-               ".sumOf {": ".sumBy {"}
+_OLD_KOTLIN = {r"\buppercase\(\)": "toUpperCase()", r"\blowercase\(\)": "toLowerCase()",
+               r"\.sumOf \{": ".sumBy {"}
 
 
 def _kotlin_batch(jobs):
@@ -310,7 +310,7 @@ def real_checks(courses):
                 topics = [t for t in topics if t not in skipped]
                 codes = [t.code for t in topics]
                 for new_name, old_name in _OLD_KOTLIN.items():
-                    codes = [c.replace(new_name, old_name) for c in codes]
+                    codes = [re.sub(new_name, old_name, c) for c in codes]
                 print(f"  Kotlin: kotlinc is older than 1.5, so {len(skipped)} coroutine "
                       "snippet(s) are not checked")
             results = _kotlin_batch(list(enumerate(codes)))

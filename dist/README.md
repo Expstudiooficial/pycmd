@@ -1,19 +1,76 @@
 # Prebuilt APK
 
-`PyCmd-2.8.1.apk` — ready to install, nothing else needed.
+`PyCmd-2.9.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 2.8.1 |
-| Size | 24 MB |
+| Version | 2.9.0 |
+| Size | 25 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
 The universal APK, as in 2.7.0: one file for a phone and for an emulator.
 
-## What is new in 2.8.1
+## What is new in 2.9.0
+
+### About 1,800 lessons in every course
+
+PyCmdTeach has **50,466 lessons** in 28 courses - about 1,800 in each, up
+from 8,874 in all. Python had over a thousand; most of the file formats had
+about a hundred. The new lessons are **practice rounds**, after each course's
+hand-written units: every kind of exercise again - precedence, remainders,
+loops, lists, functions, strings - with new code each round, written the way
+that language writes it.
+
+For JSON, YAML, TOML, XML, CSV, INI, regular expressions, .gitignore,
+Makefiles, Dockerfiles, HTML, CSS and Markdown, practice asks a question
+about a real document instead: which value a key holds, how many rows a CSV
+has, whether a TOML file would load, how wide a box is on screen.
+
+Before release the practice programs ran on the real compilers - Python, C,
+C++, Rust, Go, Java, Kotlin, JavaScript, TypeScript, Ruby, PHP, Lua, bash and
+SQLite - and had to print exactly what the lesson says. The documents were
+loaded with real parsers, the Makefiles run with make, the .gitignore files
+asked of git and the CSS laid out in Chromium. Swift is the one exception:
+there was no Swift compiler to run its practice on, so it follows the same
+tested patterns but was checked by reading.
+
+### A PyCmd account
+
+The card at the top of the Teach tab: **Create account** with a username and
+a password, and your progress follows you between this phone and PyCmd for
+Windows. A username that is taken is caught while you type.
+
+- Syncing merges, it never overwrites. Lessons finished on either device stay
+  finished, the streak comes from whichever saw the later day, and a course
+  reset on one is reset on the other.
+- **Your password never leaves the phone.** PyCmd stretches it (PBKDF2-SHA256,
+  600,000 rounds) and sends pycmd.pages.dev the result, which the website
+  stretches again before keeping it. The app holds no database key: it talks
+  to the website, and only the website talks to the database.
+- **Account** signs you out, changes the password (your other devices sign in
+  again), or deletes the account and its saved progress. The lessons on the
+  phone stay.
+
+### Export and import
+
+**Export** saves your progress as a `.json` file anywhere the system picker
+reaches; **Import** loads one - added to your progress, or replacing it. The
+same file works in PyCmd for Windows.
+
+### A tidier Teach tab
+
+- The course list starts with the courses you have started, then the
+  languages most people come for. It used to put the biggest course first,
+  which meant nothing once every course was the same size.
+- A course's units fold, with the one holding your next lesson open, and
+  practice has its own section with a **Practise** button.
+- Questions show `code` in the code font, and the wrong answers on offer are
+  the same kind of thing as the right one.
+- The tab opens faster: lessons are counted without being built.
+
 
 A small fix to PyCmdTeach.
 
