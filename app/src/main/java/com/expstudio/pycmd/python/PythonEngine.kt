@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -984,6 +985,30 @@ object PythonEngine {
             JSONObject(teach.callAttr("api", name, first, second, third).toString())
         }.getOrElse { error ->
             DebugLog.error(TAG, "teach $name failed", error)
+            JSONObject().put("ok", false).put("error", error.message ?: "it did not work")
+        }
+    }
+
+    /**
+     * The account calls (sign in, sync, export), which talk to pycmd.pages.dev.
+     *
+     * Not on the lessons' dispatcher: a slow network would otherwise hold up
+     * every lesson behind it. The Python side serialises its own syncs.
+     */
+    suspend fun teachAccount(
+        name: String,
+        first: String = "",
+        second: String = "",
+    ): JSONObject = withContext(Dispatchers.IO) {
+        if (!_status.value.ready) {
+            return@withContext JSONObject()
+                .put("ok", false)
+                .put("error", "the interpreter is still starting")
+        }
+        runCatching {
+            JSONObject(teach.callAttr("api", name, first, second, "").toString())
+        }.getOrElse { error ->
+            DebugLog.error(TAG, "account $name failed", error)
             JSONObject().put("ok", false).put("error", error.message ?: "it did not work")
         }
     }

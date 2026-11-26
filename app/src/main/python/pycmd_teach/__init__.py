@@ -42,6 +42,7 @@ import random
 import re
 import sys
 import tempfile
+import threading
 import time
 
 __all__ = [
@@ -63,24 +64,32 @@ class Unit:
 
 
 class Topic:
-    """One idea, and the four things needed to teach it."""
+    """One idea, and the four things needed to teach it.
 
-    __slots__ = ("title", "teach", "code", "out", "note")
+    `ask` is for snippets that print nothing - a JSON document, a regular
+    expression, a Makefile. It is the question the snippet answers ("What is
+    the value of `server.port`?"), and `out` is the answer. A topic with an
+    `ask` is quizzed with that question instead of "What does this print?".
+    """
 
-    def __init__(self, title: str, teach: str, code: str, out: str = "", note: str = "") -> None:
+    __slots__ = ("title", "teach", "code", "out", "note", "ask")
+
+    def __init__(self, title: str, teach: str, code: str, out: str = "", note: str = "",
+                 ask: str = "") -> None:
         self.title = title
         self.teach = teach
         self.code = code.strip("\n")
         self.out = out
         self.note = note
+        self.ask = ask
 
 
 def U(title: str, goal: str = "") -> Unit:
     return Unit(title, goal)
 
 
-def T(title: str, teach: str, code: str, out: str = "", note: str = "") -> Topic:
-    return Topic(title, teach, code, out, note)
+def T(title: str, teach: str, code: str, out: str = "", note: str = "", ask: str = "") -> Topic:
+    return Topic(title, teach, code, out, note, ask)
 
 
 class Course:
@@ -161,6 +170,15 @@ def _load_courses():
                 topics = [Unit("More")] + list(topics)
             course.topics = list(course.topics) + list(topics)
             course._units = None
+
+    # Practice comes last of all, after every hand-written unit, so adding it
+    # moved no existing lesson: ids are positions, and these positions are new.
+    try:
+        from . import practice
+    except ImportError:
+        practice = None
+    if practice is not None:
+        practice.extend(courses)
     return courses
 
 
@@ -242,25 +260,92 @@ def _pool(course: Course, kind: str):
     prints a list" is a real question when all four are Python; it is not a
     question when three of them are obviously Go.
     """
+    key = (course.id, kind)
+    cached = _POOLS.get(key)
+    if cached is not None:
+        return cached
     out = []
     for unit in course.units:
         for topic in unit["topics"]:
             if kind == "out" and topic.out:
-                out.append(topic.out)
+                # A question's answer is only a plausible wrong answer to
+                # another question about the same kind of thing, so answers to
+                # questions are pooled by question.
+                if not topic.ask:
+                    out.append(topic.out)
             elif kind == "token":
                 out.extend(w for w in _TOKEN.findall(topic.code) if len(w) > 2)
     seen = []
+    known = set()
     for item in out:
-        if item not in seen:
+        if item not in known:
+            known.add(item)
             seen.append(item)
+    _POOLS[key] = seen
     return seen
 
 
+_POOLS: dict = {}
+
+
+def _ask_pool(course: Course, ask_kind: str):
+    """Answers to questions of the same kind in the same course: the wrong
+    answers to "how many rows?" are other row counts, not port numbers."""
+    key = (course.id, "ask:" + ask_kind)
+    cached = _POOLS.get(key)
+    if cached is not None:
+        return cached
+    seen, known = [], set()
+    for unit in course.units:
+        for topic in unit["topics"]:
+            if topic.ask and topic.out and _ask_kind(topic) == ask_kind and topic.out not in known:
+                known.add(topic.out)
+                seen.append(topic.out)
+    _POOLS[key] = seen
+    return seen
+
+
+def _shape(text: str) -> str:
+    if re.fullmatch(r"-?\d+", text):
+        return "int"
+    if re.fullmatch(r"-?\d*\.\d+", text):
+        return "float"
+    if text in ("true", "false", "null", "yes", "no"):
+        return "word"
+    if text.startswith('"'):
+        return "string"
+    return "text"
+
+
+def _alike(pool, answer: str):
+    """The answers in [pool] shaped like [answer], cached per pool."""
+    key = (id(pool), _shape(answer))
+    cached = _ALIKE.get(key)
+    if cached is None:
+        cached = [item for item in pool if _shape(item) == key[1]]
+        _ALIKE[key] = cached
+    return cached
+
+
+_ALIKE: dict = {}
+
+
+def _ask_kind(topic: Topic) -> str:
+    """Questions of a kind share their first words: "How many", "What is"."""
+    return " ".join(topic.ask.split()[:2]).lower()
+
+
 def _options(correct: str, pool, rng: random.Random, count: int = 4):
-    """[correct] plus up to three others from [pool], shuffled."""
-    others = [item for item in pool if item != correct]
-    rng.shuffle(others)
-    chosen = [correct] + others[: max(0, count - 1)]
+    """[correct] plus up to three others from [pool], shuffled.
+
+    Sampled, not shuffled: a course's pool of words runs to thousands, and
+    shuffling all of them to keep three was most of the time it took to open
+    the Learn tab. The pool holds no repeats, so a sample of `count` holds at
+    least `count - 1` that are not the right answer.
+    """
+    picked = rng.sample(pool, min(len(pool), count)) if pool else []
+    others = [item for item in picked if item != correct][: max(0, count - 1)]
+    chosen = [correct] + others
     # Fewer than two options is not a choice; fall back to a true/false shape.
     if len(chosen) < 2:
         chosen.append("nothing is printed")
@@ -276,26 +361,34 @@ def _which_options(course: Course, topic: Topic, base: str):
     question would have two right answers. Too few candidates and there is no
     question: None.
     """
-    if not topic.out or len(_lines(topic.code)) > WHICH_MAX_LINES:
+    if not topic.out or topic.ask or len(_lines(topic.code)) > WHICH_MAX_LINES:
         return None
     want = _flatten(topic.out)
-    others = []
-    for unit in course.units:
-        for other in unit["topics"]:
-            if other is topic or not other.out:
-                continue
-            if _flatten(other.out) == want or other.code == topic.code:
-                continue
-            if len(_lines(other.code)) > WHICH_MAX_LINES:
-                continue
-            others.append(other.code)
+    candidates = _which_candidates(course)
+    rng = _seed(course.id, base, "which")
+    # A sample first, as in _options; the whole list only when the sample
+    # comes up short, which in a course of hundreds of snippets is rare.
+    picked = rng.sample(candidates, min(len(candidates), 12))
+    others = [code for code, flat in picked if flat != want and code != topic.code]
+    if len(others) < 3:
+        others = [code for code, flat in candidates if flat != want and code != topic.code]
+        rng.shuffle(others)
     if len(others) < 2:
         return None
-    rng = _seed(course.id, base, "which")
-    rng.shuffle(others)
     options = [topic.code] + others[:3]
     rng.shuffle(options)
     return options
+
+
+def _which_candidates(course: Course):
+    """(code, flattened output) for every short snippet that prints something."""
+    key = (course.id, "which")
+    cached = _POOLS.get(key)
+    if cached is None:
+        cached = [(t.code, _flatten(t.out)) for unit in course.units for t in unit["topics"]
+                  if t.out and not t.ask and len(_lines(t.code)) <= WHICH_MAX_LINES]
+        _POOLS[key] = cached
+    return cached
 
 
 _CLOSERS = {")": "(", "]": "[", "}": "{"}
@@ -366,15 +459,24 @@ def _topic_lessons(course: Course, unit_index: int, topic_index: int, topic: Top
         "code": topic.code,
         "output": topic.out,
         "note": topic.note,
+        # A question about a document: the read step shows the question with
+        # its answer, so "Output: 3" is not left to mean nothing.
+        "ask": topic.ask,
     })
 
     if topic.out:
-        pool = _pool(course, "out")
+        pool = _ask_pool(course, _ask_kind(topic)) if topic.ask else _pool(course, "out")
+        if topic.ask:
+            # Wrong answers of the same shape: a name offered for "which
+            # number" gives the answer away.
+            alike = _alike(pool, topic.out)
+            if len(alike) >= 4:
+                pool = alike
         made.append({
             "id": f"{base}.predict",
             "kind": "predict",
             "title": topic.title,
-            "prompt": "What does this print?",
+            "prompt": topic.ask or "What does this print?",
             "code": topic.code,
             "options": _options(topic.out, pool, _seed(course.id, base, "predict")),
         })
@@ -434,6 +536,11 @@ def _topic_lessons(course: Course, unit_index: int, topic_index: int, topic: Top
             "lines": shuffled,
         })
 
+    if topic.ask:
+        # A question about a document has no "write it" step: writing out a
+        # generated document from memory would be a memory test, not a lesson.
+        return made
+
     graded = course.graded if topic.out else "text"
     first_line = next((line.strip() for line in topic.code.split("\n") if line.strip()), "")
     made.append({
@@ -461,6 +568,64 @@ def _topic_lessons(course: Course, unit_index: int, topic_index: int, topic: Top
     })
 
     return made
+
+
+def _kinds(course: Course, topic: Topic):
+    """Which lessons a topic makes, without making them - the same rules as
+    _topic_lessons, in the same order. Counting 50,000 lessons for the course
+    list should not mean building every one of them first."""
+    kinds = ["read"]
+    lines = len(_lines(topic.code))
+    if topic.out:
+        kinds.append("predict")
+        if not topic.ask and lines <= WHICH_MAX_LINES:
+            flats = _which_flats(course)
+            if len(flats["all"]) - flats["count"].get(_flatten(topic.out), 0) >= 2:
+                kinds.append("which")
+    skip = {"a", "i", "x", "n", "s"}
+    if any(len(w) > 2 and w.lower() not in skip for w in _TOKEN.findall(topic.code)):
+        kinds.append("fill")
+    broken = _break(course, topic)
+    if broken and len(_lines(broken[0])) >= 2:
+        kinds.append("bug")
+    if lines >= 3:
+        kinds.append("order")
+    if not topic.ask:
+        kinds.append("write")
+    return kinds
+
+
+def _which_flats(course: Course):
+    key = (course.id, "which-flats")
+    cached = _POOLS.get(key)
+    if cached is None:
+        count: dict = {}
+        candidates = _which_candidates(course)
+        for _code, flat in candidates:
+            count[flat] = count.get(flat, 0) + 1
+        cached = {"all": candidates, "count": count}
+        _POOLS[key] = cached
+    return cached
+
+
+def _lesson_ids(course: Course):
+    """Every lesson id in the course, in order. Cached."""
+    key = (course.id, "ids")
+    cached = _POOLS.get(key)
+    if cached is None:
+        cached = []
+        for unit_index, unit in enumerate(course.units):
+            for topic_index, topic in enumerate(unit["topics"]):
+                base = f"{unit_index}.{topic_index}"
+                cached.extend(f"{base}.{kind}" for kind in _kinds(course, topic))
+        _POOLS[key] = cached
+        _POOLS[(course.id, "id-set")] = set(cached)
+    return cached
+
+
+def _id_set(course: Course):
+    _lesson_ids(course)
+    return _POOLS[(course.id, "id-set")]
 
 
 def _course_tree(course: Course):
@@ -494,11 +659,14 @@ def _tree(course: Course):
 
 
 def _find(course: Course, lesson_id: str):
-    for unit in _tree(course):
-        for row in unit["lessons"]:
-            if row["id"] == lesson_id:
-                return row
-    return None
+    """The lesson with this id, or None. Indexed: every open, check and
+    finish looks one up, and a course is 1,800 lessons long now."""
+    key = (course.id, "by-id")
+    index = _POOLS.get(key)
+    if index is None:
+        index = {row["id"]: row for unit in _tree(course) for row in unit["lessons"]}
+        _POOLS[key] = index
+    return index.get(lesson_id)
 
 
 # ----------------------------------------------------------------- progress
@@ -531,7 +699,14 @@ _DEFAULT = {
     "day": "",             # the date day_count belongs to
     "day_count": 0,        # lessons finished on that date
     "goal": 10,            # lessons a day the user is aiming for
+    # Added in 2.9.0, for syncing between devices (see cloud.py).
+    "updated_at": 0,       # when this file last changed, in seconds
+    "cleared": {},         # course (or "*") -> when it was reset
 }
+
+#: Held while progress is read, changed and written back, so that a sync
+#: in the background cannot land between a lesson's read and its write.
+_PROGRESS_LOCK = threading.RLock()
 
 #: The most lessons a review round holds. A queue of two hundred mistakes is
 #: not a review, it is a second course.
@@ -549,13 +724,15 @@ def _read_progress() -> dict:
     out = {key: (dict(value) if isinstance(value, dict) else value)
            for key, value in _DEFAULT.items()}
     out.update({k: v for k, v in data.items() if k in _DEFAULT})
-    for key in ("done", "missed", "last"):
+    for key in ("done", "missed", "last", "cleared"):
         if not isinstance(out.get(key), dict):
             out[key] = {}
     return out
 
 
-def _write_progress(data: dict) -> None:
+def _write_progress(data: dict, stamp: bool = True) -> None:
+    if stamp:
+        data["updated_at"] = time.time()
     path = _progress_path()
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -590,10 +767,8 @@ def catalogue() -> list:
     data = _read_progress()
     rows = []
     for course in _courses().values():
-        total = sum(len(unit["lessons"]) for unit in _tree(course))
-        done = len(_done_set(data, course.id) & {
-            row["id"] for unit in _tree(course) for row in unit["lessons"]
-        })
+        total = len(_lesson_ids(course))
+        done = len(_done_set(data, course.id) & _id_set(course))
         rows.append({
             "id": course.id,
             "name": course.name,
@@ -601,11 +776,28 @@ def catalogue() -> list:
             "extension": course.extension,
             "graded": course.graded,
             "lessons": total,
-            "units": len(_tree(course)),
+            "units": len(course.units),
             "done": done,
         })
-    rows.sort(key=lambda row: (-row["lessons"], row["name"]))
+    # Courses you have started first, then the languages most people come to
+    # learn, then everything else by name. (Until 2.9.0 the biggest course came
+    # first; now every course has about the same number of lessons, and that
+    # order would be noise.)
+    rows.sort(key=lambda row: (row["done"] == 0, _rank(row["id"]), row["name"].lower()))
     return rows
+
+
+#: The order of the course list after the ones you have started.
+POPULAR = (
+    "python", "javascript", "typescript", "java", "c", "cpp", "csharp", "go", "rust",
+    "kotlin", "swift", "php", "ruby", "sql", "html", "css", "shell", "powershell", "lua",
+    "dart", "scala", "haskell", "r", "perl", "elixir", "json", "yaml", "regex", "markdown",
+    "gitignore", "dockerfile", "makefile",
+)
+
+
+def _rank(course_id: str) -> int:
+    return POPULAR.index(course_id) if course_id in POPULAR else len(POPULAR)
 
 
 def _missed_count(data: dict) -> int:
@@ -620,7 +812,8 @@ def _missed_count(data: dict) -> int:
         course_ = _courses().get(course_id)
         if course_ is None or not isinstance(rows, list):
             continue
-        total += sum(1 for lesson_id in rows if _find(course_, lesson_id) is not None)
+        ids = _id_set(course_)
+        total += sum(1 for lesson_id in rows if lesson_id in ids)
     return total
 
 
@@ -675,7 +868,7 @@ def totals() -> dict:
     lessons = 0
     done = 0
     for course in _courses().values():
-        ids = {row["id"] for unit in _tree(course) for row in unit["lessons"]}
+        ids = _id_set(course)
         lessons += len(ids)
         done += len(_done_set(data, course.id) & ids)
     return {
@@ -757,8 +950,11 @@ def lesson(course_id: str, lesson_id: str) -> dict:
         # Marked by running it on this machine, so no "it starts with" crutch.
         out["graded"] = "run"
         out["hint"] = ""
-    if data.get("last") != {"course": course_id, "lesson": lesson_id}:
-        data["last"] = {"course": course_id, "lesson": lesson_id}
+    last = data.get("last") or {}
+    if (last.get("course"), last.get("lesson")) != (course_id, lesson_id):
+        # When, too: two devices each have a "last lesson", and Continue should
+        # go to the one opened most recently.
+        data["last"] = {"course": course_id, "lesson": lesson_id, "at": time.time()}
         _write_progress(data)
     return out
 
@@ -981,6 +1177,11 @@ def check(course_id: str, lesson_id: str, answer: str) -> dict:
 
 
 def _remember_attempt(course_id: str, lesson_id: str, right: bool) -> None:
+    with _PROGRESS_LOCK:
+        _remember(course_id, lesson_id, right)
+
+
+def _remember(course_id: str, lesson_id: str, right: bool) -> None:
     data = _read_progress()
     missed = data.setdefault("missed", {})
     rows = [row for row in (missed.get(course_id) or []) if isinstance(row, str)]
@@ -1248,8 +1449,10 @@ def reset(course_id: str = "") -> dict:
     data = _read_progress()
     if course_id:
         data["done"].pop(course_id, None)
+        data["missed"].pop(course_id, None)
+        data["cleared"][course_id] = time.time()
     else:
-        data = dict(_DEFAULT, done={})
+        data = dict(_DEFAULT, done={}, missed={}, last={}, cleared={"*": time.time()})
     _write_progress(data)
     return {"ok": True, **totals()}
 
@@ -1294,6 +1497,73 @@ def api(name: str, first: str = "", second: str = "", third: str = "") -> str:
     Never raises. A course that cannot be read should show a message in the
     app, not take the tab down with it.
     """
+    try:
+        if name in _CLOUD_CALLS:
+            return json.dumps(_cloud(name, first, second))
+        if name in ("complete", "reset", "goal", "lesson"):
+            # Quick read-change-write calls. Not "check": it can spend twenty
+            # seconds running somebody's program, and only its last step
+            # writes (see _remember_attempt), so only that step holds this.
+            with _PROGRESS_LOCK:
+                reply = _api(name, first, second, third)
+        else:
+            reply = _api(name, first, second, third)
+        if name in ("catalogue", "complete"):
+            # Opening Learn and finishing lessons push progress to the account,
+            # in the background, at most every minute and a half. Never at the
+            # cost of the reply: a sync that cannot start is not the lesson's
+            # problem.
+            try:
+                _cloud_module().sync_soon()
+            except Exception:  # noqa: BLE001
+                pass
+        return reply
+    except BaseException as error:  # noqa: BLE001
+        return json.dumps({"ok": False, "error": f"{type(error).__name__}: {error}"})
+
+
+#: The account calls, which talk to pycmd.pages.dev.
+_CLOUD_CALLS = {"account", "username", "signup", "login", "logout", "sync", "password",
+                "delete_account", "export", "import", "device"}
+
+
+def _cloud_module():
+    from . import cloud
+
+    return cloud
+
+
+def _cloud(name: str, first: str, second: str) -> dict:
+    cloud = _cloud_module()
+    try:
+        if name == "account":
+            return cloud.status()
+        if name == "username":
+            return cloud.check_username(first)
+        if name == "signup":
+            return cloud.signup(first, second)
+        if name == "login":
+            return cloud.login(first, second)
+        if name == "logout":
+            return cloud.logout()
+        if name == "sync":
+            return {**cloud.sync(), **cloud.status(), "totals": totals()}
+        if name == "password":
+            return cloud.change_password(first, second)
+        if name == "delete_account":
+            return cloud.delete_account(first)
+        if name == "export":
+            return cloud.export_text(first)
+        if name == "import":
+            return cloud.import_text(first, second or "merge")
+        if name == "device":
+            return cloud.set_device(first, second)
+    except cloud.CloudError as error:
+        return {"ok": False, "error": str(error)}
+    return {"ok": False, "error": f"no such call: {name}"}
+
+
+def _api(name: str, first: str, second: str, third: str) -> str:
     try:
         if name == "catalogue":
             return json.dumps({"ok": True, "courses": catalogue(), "totals": totals()})

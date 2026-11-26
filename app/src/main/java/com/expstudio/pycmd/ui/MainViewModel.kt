@@ -1881,6 +1881,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // when the screen is asked for rather than on a timer.
         if (tab == Tab.SYSTEM) refreshSystem()
         if (tab == Tab.TEACH && _teach.value.courses.isEmpty()) refreshTeach()
+        if (tab == Tab.TEACH) refreshAccount()
         if (tab == Tab.PLUGINS) refreshCustomPlugins(reload = false)
         _tab.value = tab
         when (tab) {
@@ -3705,6 +3706,224 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _teachBusy = MutableStateFlow(false)
     val teachBusy: StateFlow<Boolean> = _teachBusy.asStateFlow()
 
+    // ---------------------------------------------------------------- account
+
+    /**
+     * A PyCmd account, so lessons follow somebody between devices.
+     *
+     * All of it is pycmd_teach/cloud.py: these only hand the fields over and
+     * put the reply on screen. The calls go through [PythonEngine.teachAccount],
+     * off the lessons' dispatcher, because they wait on the network.
+     */
+    private val _account = MutableStateFlow(TeachAccount())
+    val account: StateFlow<TeachAccount> = _account.asStateFlow()
+    private var accountSyncedAt = 0L
+    private var accountDeviceSet = false
+
+    private fun accountFrom(json: JSONObject): TeachAccount = _account.value.copy(
+        signedIn = json.optBoolean("signed_in", _account.value.signedIn),
+        username = json.optString("username", _account.value.username),
+        syncedAt = json.optLong("synced_at", _account.value.syncedAt),
+        syncing = false,
+        lastError = json.optString("last_error", ""),
+    )
+
+    fun refreshAccount() {
+        viewModelScope.launch {
+            if (!accountDeviceSet) {
+                // A model name, never the phone's own name: that often has
+                // somebody's real name in it, and it is stored on the server.
+                engine.teachAccount(
+                    "device",
+                    "Android (${android.os.Build.MODEL})".take(40),
+                    "PyCmd-Android/${BuildConfig.VERSION_NAME}",
+                )
+                accountDeviceSet = true
+            }
+            val reply = engine.teachAccount("account")
+            if (!reply.optBoolean("ok")) return@launch
+            _account.value = accountFrom(reply)
+            // Opening the tab pulls in the other devices' lessons, at most
+            // every minute and a half.
+            if (_account.value.signedIn &&
+                System.currentTimeMillis() - accountSyncedAt > 90_000
+            ) {
+                syncAccount(quiet = true)
+            }
+        }
+    }
+
+    fun clearAccountError() {
+        _account.value = _account.value.copy(formError = "")
+    }
+
+    private fun accountSignedIn(reply: JSONObject, greeting: String) {
+        _account.value = accountFrom(reply).copy(busy = false, formError = "")
+        accountSyncedAt = System.currentTimeMillis()
+        showToast(greeting)
+        refreshTeach()
+    }
+
+    fun signIn(username: String, password: String) {
+        viewModelScope.launch {
+            _account.value = _account.value.copy(busy = true, formError = "")
+            val reply = engine.teachAccount("login", username, password)
+            if (reply.optBoolean("ok")) {
+                accountSignedIn(reply, "Signed in as ${reply.optString("username")}.")
+            } else {
+                _account.value = _account.value.copy(
+                    busy = false,
+                    formError = reply.optString("error").ifEmpty { "That did not work." },
+                )
+            }
+        }
+    }
+
+    fun signUp(username: String, password: String) {
+        viewModelScope.launch {
+            _account.value = _account.value.copy(busy = true, formError = "")
+            val reply = engine.teachAccount("signup", username, password)
+            if (reply.optBoolean("ok")) {
+                accountSignedIn(
+                    reply,
+                    "Welcome, ${reply.optString("username")}. Your progress is saved to your account.",
+                )
+            } else {
+                _account.value = _account.value.copy(
+                    busy = false,
+                    formError = reply.optString("error").ifEmpty { "That did not work." },
+                )
+            }
+        }
+    }
+
+    fun checkUsername(name: String) {
+        viewModelScope.launch {
+            val reply = engine.teachAccount("username", name)
+            _account.value = _account.value.copy(
+                nameCheck = NameCheck(
+                    name = name,
+                    available = reply.optBoolean("available"),
+                    reason = reply.optString("reason").ifEmpty { reply.optString("error") },
+                ),
+            )
+        }
+    }
+
+    fun syncAccount(quiet: Boolean = false) {
+        viewModelScope.launch {
+            _account.value = _account.value.copy(syncing = true)
+            val doneBefore = _teach.value.totals.done
+            val reply = engine.teachAccount("sync")
+            accountSyncedAt = System.currentTimeMillis()
+            _account.value = accountFrom(reply).copy(
+                syncing = false,
+                lastError = if (reply.optBoolean("ok")) "" else reply.optString("error"),
+            )
+            if (!reply.optBoolean("ok")) {
+                if (!quiet) showToast(reply.optString("error").ifEmpty { "Sync failed." })
+                return@launch
+            }
+            val after = reply.optJSONObject("totals")?.optInt("done", doneBefore) ?: doneBefore
+            if (after != doneBefore) refreshTeach()
+            if (!quiet) showToast("Progress synced.")
+        }
+    }
+
+    fun signOut() {
+        viewModelScope.launch {
+            val reply = engine.teachAccount("logout")
+            _account.value = accountFrom(reply).copy(signedIn = false, username = "", syncedAt = 0)
+            showToast("Signed out. Your progress stays on this phone.")
+        }
+    }
+
+    fun changePassword(old: String, new: String) {
+        viewModelScope.launch {
+            _account.value = _account.value.copy(busy = true, formError = "")
+            val reply = engine.teachAccount("password", old, new)
+            _account.value = _account.value.copy(
+                busy = false,
+                formError = if (reply.optBoolean("ok")) "" else reply.optString("error"),
+            )
+            if (reply.optBoolean("ok")) {
+                showToast(reply.optString("message").ifEmpty { "Password changed." })
+            }
+        }
+    }
+
+    fun deleteAccount(password: String) {
+        viewModelScope.launch {
+            _account.value = _account.value.copy(busy = true, formError = "")
+            val reply = engine.teachAccount("delete_account", password)
+            if (reply.optBoolean("ok")) {
+                _account.value = TeachAccount()
+                showToast(reply.optString("message").ifEmpty { "Account deleted." })
+            } else {
+                _account.value = _account.value.copy(
+                    busy = false,
+                    formError = reply.optString("error").ifEmpty { "That did not work." },
+                )
+            }
+        }
+    }
+
+    /** What the save picker suggests calling the exported file. */
+    fun progressFileName(): String =
+        "pycmd-progress-" + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date()) + ".json"
+
+    fun exportProgressTo(target: Uri) {
+        viewModelScope.launch {
+            val reply = engine.teachAccount("export", "PyCmd for Android ${BuildConfig.VERSION_NAME}")
+            if (!reply.optBoolean("ok")) {
+                showToast(reply.optString("error").ifEmpty { "Could not export." })
+                return@launch
+            }
+            val written = withContext(Dispatchers.IO) {
+                runCatching {
+                    getApplication<Application>().contentResolver.openOutputStream(target, "wt")
+                        ?.use { it.write(reply.optString("text").toByteArray(Charsets.UTF_8)) }
+                        ?: error("the file could not be opened")
+                }
+            }
+            written
+                .onSuccess { showToast("Saved ${reply.optInt("lessons")} lessons to the file.") }
+                .onFailure { showToast(it.message ?: "Could not save it there.") }
+        }
+    }
+
+    fun importProgressFrom(source: Uri, mode: String) {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching {
+                    getApplication<Application>().contentResolver.openInputStream(source)?.use {
+                        val bytes = it.readBytes()
+                        require(bytes.size <= 5 * 1024 * 1024) { "That file is too big to be PyCmd progress." }
+                        String(bytes, Charsets.UTF_8).removePrefix("\uFEFF")
+                    } ?: error("the file could not be opened")
+                }
+            }
+            val body = text.getOrElse {
+                showToast(it.message ?: "Could not read that file.")
+                return@launch
+            }
+            val reply = engine.teachAccount("import", body, mode)
+            if (!reply.optBoolean("ok")) {
+                showToast(reply.optString("error").ifEmpty { "Could not import that file." })
+                return@launch
+            }
+            showToast(
+                if (mode == "replace") {
+                    "Progress replaced: ${reply.optInt("lessons")} lessons."
+                } else {
+                    "Imported ${reply.optInt("added")} new lessons, ${reply.optInt("lessons")} in all."
+                },
+            )
+            refreshTeach()
+        }
+    }
+
     fun refreshTeach() {
         viewModelScope.launch {
             val reply = engine.teach("catalogue")
@@ -3909,6 +4128,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 next = reply.optString("next"),
                 previous = reply.optString("previous"),
                 done = reply.optBoolean("done"),
+                ask = reply.optString("ask"),
             )
         }
     }

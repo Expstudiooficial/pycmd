@@ -41,6 +41,38 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 29,
+            versionName = "2.9.0",
+            headline = "About 1,800 lessons in every course, and a PyCmd account.",
+            added = listOf(
+                "Every PyCmdTeach course has about 1,800 lessons - 50,466 in 28 " +
+                    "languages, up from 8,874. The small courses grew from about 100. " +
+                    "The new ones are practice rounds: every kind of exercise again, " +
+                    "with new code each round, run on the real compilers before release.",
+                "For JSON, YAML, TOML, XML, CSV, INI, regex, .gitignore, Makefile, " +
+                    "Dockerfile, HTML, CSS and Markdown, practice asks about a real " +
+                    "document: which value a key holds, how many rows, whether it loads.",
+                "A PyCmd account: sign up with a username and password and your " +
+                    "progress follows you between this phone and PyCmd for Windows. " +
+                    "A taken username is caught while you type.",
+                "Your password never leaves the phone: PyCmd sends pycmd.pages.dev " +
+                    "a key made from it, and the website stretches that again before " +
+                    "keeping it. The app holds no database key.",
+                "Export your progress to a .json file, and import one - added to " +
+                    "what you have, or replacing it. It works with the Windows app too.",
+                "Courses open with their units folded, the one with your next lesson " +
+                    "open, and practice in its own section with a Practise button.",
+            ),
+            fixed = listOf(
+                "The course list put the biggest course first, which with every " +
+                    "course the same size meant no order at all. Your courses come " +
+                    "first now, then the most popular languages.",
+                "Wrong answers on offer are the same kind of thing as the right one " +
+                    "- a number for \"how many\" - so they no longer give it away.",
+                "The Teach tab opens faster: lessons are counted without being built.",
+            ),
+        ),
+        ReleaseNote(
             versionCode = 28,
             versionName = "2.8.1",
             headline = "Every \"Spot the mistake\" lesson is a real question now.",

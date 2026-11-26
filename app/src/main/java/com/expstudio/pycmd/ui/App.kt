@@ -126,6 +126,7 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
     val whatsNew by viewModel.whatsNew.collectAsState()
     val teachSearch by viewModel.teachSearch.collectAsState()
     val teachQueue by viewModel.teachQueue.collectAsState()
+    val teachAccount by viewModel.account.collectAsState()
     val updateSource by viewModel.updateSource.collectAsState()
 
     // Worth a dot on More: a newer build found but not yet installed is the
@@ -164,6 +165,17 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
         pendingSave = file
         saveLauncher.launch(file.name)
     }
+
+    // Learn progress out to a .json file and back in. The import mode (add to,
+    // or replace) is chosen before the picker opens, so it is held until the
+    // picker comes back.
+    val progressExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri -> if (uri != null) viewModel.exportProgressTo(uri) }
+    var pendingImportMode by remember { mutableStateOf("merge") }
+    val progressImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) viewModel.importProgressFrom(uri, pendingImportMode) }
 
     // Which language the open file is, so the snippet bar and the header can
     // say so. Derived rather than stored: the file name is the only input.
@@ -592,6 +604,24 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                     onReview = viewModel::startTeachReview,
                     onSetGoal = viewModel::setTeachGoal,
                     reviewLeft = teachQueue.size,
+                    account = teachAccount,
+                    accountActions = AccountActions(
+                        signIn = viewModel::signIn,
+                        signUp = viewModel::signUp,
+                        checkName = viewModel::checkUsername,
+                        sync = { viewModel.syncAccount() },
+                        signOut = viewModel::signOut,
+                        changePassword = viewModel::changePassword,
+                        delete = viewModel::deleteAccount,
+                        export = { progressExportLauncher.launch(viewModel.progressFileName()) },
+                        import = { mode ->
+                            pendingImportMode = mode
+                            progressImportLauncher.launch(
+                                arrayOf("application/json", "text/plain", "application/octet-stream"),
+                            )
+                        },
+                        clearError = viewModel::clearAccountError,
+                    ),
                     pluginSections = {
                         PluginSections(
                             sectionsFor(Tab.TEACH, installedPlugins, installedEnabled),

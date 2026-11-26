@@ -53,6 +53,17 @@ echo "== PyCmdTeach: every course, and every snippet it can run =="
 "$PYTHON" tools/test_teach.py
 
 echo
+echo "== PyCmdTeach practice: every question about a document, asked of the real thing =="
+"$PYTHON" tools/test_practice.py
+
+echo
+echo "== Accounts: the website's API, and the app's client against it =="
+if command -v node >/dev/null; then
+  node --test --no-warnings website/test/api.test.mjs
+fi
+"$PYTHON" tools/test_account.py
+
+echo
 echo "== Plugins, doctor, preview, cloud, bundled =="
 "$PYTHON" tools/test_plugins.py
 "$PYTHON" tools/test_doctor.py

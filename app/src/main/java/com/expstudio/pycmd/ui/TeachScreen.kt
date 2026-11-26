@@ -36,6 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
@@ -126,6 +130,8 @@ data class TeachLesson(
     val next: String,
     val previous: String,
     val done: Boolean,
+    /** For a question about a document: the question. Empty for programs. */
+    val ask: String = "",
 )
 
 data class TeachMark(
@@ -168,6 +174,8 @@ fun TeachScreen(
     onSetGoal: (Int) -> Unit = {},
     /** Mistakes still to go after this one, in a review round. */
     reviewLeft: Int = 0,
+    account: TeachAccount = TeachAccount(),
+    accountActions: AccountActions = AccountActions(),
     pluginSections: @Composable () -> Unit = {},
 ) {
     when {
@@ -194,6 +202,8 @@ fun TeachScreen(
 
         else -> CourseList(
             home = home,
+            account = account,
+            accountActions = accountActions,
             busy = busy,
             onOpenCourse = onOpenCourse,
             onOpenLesson = onOpenLesson,
@@ -212,6 +222,8 @@ fun TeachScreen(
 @Composable
 private fun CourseList(
     home: TeachHome,
+    account: TeachAccount,
+    accountActions: AccountActions,
     busy: Boolean,
     onOpenCourse: (String) -> Unit,
     onOpenLesson: (String, String) -> Unit,
@@ -276,6 +288,10 @@ private fun CourseList(
                     )
                 }
             }
+        }
+
+        if (!home.loading) {
+            item { AccountCard(account, accountActions) }
         }
 
         val totals = home.totals
@@ -535,6 +551,17 @@ private fun CourseScreen(
             .flatMap { it.lessons.asSequence() }
             .firstOrNull { !it.done }
     }
+    // Open to start with: the unit holding the next lesson, and the first few
+    // hand-written ones that are not finished.
+    var expanded by remember(course.id) {
+        mutableStateOf(
+            course.units.indices.filter { index ->
+                val unit = course.units[index]
+                unit.lessons.any { it.id == next?.id } ||
+                    (index < 3 && !isPracticeUnit(unit) && unit.lessons.any { !it.done })
+            }.toSet(),
+        )
+    }
 
     LazyColumn(
         modifier.fillMaxSize(),
@@ -596,22 +623,118 @@ private fun CourseScreen(
             }
         }
 
+        // Since 2.9.0 a course is about 1,800 lessons, most of them practice
+        // rounds after the hand-written units. Units fold, so the course is a
+        // page of headings rather than a two-thousand-row scroll; the one
+        // with the next lesson in it starts open.
+        val firstPractice = course.units.indexOfFirst { isPracticeUnit(it) }
         course.units.forEachIndexed { index, unit ->
+            if (index == firstPractice) {
+                item(key = "practice-head") {
+                    PracticeHeader(course, firstPractice, onOpenLesson)
+                }
+            }
+            val isOpen = index in expanded
+            val done = unit.lessons.count { it.done }
             item(key = "unit-$index") {
-                Spacer(Modifier.height(4.dp))
-                SectionTitle("${index + 1}. ${unit.title}")
-                if (unit.goal.isNotEmpty()) {
+                UnitHeader(
+                    number = index + 1,
+                    unit = unit,
+                    done = done,
+                    open = isOpen,
+                    onToggle = {
+                        expanded = if (isOpen) expanded - index else expanded + index
+                    },
+                )
+            }
+            if (isOpen) {
+                items(unit.lessons, key = { "${index}-${it.id}" }) { row ->
+                    LessonRow(row) { onOpenLesson(row.id) }
+                }
+            }
+        }
+    }
+}
+
+private fun isPracticeUnit(unit: TeachUnit): Boolean =
+    unit.title.startsWith("Practice round ")
+
+@Composable
+private fun PracticeHeader(
+    course: TeachCourseDetail,
+    firstPractice: Int,
+    onOpenLesson: (String) -> Unit,
+) {
+    val rounds = course.units.drop(firstPractice)
+    val lessons = rounds.flatMap { it.lessons }
+    val done = lessons.count { it.done }
+    val next = lessons.firstOrNull { !it.done }
+    Spacer(Modifier.height(6.dp))
+    PyCard {
+        Text("Practice · ${rounds.size} rounds", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Every kind of exercise again, with new code each round. " +
+                "$done of ${lessons.size} done.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (next != null) {
+            Spacer(Modifier.height(10.dp))
+            ActionButton(
+                if (done == 0) "Practise" else "Keep practising",
+                PyIcons.PlayArrow,
+                onClick = { onOpenLesson(next.id) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnitHeader(
+    number: Int,
+    unit: TeachUnit,
+    done: Int,
+    open: Boolean,
+    onToggle: () -> Unit,
+) {
+    PyCard(contentPadding = PaddingValues(0.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (isPracticeUnit(unit)) unit.title else "$number. ${unit.title}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (unit.goal.isNotEmpty() && !isPracticeUnit(unit)) {
                     Text(
                         unit.goal,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                     )
                 }
             }
-            items(unit.lessons, key = { "${index}-${it.id}" }) { row ->
-                LessonRow(row) { onOpenLesson(row.id) }
-            }
+            Text(
+                "$done/${unit.lessons.size}",
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = MonoFamily,
+                color = if (done == unit.lessons.size) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                if (open) PyIcons.ExpandLess else PyIcons.ExpandMore,
+                contentDescription = if (open) "Fold" else "Unfold",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -680,7 +803,7 @@ private fun kindGlyph(kind: String): String = when (kind) {
 
 private fun kindName(kind: String): String = when (kind) {
     "read" -> "Read it"
-    "predict" -> "What does it print?"
+    "predict" -> "Predict the result"
     "which" -> "Which one prints it?"
     "bug" -> "Spot the mistake"
     "fill" -> "Fill the gap"
@@ -772,7 +895,17 @@ private fun LessonPlayer(
                 item { CodeBlock(lesson.code) }
                 if (lesson.output.isNotEmpty()) {
                     item {
-                        SectionTitle("It prints")
+                        // A question about a document shows the question with
+                        // its answer; a program shows what it prints.
+                        if (lesson.ask.isNotEmpty()) {
+                            Text(
+                                inlineCode(lesson.ask),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                            )
+                        } else {
+                            SectionTitle("It prints")
+                        }
                         CodeBlock(lesson.output, accent = true)
                     }
                 }
@@ -1067,7 +1200,29 @@ private fun LessonPlayer(
 private fun Prompt(text: String) {
     if (text.isEmpty()) return
     PyCard {
-        Text(text, style = MaterialTheme.typography.bodyLarge)
+        Text(inlineCode(text), style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/**
+ * `code` in a question shown as code, without the backticks: "Which value
+ * does `port` hold?" reads better with port in the code font than with two
+ * stray marks around it.
+ */
+@Composable
+fun inlineCode(text: String): AnnotatedString {
+    val tint = MaterialTheme.colorScheme.primary
+    return remember(text, tint) {
+        buildAnnotatedString {
+            val parts = text.split('`')
+            parts.forEachIndexed { index, part ->
+                if (index % 2 == 1 && index < parts.size - 1) {
+                    withStyle(SpanStyle(fontFamily = MonoFamily, color = tint)) { append(part) }
+                } else {
+                    append(if (index % 2 == 1) "`$part" else part)
+                }
+            }
+        }
     }
 }
 

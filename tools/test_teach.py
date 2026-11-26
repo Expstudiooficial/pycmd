@@ -14,6 +14,7 @@ question can actually be answered correctly.
 
 import io
 import os
+import re
 import sys
 import tempfile
 import time
@@ -86,6 +87,7 @@ def run_registry(source, extension):
 
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
 #: How to run one snippet with a real toolchain: the file name to write it
 #: to, and the command (with {file} and {dir} filled in). A list of steps,
@@ -166,6 +168,10 @@ def format_checks(courses):
             for topic in unit["topics"]:
                 if topic.title in not_documents:
                     continue
+                # "Is this valid JSON?" is sometimes answered no, on purpose;
+                # tools/test_practice.py checks those answers with the parser.
+                if topic.ask.startswith("Is this"):
+                    continue
                 text = topic.code
                 if course_id == "xml":
                     # A fragment is checked inside a root, and the declaration
@@ -180,6 +186,70 @@ def format_checks(courses):
                     ok, why = False, str(error)
                 check(f"{course_id} '{topic.title}' is a valid {course_id.upper()} document",
                       ok, why)
+
+
+def _kotlinc_version():
+    try:
+        done = subprocess.run(["kotlinc", "-version"], capture_output=True, text=True,
+                              timeout=120, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return (0, 0)
+    found = re.search(r"kotlinc-jvm (\d+)\.(\d+)", done.stdout + done.stderr)
+    return (int(found.group(1)), int(found.group(2))) if found else (0, 0)
+
+
+#: What an old kotlinc (Debian's is 1.3) calls the functions the courses use.
+#: Test-only, like the clojure and scala shims in the Windows tests: the
+#: lessons are written for the Kotlin people install today.
+_OLD_KOTLIN = {".uppercase()": ".toUpperCase()", ".lowercase()": ".toLowerCase()",
+               ".sumOf {": ".sumBy {"}
+
+
+def _kotlin_batch(jobs):
+    """Every Kotlin snippet in one compiler run - kotlinc takes seconds to
+    start, and there are hundreds of them. Each goes in a package of its own
+    so that every one can have its own main. {index: (output, error)}."""
+    folder = tempfile.mkdtemp(prefix="real-kotlin-")
+    paths = []
+    for index, code in jobs:
+        sub = os.path.join(folder, f"p{index}")
+        os.makedirs(sub, exist_ok=True)
+        path = os.path.join(sub, "Main.kt")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(f"package p{index}\n\n{code}\n")
+        paths.append(path)
+    jar = os.path.join(folder, "all.jar")
+    try:
+        done = subprocess.run(["kotlinc", *paths, "-d", jar], capture_output=True, text=True,
+                              timeout=1800, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {index: ("", str(exc)) for index, _ in jobs}
+    if done.returncode != 0:
+        if len(jobs) == 1:
+            return {jobs[0][0]: ("", done.stderr[-400:])}
+        # One bad snippet fails the batch; halve it until the bad one is alone.
+        half = len(jobs) // 2
+        return {**_kotlin_batch(jobs[:half]), **_kotlin_batch(jobs[half:])}
+    stdlib = next((os.path.join("/usr/share/java", name) for name in
+                   ("kotlin-stdlib.jar",) if os.path.exists(os.path.join("/usr/share/java", name))),
+                  "")
+    results = {}
+
+    def run_one(index):
+        try:
+            ran = subprocess.run(["java", "-cp", f"{jar}{os.pathsep}{stdlib}",
+                                  f"p{index}.MainKt"], capture_output=True, text=True,
+                                 timeout=120, stdin=subprocess.DEVNULL)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return index, ("", str(exc))
+        if ran.returncode != 0:
+            return index, (ran.stdout, ran.stderr[-400:])
+        return index, (ran.stdout, "")
+
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
+        for index, result in pool.map(run_one, [i for i, _ in jobs]):
+            results[index] = result
+    return results
 
 
 def real_checks(courses):
@@ -203,24 +273,56 @@ def real_checks(courses):
             print(f"  SKIP  {course.name}: no {tool} here to check it with")
             continue
         checked = 0
-        for unit in course.units:
-            for topic in unit["topics"]:
-                if not topic.out:
-                    continue
-                result = run_real(course.id, topic.code)
-                if result is None:
-                    continue
-                got, error = result
-                checked += 1
-                if error:
-                    check(f"{course.id} '{topic.title}' runs on the real {tool}", False, error)
-                    continue
-                check(
-                    f"{course.id} '{topic.title}' prints the same on the real {tool}",
-                    flatten(got) == flatten(topic.out),
-                    f"got {flatten(got)!r}, course says {flatten(topic.out)!r}",
-                )
+        topics = [topic for unit in course.units for topic in unit["topics"]
+                  if topic.out and not topic.ask]
+        # Hundreds of snippets a course since 2.9.0's practice rounds: run them
+        # side by side, one per core.
+        with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
+            results = list(pool.map(lambda t: run_real(course.id, t.code), topics))
+        for topic, result in zip(topics, results):
+            if result is None:
+                continue
+            got, error = result
+            checked += 1
+            if error:
+                check(f"{course.id} '{topic.title}' runs on the real {tool}", False, error)
+                continue
+            check(
+                f"{course.id} '{topic.title}' prints the same on the real {tool}",
+                flatten(got) == flatten(topic.out),
+                f"got {flatten(got)!r}, course says {flatten(topic.out)!r}",
+            )
         print(f"  {course.name}: {checked} snippets checked on the real {tool}")
+
+    # Kotlin is checked in one compiler run, not one per snippet.
+    course = courses.get("kotlin")
+    if course is not None:
+        if not (shutil.which("kotlinc") and shutil.which("java")):
+            print("  SKIP  Kotlin: no kotlinc here to check it with")
+        else:
+            topics = [topic for unit in course.units for topic in unit["topics"]
+                      if topic.out and not topic.ask]
+            codes = [t.code for t in topics]
+            if _kotlinc_version() < (1, 5):
+                # No coroutines library on a box this old; everything else is
+                # translated back to the names that compiler knows.
+                skipped = [t for t in topics if "kotlinx.coroutines" in t.code]
+                topics = [t for t in topics if t not in skipped]
+                codes = [t.code for t in topics]
+                for new_name, old_name in _OLD_KOTLIN.items():
+                    codes = [c.replace(new_name, old_name) for c in codes]
+                print(f"  Kotlin: kotlinc is older than 1.5, so {len(skipped)} coroutine "
+                      "snippet(s) are not checked")
+            results = _kotlin_batch(list(enumerate(codes)))
+            for index, topic in enumerate(topics):
+                got, error = results[index]
+                if error:
+                    check(f"kotlin '{topic.title}' runs on the real kotlinc", False, error)
+                    continue
+                check(f"kotlin '{topic.title}' prints the same on the real kotlinc",
+                      flatten(got) == flatten(topic.out),
+                      f"got {flatten(got)!r}, course says {flatten(topic.out)!r}")
+            print(f"  Kotlin: {len(topics)} snippets checked on the real kotlinc")
 
 
 def main():
@@ -417,6 +519,19 @@ def main():
     finally:
         pycmd_teach.TIME_LIMIT = saved_time
         pycmd_teach.OUTPUT_LIMIT = saved_out
+
+    # ---- 2.9.0: counting lessons without building them ------------------
+    #
+    # The course list counts lessons with _kinds(), which follows the same
+    # rules as _topic_lessons() without making the lessons - 50,000 of them
+    # took seconds to build on a phone. If the two ever disagree, the list
+    # says a course has lessons it does not, and progress percentages lie.
+    for course_ in courses.values():
+        built = [row["id"] for unit in pycmd_teach._tree(course_) for row in unit["lessons"]]
+        check(f"{course_.id}: the lesson count matches the lessons",
+              built == pycmd_teach._lesson_ids(course_),
+              f"{len(built)} built, {len(pycmd_teach._lesson_ids(course_))} counted")
+        check(f"{course_.id} has about 1,800 lessons", 1700 <= len(built) <= 1900, len(built))
 
     # ---- the shape of an ordering exercise ----------------------------
     #

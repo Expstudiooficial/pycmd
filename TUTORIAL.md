@@ -789,8 +789,8 @@ that already runs, with what it needs already inside it.
 
 ## 11g. PyCmdTeach — learn the language you are writing in
 
-**More → PyCmdTeach.** 28 courses, 8,874 lessons, free, and all of it on the
-device — there is nothing to download and no account.
+**More → PyCmdTeach.** 28 courses, 50,466 lessons, free, and all of it on the
+device — there is nothing to download, and an account is optional.
 
 Start with Python if you are not sure. Tap it, then **Start**. The course is
 eleven units from `print` to decorators and generators, and each lesson is one
@@ -838,8 +838,29 @@ Every lesson has an **Editor** button. It writes the snippet into
 course inside a code editor that you cannot leave would be a strange thing to
 build.
 
-Progress, XP and a day streak are kept on the device and nowhere else. **Reset**
-on a course forgets just that one.
+Every course has about 1,800 lessons. After the hand-written units come
+**practice rounds**: every kind of exercise again with new code each round,
+in a section of their own with a **Practise** button. Units fold; the one with
+your next lesson starts open. For the file formats, practice asks a question
+about a document - which value a key holds, how many rows a CSV has, whether
+a file would load - and **Read it** shows the question with its answer.
+
+Progress, XP and a day streak are kept on the device. **Reset** on a course
+forgets just that one.
+
+**An account is optional.** The card at the top of the tab signs you in (or
+**Create account**: a username that is free, and a password of at least 8
+characters), and from then on your progress follows you between this phone
+and PyCmd for Windows. Lessons finished on either stay finished; the streak
+comes from whichever saw the later day. Your password never leaves the phone:
+PyCmd sends pycmd.pages.dev a key made from it with PBKDF2 (600,000 rounds),
+and the website stretches that again before keeping it. **Account** signs you
+out, changes the password (your other devices sign in again), or deletes the
+account and its saved progress - the lessons on the phone stay.
+
+**Export** saves your progress as a `.json` file anywhere the system picker
+can reach; **Import** loads one, added to what you have or replacing it. The
+same file works in PyCmd for Windows.
 
 The top of the tab has three things worth knowing about. **Continue** opens
 the lesson you were last in. **Today** is a daily goal - press - or + to set
