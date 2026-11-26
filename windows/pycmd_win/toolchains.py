@@ -331,7 +331,13 @@ TOOLCHAINS = [
     ),
     Toolchain(
         "clangpp", "Clang++", ["cpp"], "clang++",
-        _steps_build(("{exe}", "{src}", "-o", "{out}", "-std=c++20")),
+        # Against MSVC's STL, a Visual Studio newer than the Clang stops the
+        # build at its first header (error STL1000: "expected Clang 19 or
+        # newer") - an installed LLVM and an updated Visual Studio drift apart
+        # on their own. The STL's own switch lets the pair compile; it is an
+        # unused macro anywhere else.
+        _steps_build(("{exe}", "{src}", "-o", "{out}", "-std=c++20",
+                      "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH")),
         winget="winget install LLVM.LLVM", scoop="scoop install llvm",
         choco="choco install llvm", site="https://releases.llvm.org/",
         note="On Windows, Clang++ needs MSVC's headers, libraries and linker. "
