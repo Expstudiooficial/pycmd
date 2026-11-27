@@ -413,7 +413,7 @@ check("the switches survive a restart",
 
 say("\n== the plugins that ship inside ==")
 staged = bundle.stage_bundled()
-check("all five are in the build", len(staged) == 5, [os.path.basename(p) for p in staged])
+check("all six are in the build", len(staged) == len(bundle.BUNDLED) == 6, [os.path.basename(p) for p in staged])
 
 say("\n== reading a plugin from the phone ==")
 sample = os.path.join(ROOT, "app", "src", "main", "assets", "plugins", "creator")
@@ -481,7 +481,7 @@ check("an unknown call is an answer, not a crash",
 booted = instance.start()
 check("the engine starts", booted["ok"], booted)
 check("and the bundled plugins went in",
-      len(host_module.call(instance, "plugins")["installed"]) == 5)
+      len(host_module.call(instance, "plugins")["installed"]) == len(bundle.BUNDLED))
 
 # These start work or change something rather than answering a question, so
 # calling them with an empty payload proves nothing and costs something.
@@ -1630,7 +1630,7 @@ _cr55 = json.load(open(os.path.join(ROOT, "app", "src", "main", "assets", "plugi
 check("Creator is 3.0", _cr55["version"].startswith("3."), _cr55["version"])
 
 say("\n== 5.6 ==")
-check("the version is 5.6", host_module.VERSION == "5.6" and host_module.BUILD == 11)
+check("the version is 5.6 or later", host_module.BUILD >= 11)
 _rows56 = {c.id: c for c in _tc55.TOOLCHAINS}
 _bad56 = {"scoop install tcl", "scoop install clojure", "scoop install ocaml", "scoop install guile",
           "choco install guile", "winget install Haskell.GHCup"}
@@ -1653,6 +1653,16 @@ import urllib.request as _ur56  # noqa: E402
 check("Run on an .html file serves it", _ran56["ok"] and b"hello" in _ur56.urlopen(_ran56["url"]).read(), _ran56)
 from pycmd_win import files as _files56  # noqa: E402
 check("an .html file shows a Run button", _files56._entry(_page56)["runnable"])
+
+say("\n== 5.7 ==")
+check("the version is 5.7", host_module.VERSION == "5.7" and host_module.BUILD == 12)
+check("the Board ships in the exe", "board" in _bundle55.BUNDLED)
+_ui57 = open(os.path.join(ROOT, "windows", "ui", "screens-more.js"), encoding="utf-8").read()
+check("Notes opens the Board, and moves old notes onto it", "pycmd.board" in _ui57 and "import_text" in _ui57)
+check("old notes are moved only once", "notes.moved" in host_module.HANDLERS)
+check("the ten tools reach the shared engine, not a Windows program of the same name",
+      all(n in host_module.ENGINE_COMMANDS for n in ("calc", "todo", "passgen", "hash", "base64",
+                                                      "wc", "grep", "diff", "cal", "loc")))
 
 say()
 if FAILURES:

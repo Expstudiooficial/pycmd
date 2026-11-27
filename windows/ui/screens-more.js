@@ -461,7 +461,28 @@ async function Snippets(screen) {
   screen.appendChild(draw(reply.builtin || [], false));
 }
 
+/* 5.7: Notes is the Board - cards, images, to-dos and arrows. The plain
+   scratchpad below is what you get if the Board plugin is missing or off, and
+   the old scratchpad's text is put on the board as a card, once. */
 async function Notes(screen) {
+  const plugins = await PyCmd.call('plugins');
+  const board = ((plugins && plugins.installed) || []).find((p) => p.id === 'pycmd.board' && !p.broken);
+  if (board) {
+    if (board.on === false) await PyCmd.call('plugin.set', { id: 'pycmd.board', on: true });
+    const moved = await PyCmd.call('notes.moved', {});
+    if (!moved.done) {
+      const old = await PyCmd.call('notes', {});
+      if ((old.text || '').trim()) {
+        await PyCmd.call('plugin.export', { id: 'pycmd.board', name: 'import_text', payload: { text: old.text } });
+      }
+      await PyCmd.call('notes.moved', { mark: true });
+    }
+    return drawPanelScreen(screen, board);
+  }
+  return plainNotes(screen);
+}
+
+async function plainNotes(screen) {
   screen.appendChild(head('Notes', 'A scratchpad that saves itself. Plain text; Markdown if you like.'));
   const reply = await PyCmd.call('notes', {});
   const box = el('textarea', { class: 'plain mono notes', rows: '28', spellcheck: 'true' });

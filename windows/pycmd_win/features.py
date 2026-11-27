@@ -347,19 +347,16 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "5.6",
-    "title": "PyCmd for Windows 5.6",
+    "version": "5.7",
+    "title": "PyCmd for Windows 5.7",
     "items": [
-        ["HTML runs",
-         "Press Run on an .html file - in the editor, Files, the Run tab or `run index.html` in the "
-         "console - and PyCmd serves its folder and opens it in your browser."],
-        ["Installs that work",
-         "Seven toolchains offered install lines that do not exist. Tcl, Clojure, Haskell, OCaml and "
-         "GnuCOBOL now use real packages, Scheme runs on Racket (Guile has no Windows build), and "
-         "MSVC installs with its C++ compiler."],
-        ["Found where installers put them",
-         "Tcl, GHC, OCaml, GnuCOBOL and Racket are found even when their installer did not add them "
-         "to PATH, and MSVC works without a Developer Command Prompt."],
+        ["Notes is a board now",
+         "Drop notes, headings, to-do lists, images and links anywhere, drag them around, colour "
+         "them and connect them with arrows. Pan, zoom, several boards, and Export to Markdown. "
+         "Your old notes are on it as a card. Paste an image or a link straight onto it."],
+        ["Ten new console tools",
+         "calc, todo, passgen, hash, base64, wc, grep, diff, cal and loc - the same on the phone. "
+         "`note <text>` drops a note on your board from the console."],
     ],
 }
 
@@ -432,6 +429,13 @@ def _h_notes(host, payload):
             return {"ok": True, "text": handle.read()}
     except OSError:
         return {"ok": True, "text": ""}
+
+
+def _h_notes_moved(host, payload):
+    """Whether the old scratchpad has gone onto the Board (5.7); `mark` records that it has."""
+    if payload.get("mark"):
+        _settings_put("notesOnBoard", True)
+    return {"ok": True, "done": bool(_settings_get("notesOnBoard", False))}
 
 
 def _h_notes_save(host, payload):
@@ -1296,6 +1300,7 @@ HANDLERS = {
     "history.clear": _h_history_clear,
     "notes": _h_notes,
     "notes.save": _h_notes_save,
+    "notes.moved": _h_notes_moved,
     "snippets": _h_snippets,
     "snippet.save": _h_snippet_save,
     "snippet.remove": _h_snippet_remove,

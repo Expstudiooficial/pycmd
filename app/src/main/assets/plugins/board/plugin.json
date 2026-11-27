@@ -1,0 +1,18 @@
+{
+  "id": "pycmd.board",
+  "name": "Board",
+  "version": "1.0.0",
+  "author": "PyCmd",
+  "description": "A board for plans and notes: drop notes, headings, to-do lists, images and links anywhere, drag them around, colour them and connect them with arrows. Pan and zoom, several boards, saves itself. `note <text>` in the console drops a note on your board.",
+  "entry": "main.py",
+  "panel": "ui.html",
+  "tab": {
+    "title": "Board",
+    "description": "Notes, images and to-dos you can arrange and connect",
+    "icon": "note"
+  },
+  "commands": [
+    {"name": "note", "help": "note <text> - drop a note on your board  ·  note list"}
+  ],
+  "permissions": ["files"]
+}

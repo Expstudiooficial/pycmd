@@ -318,6 +318,31 @@ check("quotes hold a word together", out.strip() == "hello there", out)
 _h, _s, out, _e = run("echo it's fine")
 check("an unbalanced quote does not raise", "handled", out)
 
+print("\n== 3.6: the ten small tools ==")
+with open("a.txt", "w", encoding="utf-8") as handle:
+    handle.write("one\ntwo TODO\n")
+with open("b.txt", "w", encoding="utf-8") as handle:
+    handle.write("one\nthree\n")
+_, status, out, _ = run("calc 2^10 / 4")
+check("calc works it out, ^ included", status == "ok" and out.strip() == "256", out)
+_, status, _, err = run('calc __import__("os").system("x")')
+check("calc refuses anything that is not maths", status != "ok" and "only numbers" in err, err)
+run("todo add ship it")
+_, status, out, _ = run("todo done 1")
+check("todo adds and ticks", status == "ok" and "done: ship it" in out, out)
+check("todo lists", "[x] ship it" in run("todo")[2])
+_, _, out, _ = run("passgen 24")
+check("passgen makes a password of that length", len(out.strip()) == 24, out)
+check("hash knows sha256", "ba7816bf" in run("hash abc")[2])
+check("base64 goes both ways", run("base64 encode hi")[2].strip() == "aGk=" and run("base64 decode aGk=")[2].strip() == "hi")
+check("wc counts", "2 lines" in run("wc a.txt")[2])
+check("grep finds text, ignoring case", "a.txt:2" in run("grep todo -i")[2])
+check("diff shows what changed", "+three" in run("diff a.txt b.txt")[2])
+check("cal draws a month", "February 2027" in run("cal 2 2027")[2])
+check("loc counts code by language", "total" in run("loc")[2])
+check("all ten are in help", all(name in pycmd_shell.COMMANDS for name in
+      ("calc", "todo", "passgen", "hash", "base64", "wc", "grep", "diff", "cal", "loc")))
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} shell checks failed")

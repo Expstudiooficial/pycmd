@@ -37,6 +37,39 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 5.7
+
+### Notes is a board now
+
+The **Notes** tab is a board:
+- **Cards:** notes, headings, to-do lists, images and links, anywhere you like.
+- **Arranging:** drag cards around, resize them and colour them.
+- **Arrows:** drag a card's green dot onto another card to connect them, or use **Connect**. Double-click an arrow to label it.
+- **Getting around:** pan by dragging the background; zoom with the wheel or **Fit**.
+- **Pasting:** paste an image or a link straight onto the board.
+- **Boards:** keep as many as you like (New, rename, Delete), and **Export .md** writes one to your workspace as Markdown.
+
+Your old notes are on the board as a card. It saves itself, and Ctrl+Z undoes anything. It is the same Board plugin the phone has.
+
+### Ten new console tools
+
+The same ten on the phone and the PC:
+
+| Command | Does |
+|---|---|
+| `calc 2^10 / 3` | a calculator, with `sqrt`, `pi` and the rest of `math` |
+| `todo add …` / `todo done 2` / `todo` | a to-do list kept in the workspace |
+| `passgen 24` | a strong random password (`x5` for five, `--no-symbols`) |
+| `hash file [md5]` | the SHA-256 (or MD5, SHA-1, SHA-512) of a file or text |
+| `base64 encode/decode` | text or a file |
+| `wc file` | lines, words and characters |
+| `grep pattern [folder] [-i]` | find text in files |
+| `diff a b` | what changed between two files |
+| `cal` / `cal 3 2027` / `cal 2027` | a calendar |
+| `loc [folder]` | lines of code, by language |
+
+And `note <text>` drops a note on your board.
+
 ## What is new in 5.6
 
 ### HTML runs

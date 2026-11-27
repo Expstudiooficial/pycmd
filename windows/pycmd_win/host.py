@@ -36,8 +36,8 @@ import traceback
 
 from . import (android, builtins, bundle, copies, disk, files, install, known,
                langs, portable, runner, setup_all, store, toolchains)
-VERSION = "5.6"
-BUILD = 11
+VERSION = "5.7"
+BUILD = 12
 
 _engine_ready = False
 
@@ -299,6 +299,8 @@ ENGINE_COMMANDS = {
     "man", "mkdir", "mv", "open", "packages", "pip", "preview", "pwd",
     "python", "rm", "serve", "servers", "show", "status", "stop", "tail",
     "touch", "tree", "type", "uninstall", "version", "which",
+    # 5.7: the ten small tools, the same on the phone
+    "calc", "todo", "passgen", "hash", "base64", "wc", "grep", "diff", "cal", "loc",
 }
 
 
