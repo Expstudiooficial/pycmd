@@ -36,8 +36,8 @@ import traceback
 
 from . import (android, builtins, bundle, copies, disk, files, install, known,
                langs, portable, runner, setup_all, store, toolchains)
-VERSION = "5.7"
-BUILD = 12
+VERSION = "5.8"
+BUILD = 13
 
 _engine_ready = False
 
@@ -244,6 +244,16 @@ class Host:
         # Installing replaces a plugin's folder and loading imports out of it;
         # on the phone those once ran at the same time and a plugin was
         # imported while its own files were being moved out from under it.
+        # 5.8: Notes is built in. The Board plugin's boards move into the
+        # workspace and the plugin is removed - before bundled plugins go in.
+        try:
+            import pycmd_board
+
+            retired = json.loads(pycmd_board.api("retire", "{}", files.root()))
+            if retired.get("retired"):
+                self.log("info", "the Board plugin is now the built-in Notes tab", "")
+        except Exception as error:  # noqa: BLE001
+            self.log("warn", "could not move the Board plugin into Notes", str(error))
         staged = bundle.install_bundled(self.engine["plugins"], log=self.log)
         if staged.get("installed"):
             self.log("info", "bundled plugins installed",
@@ -300,7 +310,7 @@ ENGINE_COMMANDS = {
     "python", "rm", "serve", "servers", "show", "status", "stop", "tail",
     "touch", "tree", "type", "uninstall", "version", "which",
     # 5.7: the ten small tools, the same on the phone
-    "calc", "todo", "passgen", "hash", "base64", "wc", "grep", "diff", "cal", "loc",
+    "calc", "todo", "passgen", "hash", "base64", "wc", "grep", "diff", "cal", "loc", "note",
 }
 
 

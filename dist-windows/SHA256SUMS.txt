@@ -1,1 +1,2 @@
-2158509902748f8c03e4c20d95fdae0bea70a32de430d9d8f527feb93eebf9db  PyCmd.exe
+# PyCmd for Windows 5.8 (build 13) has not been built yet.
+# The checksum appears here when a Windows release tag builds it.

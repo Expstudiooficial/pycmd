@@ -994,6 +994,28 @@ def _cmd_loc(args: list) -> int:
     return 0
 
 
+def _cmd_note(args: list) -> int:
+    """`note <text>` drops a note on the board in the Notes tab."""
+    import json
+
+    import pycmd_board
+
+    text = " ".join(args).strip()
+    if not text or text == "list":
+        reply = json.loads(pycmd_board.api("listing", "{}", _workspace()))
+        if not text:
+            _out("note <text> drops a note on your board (Notes tab). Your boards:")
+        for row in reply.get("boards", []):
+            _out(f"  {row['name']}: {row['cards']} cards")
+        return 0
+    reply = json.loads(pycmd_board.api("note", json.dumps({"text": text}), _workspace()))
+    if not reply.get("ok"):
+        _err(f"note: {reply.get('error')}")
+        return 1
+    _out(f"Pinned to {reply['board']}. Open Notes to see it.")
+    return 0
+
+
 COMMANDS = {
     "pip": (_cmd_pip, "install, remove and list Python packages",
             "pip install flask  ·  pip install rich==13.9.4  ·  pip list\n"
@@ -1034,6 +1056,7 @@ COMMANDS = {
     "diff": (_cmd_diff, "what changed between two files", ""),
     "cal": (_cmd_cal, "a calendar  (cal · cal 3 2027 · cal 2027)", ""),
     "loc": (_cmd_loc, "lines of code in a folder, by language", ""),
+    "note": (_cmd_note, "drop a note on your board in Notes  (note buy milk · note list)", ""),
     "help": (_cmd_help, "this list", ""),
 }
 

@@ -37,6 +37,32 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 5.8
+
+### Notes, built in, and you can write in it
+
+Notes is part of PyCmd now, not a plugin. In 5.7 you could not type in a card:
+the board held the mouse, and the double-click never reached the text. Now a
+double-click on any card opens it for writing, as often as you like. Your
+boards and your old notes came with it, and the Board plugin is gone.
+
+### A much better board
+
+- **Right-click** a card, an arrow or the board for what you can do with it.
+- **Select many:** Shift+drag a box, use **Select**, or Shift+click. Move, colour, duplicate or delete them together.
+- **Sections:** frames that group cards, and moving a section moves what is in it.
+- **More cards and arrows:** code cards, plus `**bold**`, `*italic*`, `` `code` `` and `- lists` in notes. Arrows can be one-way, two-way or plain lines, solid or dashed, in any colour.
+- **Arranging:** lock, bring to front and send to back, snap to grid, and arrow keys to nudge.
+- **Find** (Ctrl+F) jumps to a card.
+- **Templates:** Kanban, mind map, my week, project, and pros and cons.
+- **Images:** drag image files onto the board, or paste them.
+- **Export** to a **picture (.png)** or Markdown.
+- **Keys:** Ctrl+A, Ctrl+C / Ctrl+V and Ctrl+D work on cards.
+
+### AI agents can use it
+
+With MCP on, AI apps get `pycmd_board_*` tools to read your boards and add notes.
+
 ## What is new in 5.7
 
 ### Notes is a board now

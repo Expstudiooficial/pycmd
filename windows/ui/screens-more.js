@@ -461,45 +461,40 @@ async function Snippets(screen) {
   screen.appendChild(draw(reply.builtin || [], false));
 }
 
-/* 5.7: Notes is the Board - cards, images, to-dos and arrows. The plain
-   scratchpad below is what you get if the Board plugin is missing or off, and
-   the old scratchpad's text is put on the board as a card, once. */
-async function Notes(screen) {
-  const plugins = await PyCmd.call('plugins');
-  const board = ((plugins && plugins.installed) || []).find((p) => p.id === 'pycmd.board' && !p.broken);
-  if (board) {
-    if (board.on === false) await PyCmd.call('plugin.set', { id: 'pycmd.board', on: true });
-    const moved = await PyCmd.call('notes.moved', {});
-    if (!moved.done) {
-      const old = await PyCmd.call('notes', {});
-      if ((old.text || '').trim()) {
-        await PyCmd.call('plugin.export', { id: 'pycmd.board', name: 'import_text', payload: { text: old.text } });
-      }
-      await PyCmd.call('notes.moved', { mark: true });
-    }
-    return drawPanelScreen(screen, board);
-  }
-  return plainNotes(screen);
-}
+/* 5.8: Notes is the built-in board (assets/web/board.html, shared with the
+   phone). It talks to the app through PyBoard.call -> the board.* calls. The
+   old scratchpad's text goes onto the board as a card, once. */
+// Every call the board page makes, each spelled out so a test can check that
+// the app answers all of them.
+const BOARD_CALLS = {
+  listing: (p) => PyCmd.call('board.listing', p), load: (p) => PyCmd.call('board.load', p),
+  save: (p) => PyCmd.call('board.save', p), create: (p) => PyCmd.call('board.create', p),
+  remove: (p) => PyCmd.call('board.remove', p), images: (p) => PyCmd.call('board.images', p),
+  image: (p) => PyCmd.call('board.image', p), export_markdown: (p) => PyCmd.call('board.export_markdown', p),
+  export_png: (p) => PyCmd.call('board.export_png', p), note: (p) => PyCmd.call('board.note', p),
+};
 
-async function plainNotes(screen) {
-  screen.appendChild(head('Notes', 'A scratchpad that saves itself. Plain text; Markdown if you like.'));
-  const reply = await PyCmd.call('notes', {});
-  const box = el('textarea', { class: 'plain mono notes', rows: '28', spellcheck: 'true' });
-  box.value = reply.text || '';
-  const said = el('span', { class: 'muted small-text', text: 'Saved.' });
-  let timer = 0;
-  box.addEventListener('input', () => {
-    said.textContent = 'Saving…';
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const r = await PyCmd.call('notes.save', { text: box.value });
-      said.textContent = r.ok ? 'Saved.' : 'Not saved: ' + r.error;
-    }, 500);
-  });
-  screen.appendChild(card(el('div', { class: 'row spread' }, said,
-    el('span', { class: 'muted small-text', text: `${(reply.text || '').length} characters` })), box));
-  setTimeout(() => box.focus(), 30);
+async function Notes(screen) {
+  const moved = await PyCmd.call('notes.moved', {});
+  if (!moved.done) {
+    const old = await PyCmd.call('notes', {});
+    if ((old.text || '').trim()) await PyCmd.call('board.import_text', { text: old.text });
+    await PyCmd.call('notes.moved', { mark: true });
+  }
+  screen.classList.add('panel-screen', 'flush');
+  const holder = el('div', { class: 'panel-holder' });
+  const frame = el('iframe', { src: '/web/board.html', title: 'Notes',
+    style: 'width:100%;height:100%;border:0;background:var(--bg)' });
+  const wire = () => {
+    const view = frame.contentWindow;
+    if (!view || view.PyBoard) return;
+    view.PyBoard = { call: (name, payload) => (BOARD_CALLS[name] || (() => Promise.resolve({ ok: false, error: 'no board call ' + name })))(payload || {}) };
+    if (window.lookFrame) window.lookFrame(frame);
+  };
+  frame.addEventListener('load', wire);
+  holder.appendChild(frame);
+  screen.appendChild(holder);
+  setTimeout(wire, 0);
 }
 
 // ---------------------------------------------------------------------------

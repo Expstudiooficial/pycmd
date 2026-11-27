@@ -347,16 +347,19 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "5.7",
-    "title": "PyCmd for Windows 5.7",
+    "version": "5.8",
+    "title": "PyCmd for Windows 5.8",
     "items": [
-        ["Notes is a board now",
-         "Drop notes, headings, to-do lists, images and links anywhere, drag them around, colour "
-         "them and connect them with arrows. Pan, zoom, several boards, and Export to Markdown. "
-         "Your old notes are on it as a card. Paste an image or a link straight onto it."],
-        ["Ten new console tools",
-         "calc, todo, passgen, hash, base64, wc, grep, diff, cal and loc - the same on the phone. "
-         "`note <text>` drops a note on your board from the console."],
+        ["Notes, built in - and you can write in it",
+         "Notes is part of PyCmd now, not a plugin, and text edits properly: double-click any card "
+         "and type, as often as you like. Your boards came with it."],
+        ["A much better board",
+         "Right-click menus, select many (Shift+drag or Select), sections that carry their cards, code "
+         "cards, **bold** and lists in notes, arrow styles and colours, lock, bring to front, Find, "
+         "snap to grid, templates (Kanban, mind map, week, project, pros and cons), drag images in, "
+         "and Export to a picture or Markdown."],
+        ["AI agents can use it",
+         "With MCP on, an AI app can read your boards and add notes to them."],
     ],
 }
 
@@ -429,6 +432,21 @@ def _h_notes(host, payload):
             return {"ok": True, "text": handle.read()}
     except OSError:
         return {"ok": True, "text": ""}
+
+
+def _board(call):
+    """One Notes-board call on the shared engine (pycmd_board), in the workspace."""
+    def handler(host, payload):
+        import pycmd_board
+        from . import files
+
+        return json.loads(pycmd_board.api(call, json.dumps(payload or {}), files.root()))
+    handler.__doc__ = f"Notes board: {call.replace('_', ' ')}."
+    return handler
+
+
+BOARD_CALLS = ("listing", "load", "save", "create", "remove", "images", "image",
+               "export_markdown", "export_png", "note", "import_text")
 
 
 def _h_notes_moved(host, payload):
@@ -1301,6 +1319,7 @@ HANDLERS = {
     "notes": _h_notes,
     "notes.save": _h_notes_save,
     "notes.moved": _h_notes_moved,
+    **{f"board.{name}": _board(name) for name in BOARD_CALLS},
     "snippets": _h_snippets,
     "snippet.save": _h_snippet_save,
     "snippet.remove": _h_snippet_remove,

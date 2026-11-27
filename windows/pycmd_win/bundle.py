@@ -27,7 +27,7 @@ import zipfile
 
 from . import mobile, store
 
-BUNDLED = ("board", "cloud", "creator", "packages-pro", "scheduler", "server-pro")
+BUNDLED = ("cloud", "creator", "packages-pro", "scheduler", "server-pro")
 
 # What a plugin can ask for that means something different, or nothing, here.
 MOBILE_ONLY_PERMISSIONS = {

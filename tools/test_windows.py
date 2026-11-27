@@ -413,7 +413,7 @@ check("the switches survive a restart",
 
 say("\n== the plugins that ship inside ==")
 staged = bundle.stage_bundled()
-check("all six are in the build", len(staged) == len(bundle.BUNDLED) == 6, [os.path.basename(p) for p in staged])
+check("all five are in the build", len(staged) == len(bundle.BUNDLED) == 5, [os.path.basename(p) for p in staged])
 
 say("\n== reading a plugin from the phone ==")
 sample = os.path.join(ROOT, "app", "src", "main", "assets", "plugins", "creator")
@@ -498,6 +498,9 @@ DOES_RATHER_THAN_ANSWERS = {
     "android.start", "android.stop", "setup.start", "setup.stop",
     "manager.install", "install.one", "known.forget",
     "copies.replace", "copies.rollback", "copies.elevate", "console.secret",
+    # 5.8: the Notes board's writers
+    "board.save", "board.create", "board.remove", "board.export_markdown",
+    "board.export_png", "board.note", "board.import_text",
 }
 for name in sorted(host_module.HANDLERS):
     if name in DOES_RATHER_THAN_ANSWERS:
@@ -1655,14 +1658,23 @@ from pycmd_win import files as _files56  # noqa: E402
 check("an .html file shows a Run button", _files56._entry(_page56)["runnable"])
 
 say("\n== 5.7 ==")
-check("the version is 5.7", host_module.VERSION == "5.7" and host_module.BUILD == 12)
-check("the Board ships in the exe", "board" in _bundle55.BUNDLED)
+check("the version is 5.7 or later", host_module.BUILD >= 12)
 _ui57 = open(os.path.join(ROOT, "windows", "ui", "screens-more.js"), encoding="utf-8").read()
-check("Notes opens the Board, and moves old notes onto it", "pycmd.board" in _ui57 and "import_text" in _ui57)
 check("old notes are moved only once", "notes.moved" in host_module.HANDLERS)
 check("the ten tools reach the shared engine, not a Windows program of the same name",
       all(n in host_module.ENGINE_COMMANDS for n in ("calc", "todo", "passgen", "hash", "base64",
                                                       "wc", "grep", "diff", "cal", "loc")))
+
+say("\n== 5.8 ==")
+check("the version is 5.8", host_module.VERSION == "5.8" and host_module.BUILD == 13)
+check("Notes is built in, not a plugin", "board" not in _bundle55.BUNDLED and "/web/board.html" in _ui57)
+check("old notes still move onto the board", "board.import_text" in _ui57)
+check("every board call is the app's", all(f"board.{n}" in host_module.HANDLERS for n in ("listing", "load", "save", "create", "export_png", "note")))
+check("the board page ships with the app", os.path.isfile(os.path.join(ROOT, "app", "src", "main", "assets", "web", "board.html")))
+_ws58 = _tf55.mkdtemp()
+import pycmd_board as _pb58  # noqa: E402
+_r58 = json.loads(_pb58.api("note", json.dumps({"text": "from the test"}), _ws58))
+check("note drops a card on the board", _r58.get("ok") and "from the test" in open(os.path.join(_ws58, ".pycmd", "boards.json"), encoding="utf-8").read(), _r58)
 
 say()
 if FAILURES:
