@@ -423,17 +423,16 @@ with open(creator_panel, encoding="utf-8") as handle:
 without_sheets = strip_comments(panel)
 check("the footer that was fixed to the bottom is gone",
       ".foot {" not in without_sheets, creator_panel)
-# The picker's own header is sticky, and that is fine: it is inside a sheet,
-# which scrolls itself and has always worked. It is the page's own chrome
-# that had to stop being pinned.
-bar_rule = without_sheets.split(".bar {")[1].split("}")[0]
-check("and the top bar scrolls with the page like everything else",
-      "sticky" not in bar_rule and "fixed" not in bar_rule, bar_rule)
+# 3.0 kept the rule. Only the dialog overlay and the toast are pinned to the
+# viewport; the page's own chrome scrolls with it, and on the phone the body
+# is never its own scroller.
+pinned = re.findall(r"\.([\w-]+)\s*\{[^}]*position:\s*(?:fixed|sticky)", without_sheets)
+check("only the dialog and the toast are pinned to the screen",
+      set(pinned) <= {"sheet", "toast"}, pinned)
 check("the buttons are above the script, not below it",
-      0 < without_sheets.index('<div class="actions">')
-      < without_sheets.index('<div class="pane">'), creator_panel)
-check("and the block picker is still a sheet, which is what does work",
-      'id="addSheet"' in panel and "position: fixed" in panel, creator_panel)
+      0 < without_sheets.index('id="bRun"') < without_sheets.index('id="tree"'), creator_panel)
+check("the phone gets a plain page; only a desktop window gets the shell",
+      "html.shell body" in without_sheets and "/Android/i.test" in panel, creator_panel)
 
 say("\n== The bridge offers both verbs ==")
 check("pycmd.poll is part of the bridge every panel gets",

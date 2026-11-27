@@ -13,9 +13,15 @@
     --mono: "JetBrains Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body { background: var(--c-bg); color: var(--c-fg); font: 13.5px/1.5 system-ui, "Segoe UI", Roboto, sans-serif;
-         display: flex; flex-direction: column; overflow: hidden; }
+  /*
+    Two layouts. On a desktop (html.shell) the panel is an app: three panes
+    that fill the window, each scrolling on its own, sized with vh. On the
+    phone it is a plain page that scrolls, because a percentage height - or a
+    body that is its own scroller - is a black screen in the app's WebView.
+    No percentage heights anywhere: tools/test_bundled.py checks.
+  */
+  body { margin: 0; background: var(--c-bg); color: var(--c-fg); font: 13.5px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; }
+  html.shell body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   button, input, select, textarea { font: inherit; color: inherit; }
   button { background: var(--c-high); border: 1px solid var(--c-line); border-radius: 9px; padding: 6px 11px;
            cursor: pointer; white-space: nowrap; transition: background .12s, border-color .12s; }
@@ -38,12 +44,16 @@
   .name { width: 150px; font-weight: 600; }
   .acts { display: flex; gap: 6px; flex-wrap: wrap; }
   .saved { font-size: 11.5px; min-width: 52px; text-align: right; }
-  .main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr) minmax(280px, 40%); }
-  .pane { min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--c-line); }
+  .main { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr) minmax(280px, 40%); }
+  .pane { display: flex; flex-direction: column; border-right: 1px solid var(--c-line); min-width: 0; }
+  .scroll { overflow: auto; }
+  .palette .scroll, #codeView { max-height: 560px; }
+  html.shell .main { flex: 1 1 auto; min-height: 0; }
+  html.shell .pane { min-height: 0; }
+  html.shell .scroll { flex: 1 1 auto; min-height: 0; max-height: none; overscroll-behavior: contain; }
   .pane:last-child { border-right: 0; }
   .pane-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--c-line); }
   .pane-head b { flex: 1; }
-  .scroll { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
   .search { width: 100%; }
   .cats { display: flex; gap: 4px; overflow-x: auto; padding: 8px 10px 6px; scrollbar-width: thin; flex: 0 0 auto; }
   .cats .chip { flex: 0 0 auto; }
@@ -88,17 +98,20 @@
   .k { color: var(--kw, #c792ea); } .s { color: var(--str, #c3e88d); } .n { color: var(--num, #f78c6c); }
   .c { color: var(--comment, #6a7a70); font-style: italic; } .f { color: var(--def, #82aaff); }
   .problems { margin: 8px 10px; padding: 8px 10px; border-radius: 8px; background: rgba(229, 169, 69, .12); color: var(--c-warn); font-size: 12.5px; }
-  .runbox { display: flex; flex-direction: column; gap: 8px; padding: 10px; flex: 1 1 auto; min-height: 0; }
+  .runbox { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  html.shell .runbox { flex: 1 1 auto; min-height: 0; }
   .runbox[hidden] { display: none; }
   .runbox textarea { min-height: 54px; resize: vertical; font-family: var(--mono); font-size: 12.5px; }
-  .out { flex: 1 1 auto; min-height: 120px; overflow: auto; margin: 0; padding: 10px 12px; border-radius: 10px;
+  .out { min-height: 120px; max-height: 420px; overflow: auto; margin: 0; padding: 10px 12px; border-radius: 10px;
          background: var(--c-bg); border: 1px solid var(--c-line); font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-word; }
   .out .e { color: var(--c-danger); } .out .i { color: var(--c-muted); }
-  .preview { flex: 1 1 auto; min-height: 200px; border: 1px solid var(--c-line); border-radius: 10px; background: #fff; width: 100%; }
+  .preview { height: 420px; border: 1px solid var(--c-line); border-radius: 10px; background: #fff; width: 100%; }
   .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-  .nav { display: none; border-top: 1px solid var(--c-line); background: var(--c-surface); }
+  html.shell .out { flex: 1 1 auto; max-height: none; }
+  html.shell .preview { flex: 1 1 auto; height: auto; min-height: 200px; }
+  .nav { display: none; border-bottom: 1px solid var(--c-line); background: var(--c-surface); }
   .nav button { flex: 1; border: 0; border-radius: 0; background: none; padding: 10px 4px; font-size: 12.5px; color: var(--c-muted); }
-  .nav button.on { color: var(--c-accent); font-weight: 600; box-shadow: inset 0 2px 0 var(--c-accent); }
+  .nav button.on { color: var(--c-accent); font-weight: 600; box-shadow: inset 0 -2px 0 var(--c-accent); }
   @media (max-width: 1050px) {
     .main { grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); }
     .main .side { display: none; }
@@ -120,14 +133,14 @@
   .sheet { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 9; }
   .sheet[hidden] { display: none; }
   .card { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 14px; width: min(640px, 100%);
-          max-height: 100%; display: flex; flex-direction: column; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .7); }
+          max-height: max(320px, 86vh); display: flex; flex-direction: column; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .7); }
   .card header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-line); }
   .card header b { flex: 1; font-size: 15px; }
   .card .body { padding: 12px 14px 16px; overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
   .item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--c-line); border-radius: 10px; background: var(--c-bg); }
   .item .grow { flex: 1; min-width: 0; }
   .item .grow div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .toast { position: fixed; left: 50%; bottom: 66px; transform: translateX(-50%); background: var(--c-high); border: 1px solid var(--c-accent);
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--c-high); border: 1px solid var(--c-accent);
            padding: 8px 14px; border-radius: 10px; z-index: 10; max-width: 90%; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
 </style>
 </head>
@@ -146,6 +159,10 @@
     <button id="bRun" class="primary" title="Run it (Ctrl+Enter)">▶ Run</button>
   </div>
 </div>
+<nav class="nav" id="nav">
+  <button data-v="blocks">Blocks</button><button data-v="script" class="on">Script</button>
+  <button data-v="code">Code</button><button data-v="run">Run</button>
+</nav>
 <div class="main" id="main" data-view="script">
   <aside class="pane palette">
     <div class="pane-head"><input class="search" id="search" placeholder="Search blocks…  ( / )" spellcheck="false"></div>
@@ -171,15 +188,13 @@
     <div class="runbox" id="runView" hidden></div>
   </section>
 </div>
-<nav class="nav" id="nav">
-  <button data-v="blocks">Blocks</button><button data-v="script" class="on">Script</button>
-  <button data-v="code">Code</button><button data-v="run">Run</button>
-</nav>
 <div class="sheet" id="sheet" hidden><div class="card"><header><b id="sheetTitle"></b>
   <button class="ghost icon" id="sheetClose" title="Close">✕</button></header><div class="body" id="sheetBody"></div></div></div>
 <script>
 (function () {
   'use strict';
+  // The app's Android WebView says Android; a desktop window gets the shell.
+  if (!/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('shell');
   var $ = function (id) { return document.getElementById(id); };
   var S = { langs: [], lang: 'python', cats: {}, byId: {}, project: null, ids: {}, drafts: {}, sel: '', filter: '', cat: '',
             past: [], future: [], built: null, run: null, side: 'code', input: {}, timer: 0, saveTimer: 0, folder: '' };

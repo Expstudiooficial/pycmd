@@ -81,6 +81,24 @@ const check = (name, ok, detail) => {
   check('a phone gets the tab bar', await q(() => getComputedStyle(document.getElementById('nav')).display) === 'flex');
   check('no page errors', errors.length === 0, errors);
 
+  // The phone app's WebView: a plain page, no viewport-filling shell.
+  const phone = await browser.newPage({ viewport: { width: 400, height: 780 },
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36' });
+  await phone.exposeFunction('__creatorCall', (name, payload) =>
+    execFileSync(process.env.PYTHON || 'python3', [BRIDGE, STATE, name], { input: payload, encoding: 'utf-8' }));
+  await phone.addInitScript(() => {
+    window.pycmd = { call: (n, p) => window.__creatorCall(n, JSON.stringify(p || {})).then(JSON.parse),
+      toast: () => {}, log: () => {}, on: () => {}, theme: () => ({}) };
+  });
+  await phone.goto('file://' + PANEL);
+  await phone.waitForFunction(() => document.querySelectorAll('.blk').length > 0, null, { timeout: 20000 });
+  const laid = await phone.evaluate(() => ({ shell: document.documentElement.classList.contains('shell'),
+    tree: document.getElementById('tree').offsetHeight, overflow: getComputedStyle(document.body).overflowY }));
+  check('on Android it is a plain page, not a shell', !laid.shell && laid.overflow !== 'hidden', laid);
+  check('and the script has height', laid.tree > 100, laid);
+  await phone.evaluate(() => document.querySelector('.nav [data-v=blocks]').click());
+  check('the Blocks tab shows the palette', await phone.evaluate(() => document.querySelector('.palette').offsetHeight > 200));
+
   await browser.close();
   fs.rmSync(STATE, { recursive: true, force: true });
   console.log(failures ? `\n${failures} creator panel checks failed` : '\nall creator panel checks passed');
