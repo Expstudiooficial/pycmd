@@ -50,15 +50,14 @@ VersionInfoProductName=PyCmd
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
-[Tasks]
-Name: "desktopicon"; Description: "Put PyCmd on the desktop"; GroupDescription: "Shortcuts:"
-
 [Files]
 Source: "{#SourceExe}"; DestDir: "{app}"; DestName: "PyCmd.exe"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\PyCmd"; Filename: "{app}\PyCmd.exe"; Comment: "PyCmd - one console, run anything"
-Name: "{autodesktop}\PyCmd"; Filename: "{app}\PyCmd.exe"; Tasks: desktopicon
+; Always, on every install and update: 5.9 made it an option that silent installs and
+; updates never ticked, so most people had no desktop shortcut at all.
+Name: "{autodesktop}\PyCmd"; Filename: "{app}\PyCmd.exe"; Comment: "PyCmd - one console, run anything"
 
 [Run]
 ; After a normal install: a box to tick. After a silent update: straight back in.

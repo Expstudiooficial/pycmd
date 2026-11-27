@@ -37,6 +37,14 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 5.9.1
+
+### A desktop shortcut, for everyone
+
+The installer now puts PyCmd on the desktop every time, on new installs and on updates.
+In 5.9 it was a tick-box that silent installs and in-app updates never ticked, so most
+people got no desktop shortcut. The CI install test now checks for it too.
+
 ## What is new in 5.9
 
 ### A real installer

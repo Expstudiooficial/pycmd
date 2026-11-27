@@ -142,6 +142,8 @@ jobs:
           if (-not (Test-Path $exe)) { throw "PyCmd.exe is not in %LOCALAPPDATA%\Programs\PyCmd" }
           $link = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\PyCmd.lnk"
           if (-not (Test-Path $link)) { throw "there is no Start menu shortcut" }
+          $desk = Join-Path ([Environment]::GetFolderPath("Desktop")) "PyCmd.lnk"
+          if (-not (Test-Path $desk)) { throw "there is no desktop shortcut" }
           $v = Start-Process $exe -ArgumentList "--version" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "installed-version.txt"
           if ($v.ExitCode -ne 0) { throw "the installed PyCmd would not start" }
           Write-Host ("installed: " + (Get-Content installed-version.txt -Raw))

@@ -1595,7 +1595,7 @@ _r58 = json.loads(_pb58.api("note", json.dumps({"text": "from the test"}), _ws58
 check("note drops a card on the board", _r58.get("ok") and "from the test" in open(os.path.join(_ws58, ".pycmd", "boards.json"), encoding="utf-8").read(), _r58)
 
 say("\n== 5.9 ==")
-check("the version is 5.9", host_module.VERSION == "5.9" and host_module.BUILD == 14)
+check("the version is 5.9.1", host_module.VERSION == "5.9.1" and host_module.BUILD == 15)
 check("Copies is gone", not any(k.startswith("copies") for k in host_module.HANDLERS)
       and not os.path.exists(os.path.join(ROOT, "windows", "pycmd_win", "copies.py"))
       and "id: 'copies'" not in open(os.path.join(ROOT, "windows", "ui", "app.js"), encoding="utf-8").read())
@@ -1609,6 +1609,7 @@ _iss = open(os.path.join(ROOT, "windows", "build", "installer.iss"), encoding="u
 check("the installer is per-user, updates in place and closes a running PyCmd",
       "PrivilegesRequired=lowest" in _iss and "AppId={{6B0F6B8E" in _iss and "CloseApplications=force" in _iss
       and "{autoprograms}" in _iss and "ShouldRelaunch" in _iss)
+check("the desktop shortcut is always made, not a tick-box", "{autodesktop}" in _iss and "Tasks: desktopicon" not in _iss)
 _wf = open(os.path.join(ROOT, ".github", "workflows", "windows.yml"), encoding="utf-8").read()
 check("CI builds the installer, proves it, and publishes it",
       "installer.iss" in _wf and "unins000.exe" in _wf and "PyCmd-Setup.exe" in _wf.split("softprops/action-gh-release")[1])

@@ -347,19 +347,12 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "5.9",
-    "title": "PyCmd for Windows 5.9",
+    "version": "5.9.1",
+    "title": "PyCmd for Windows 5.9.1",
     "items": [
-        ["A real installer",
-         "PyCmd-Setup.exe installs PyCmd in %LOCALAPPDATA%\\Programs\\PyCmd - no administrator - with a "
-         "Start menu shortcut, an optional desktop one, and an uninstaller in Settings > Apps. "
-         "A newer installer updates the installed PyCmd in place. Your things stay where they were."],
-        ["PyCmd updates itself",
-         "It checks for a new version when it starts and every six hours, and shows a pop-up with "
-         "Install now. Settings > Updates: tell me, install by itself, or never check. Every "
-         "download is checked against its SHA-256 before it runs."],
-        ["Copies is gone",
-         "The installer keeps exactly one PyCmd, so there is nothing left for Copies to do."],
+        ["A desktop shortcut, for everyone",
+         "The installer puts PyCmd on the desktop every time - new installs and updates. 5.9 made it "
+         "a tick-box that silent installs and updates never ticked."],
     ],
 }
 
