@@ -347,23 +347,24 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "5.0",
-    "title": "PyCmd for Windows 5.0",
+    "version": "5.5",
+    "title": "PyCmd for Windows 5.5",
     "items": [
-        ["MCP: AI agents drive PyCmd",
-         "A new MCP tab: switch it on and Claude Code, Claude Desktop, Antigravity, Cursor, "
-         "VS Code, Gemini or Codex get 170+ tools - files, console, toolchains, Learn, "
-         "plugins, Android Lab and the window itself (read, click, type, screenshot)."],
-        ["800 KB of cloud storage",
-         "Every PyCmd account can keep small files online: Cloud files on the account card."],
-        ["Plugins work",
-         "Installed plugins load (Creator's buttons did nothing before), switch on and off, "
-         "and follow the theme you pick."],
-        ["Guides scroll",
-         "Long guides and dialogs scroll to the end; screens no longer flicker or draw twice."],
-        ["Smaller fixes",
-         "Erlang shows its real version, Learn progress takes a tenth of the space online, "
-         "and Clang++ builds against newer Visual Studio."],
+        ["Creator 3.0",
+         "Rebuilt: run Python, C, Go, Rust and JavaScript right in the Creator tab, with an Input "
+         "box for input(); live previews for HTML, CSS and Markdown; paste code and get it back as "
+         "blocks; drag and drop, undo and redo, search, and projects that save themselves."],
+        ["Python files run on every PC",
+         "No Python installed, or only the Microsoft Store placeholder? Run now uses PyCmd's own "
+         "Python - the whole standard library is in the exe. input() works in the console, and "
+         "printing emoji no longer crashes on Windows code pages."],
+        ["Guides and plugin tabs scroll at any zoom",
+         "Above 100% zoom the guide window and plugin tabs ran off the bottom of the window. They "
+         "fit now, and an open guide scrolls with the wheel or the keyboard straight away."],
+        ["Plugins stay up to date",
+         "A bundled plugin is replaced whenever its files change, not only when its version "
+         "number does - which is why Creator kept its old look - and an update keeps what the "
+         "plugin saved. Installed plugins are at the top of the Plugins tab."],
     ],
 }
 

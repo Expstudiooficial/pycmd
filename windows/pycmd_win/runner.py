@@ -110,12 +110,16 @@ def _kill_tree(process) -> None:
             pass
 
 
-def _spawn(command, cwd, stdin_text=None):
+def _spawn(command, cwd, stdin_text=None, interactive=False):
+    # UTF-8 and unbuffered, so print("✓") does not die on cp1252 and an
+    # input() prompt shows before the program waits rather than after.
+    env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
     kwargs = {
         "cwd": cwd or None,
+        "env": env,
         "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
-        "stdin": subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
+        "stdin": subprocess.PIPE if (stdin_text is not None or interactive) else subprocess.DEVNULL,
         "text": True,
         "bufsize": 1,
         "encoding": "utf-8",
@@ -207,6 +211,24 @@ def _ensure_project(path: str, language_id: str, toolchain: str, write) -> None:
 BUILT_IN = {"c": "C", "go": "Go", "rust": "Rust", "javascript": "JavaScript"}
 
 
+def own_python() -> list:
+    """The command that runs a script on PyCmd's own Python."""
+    import sys
+
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--python"]
+    return [sys.executable, "-u"]
+
+
+def own_python_plan(path: str) -> dict:
+    import sys
+
+    return {"ok": True, "toolchain": "pycmd-python",
+            "name": "PyCmd's own Python", "version": sys.version.split()[0],
+            "commands": [own_python() + [path]], "builds": False,
+            "cwd": os.path.dirname(path), "output": ""}
+
+
 def _run_built_in(path: str, language_id: str, write) -> dict:
     """Falls back to the interpreter in the box."""
     try:
@@ -295,6 +317,29 @@ def run_command(argv, write, cwd: str = "", run_id: str = "") -> dict:
     return {"ok": code == 0, "exit": code, "run": run.as_dict()}
 
 
+def _forward(process, answers) -> None:
+    """Hands what the user types in the console to a running program.
+
+    5.0 gave every program an empty stdin, so the first input() raised
+    EOFError - which is how a script built in Creator "threw an error".
+    `answers` has wanted() (show the input box) and get(timeout).
+    """
+    def work():
+        answers.wanted()
+        while process.poll() is None:
+            line = answers.get(0.4)
+            if line is None:
+                continue
+            try:
+                process.stdin.write(line + "\n")
+                process.stdin.flush()
+            except (OSError, ValueError):
+                return
+            answers.wanted()
+
+    threading.Thread(target=work, name="pycmd-stdin", daemon=True).start()
+
+
 def _feed(process, text) -> None:
     """Writes the input a run was given, then closes stdin so the program sees EOF."""
     def work():
@@ -307,7 +352,7 @@ def _feed(process, text) -> None:
 
 
 def run_file(path: str, write, prefer: str = "", run_id: str = "", args=None,
-             stdin=None) -> dict:
+             stdin=None, answers=None) -> dict:
     """Runs one file, streaming its output through `write`.
 
     Blocking: the caller is expected to be on a thread of its own, which is
@@ -325,6 +370,10 @@ def run_file(path: str, write, prefer: str = "", run_id: str = "", args=None,
     try:
         plan = toolchains.plan_for(path, language_id, prefer=prefer)
 
+        if not plan.get("ok") and language_id == "python":
+            # No Python on the PATH: use the one PyCmd is made of. A real
+            # CPython, run as a process of its own so input() and Stop work.
+            plan = own_python_plan(path)
         if not plan.get("ok"):
             if language_id in BUILT_IN:
                 result = _run_built_in(path, language_id, write)
@@ -363,9 +412,12 @@ def run_file(path: str, write, prefer: str = "", run_id: str = "", args=None,
             if last and args:
                 command = list(command) + [str(a) for a in args]
             try:
-                process = _spawn(command, plan["cwd"], stdin if last else None)
+                talk = bool(last and stdin is None and answers is not None)
+                process = _spawn(command, plan["cwd"], stdin if last else None, talk)
                 if last and stdin is not None:
                     _feed(process, stdin)
+                elif talk:
+                    _forward(process, answers)
             except FileNotFoundError:
                 message = f"{command[0]} is not there any more - was it uninstalled?"
                 write(f"[PyCmd] {message}\n")

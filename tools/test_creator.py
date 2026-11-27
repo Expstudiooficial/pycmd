@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -96,6 +98,26 @@ no_close = [row["id"] for rows in blocks.BLOCKS.values() for row in rows
             and row["id"].split(".")[0] not in ("html", "css", "md", "js")]
 check("every Python container can be left empty without breaking",
       not no_close, no_close[:5])
+
+# `runs` is written out in creator_blocks rather than asked of the app, so
+# that the module stays importable on a laptop. This is the check that keeps
+# the two in step.
+from pycmd_langs import registry as _registry  # noqa: E402
+
+_wrong = []
+_app_languages = {row["id"]: row for row in _registry.catalogue()}
+for _row in blocks.LANGUAGES:
+    _found = _app_languages.get(_row["id"])
+    if _found is None:
+        _wrong.append((_row["id"], "the app has no such language"))
+        continue
+    if bool(_row["runs"]) != (_found["mode"] == "run"):
+        _wrong.append((_row["id"], f"says runs={_row['runs']}, app says {_found['mode']}"))
+check("every language's 'runs on the phone' flag matches the app",
+      not _wrong, _wrong)
+check("and six of the ten do run",
+      sum(1 for row in blocks.LANGUAGES if row["runs"]) == 6,
+      [row["id"] for row in blocks.LANGUAGES if row["runs"]])
 
 say()
 say("== the catalogue is served the way the panel asks for it ==")
@@ -180,6 +202,7 @@ AROUND = {
     "py.finally": ("try:\n    pass\n", 0, ""),
     "py.try": ("", 0, "except Exception:\n    pass\n"),
     "py.flask_route": ("", 0, "def view():\n    pass\n"),
+    "py.dataclass_marker": ("", 0, "class C:\n    pass\n"),
     "py.return": ("def f():\n", 1, ""),
     "py.return_none": ("def f():\n", 1, ""),
     "py.global": ("def f():\n", 1, ""),
@@ -209,6 +232,186 @@ for row in blocks.BLOCKS["python"]:
     except SyntaxError as error:
         broken.append((row["id"], str(error)))
 check(f"all {len(blocks.BLOCKS['python'])} of them", not broken, broken[:6])
+
+say()
+say("== every C, Go and Rust block on its own parses ==")
+#
+# The same idea as the Python check above, against the interpreters the app
+# carries. Parsing rather than running is the point: a parser does not care
+# whether `total` was declared, so one block can be checked on its own, and a
+# block that does not parse is a typo in the catalogue rather than a program
+# that happens to be incomplete.
+#
+from pycmd_langs import c_parser, go_parser, rust_parser  # noqa: E402
+
+# Blocks that go at the top of a file rather than inside main.
+TOP_LEVEL = {
+    "c": {"c.include", "c.main", "c.function", "c.function_void", "c.prototype",
+          "c.struct", "c.blank", "c.comment"},
+    "go": {"go.package", "go.import", "go.import_group", "go.main", "go.func",
+           "go.func_nothing", "go.struct", "go.method", "go.blank", "go.comment"},
+    "rust": {"rs.main", "rs.use", "rs.fn", "rs.fn_nothing", "rs.struct",
+             "rs.impl", "rs.enum", "rs.blank", "rs.comment"},
+}
+
+# Blocks that are half of something, and what makes each of them legal.
+HALVES = {
+    "c.else": ("if (1) {\n", ""),
+    "c.else_if": ("if (1) {\n", ""),
+    "c.case": ("switch (1) {\n", "}\n"),
+    "c.case_default": ("switch (1) {\n", "}\n"),
+    "go.else": ("if true {\n", ""),
+    "go.else_if": ("if true {\n", ""),
+    "go.case": ("switch 1 {\n", "}\n"),
+    "go.case_default": ("switch 1 {\n", "}\n"),
+    "rs.else": ("if true {\n", ""),
+    "rs.else_if": ("if true {\n", ""),
+    "rs.match_arm": ("match 1 {\n", "}\n"),
+    "rs.match_other": ("match 1 {\n", "}\n"),
+    "rs.struct_field": ("struct Shape {\n", "}\n"),
+    "rs.enum_variant": ("enum Kind {\n", "}\n"),
+}
+
+AROUND_FILE = {
+    "c": ("#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n"
+          "#include <math.h>\n#include <ctype.h>\nint main(void) {\n", "\n}\n"),
+    "go": ('package main\n\nimport (\n"fmt"\n"strings"\n"strconv"\n"math"\n'
+           '"sort"\n"os"\n"time"\n"errors"\n)\n\nfunc main() {\n', "\n}\n"),
+    "rust": ("use std::collections::HashMap;\nfn main() {\n", "\n}\n"),
+}
+PARSERS = {"c": c_parser.parse, "go": go_parser.parse, "rust": rust_parser.parse}
+FILLERS = {"c": "c.blank", "go": "go.blank", "rust": "rs.blank"}
+
+for _language in ("c", "go", "rust"):
+    _broken = []
+    for row in blocks.BLOCKS[_language]:
+        node = {"block": row["id"], "values": {}}
+        if row["wrap"]:
+            node["children"] = [{"block": FILLERS[_language], "values": {}}]
+        code = blocks.compile_project({"language": _language, "blocks": [node]})["code"]
+        if row["id"] in TOP_LEVEL[_language]:
+            source = code if _language != "go" or row["id"] == "go.package" \
+                else "package main\n" + code
+        else:
+            before, after = AROUND_FILE[_language]
+            inner_before, inner_after = HALVES.get(row["id"], ("", ""))
+            source = before + inner_before + code + inner_after + after
+        try:
+            PARSERS[_language](source)
+        except Exception as error:  # noqa: BLE001
+            _broken.append((row["id"], str(error)[:80]))
+    check(f"all {len(blocks.BLOCKS[_language])} {_language} blocks",
+          not _broken, _broken[:6])
+
+say()
+say("== every shell block on its own is shell ==")
+_SCRATCH = tempfile.mkdtemp(prefix="creator-shell-")
+# `sh -n` reads a script and says whether it is syntactically a script,
+# without running a line of it - which is exactly what is wanted for a block
+# that deletes a file.
+_sh_broken = []
+_sh_checker = shutil.which("sh")
+if not _sh_checker:
+    say("  SKIP  no sh on this machine")
+else:
+    SH_HALVES = {
+        "sh.else": ('if true; then\n:\n', "fi\n"),
+        "sh.elif": ('if true; then\n:\n', "fi\n"),
+        "sh.case_when": ('case "$x" in\n', "esac\n"),
+        "sh.case_other": ('case "$x" in\n', "esac\n"),
+        "sh.break": ("while true; do\n", "done\n"),
+        "sh.continue": ("while true; do\n", "done\n"),
+        "sh.return": ("f() {\n", "}\n"),
+    }
+    for row in blocks.BLOCKS["shell"]:
+        # No filler child on purpose: an empty `then` is a syntax error in
+        # sh, so a container is checked the way it is actually left when
+        # nothing has been put in it - filled with the `:` it declares.
+        node = {"block": row["id"], "values": {}}
+        code = blocks.compile_project({"language": "shell", "blocks": [node]})["code"]
+        before, after = SH_HALVES.get(row["id"], ("", ""))
+        script = os.path.join(_SCRATCH, "one.sh")
+        with open(script, "w", encoding="utf-8") as handle:
+            handle.write(before + code + after)
+        done = subprocess.run([_sh_checker, "-n", script],
+                              capture_output=True, text=True, timeout=20)
+        if done.returncode != 0:
+            _sh_broken.append((row["id"], done.stderr.strip()[:80]))
+    check(f"all {len(blocks.BLOCKS['shell'])} of them", not _sh_broken, _sh_broken[:6])
+shutil.rmtree(_SCRATCH, ignore_errors=True)
+
+say()
+say("== a number slot means a number in JSON, and an expression everywhere else ==")
+# Nine of the ten languages have expressions, and `total += i` puts a variable
+# in a number slot. JSON has no expressions at all, so a word there is a file
+# that does not parse rather than a name that resolves later.
+_expression = blocks.compile_project({"language": "python", "blocks": [
+    {"block": "py.increase", "values": {"name": "total", "amount": "i"}},
+]})
+check("a variable in a Python number slot is written as typed",
+      _expression["code"].strip() == "total += i", _expression["code"])
+_c_expression = blocks.compile_project({"language": "c", "blocks": [
+    {"block": "c.increase", "values": {"name": "total", "amount": "count * 2"}},
+]})
+check("and so is an expression in C",
+      "count * 2" in _c_expression["code"], _c_expression["code"])
+
+for _typed, _written in (("abc", "0"), ("10px", "10"), ("+3", "3"),
+                         ("5.", "5"), (".5", "0.5"), ("..", "0"),
+                         ("3.1.4", "3.1"), ("", "0")):
+    _out = blocks.compile_project({"language": "json", "blocks": [
+        {"block": "json.object", "children": [
+            {"block": "json.number", "values": {"name": "n", "value": _typed}},
+        ]},
+    ]})
+    check(f"JSON writes {_typed!r} as {_written}",
+          f'"n": {_written}' in _out["code"], _out["code"])
+    check(f"and {_typed!r} leaves valid JSON behind",
+          not _out["problems"], _out["problems"])
+
+say()
+say("== a JSON project says when it is not JSON yet ==")
+# The "written out as is" block is an escape hatch by design. An escape hatch
+# that quietly writes a file nothing can read is a trap.
+_broken = blocks.compile_project({"language": "json", "blocks": [
+    {"block": "json.object", "children": [
+        {"block": "json.raw", "values": {"name": "a", "value": "oops"}},
+    ]},
+]})
+check("an escape hatch that broke it is reported",
+      any("not valid JSON" in note for note in _broken["problems"]),
+      _broken["problems"])
+check("and the code is still handed back to be looked at",
+      "oops" in _broken["code"], _broken["code"])
+
+_fine = blocks.compile_project({"language": "json", "blocks": [
+    {"block": "json.object", "children": [
+        {"block": "json.text", "values": {"name": "a", "value": "one"}},
+    ]},
+]})
+check("a JSON project that is fine says nothing", not _fine["problems"], _fine)
+
+say()
+say("== every JSON block on its own is JSON ==")
+_json_broken = []
+for row in blocks.BLOCKS["json"]:
+    node = {"block": row["id"], "values": {}}
+    if row["wrap"]:
+        node["children"] = []
+    # A named value needs an object round it; a bare value does not.
+    inside_list = row["cat"] == "In a list"
+    if row["id"] in ("json.object", "json.array"):
+        project = [node]
+    elif inside_list:
+        project = [{"block": "json.array", "children": [node]}]
+    else:
+        project = [{"block": "json.object", "children": [node]}]
+    code = blocks.compile_project({"language": "json", "blocks": project})["code"]
+    try:
+        json.loads(code)
+    except Exception as error:  # noqa: BLE001
+        _json_broken.append((row["id"], str(error)[:60], code))
+check(f"all {len(blocks.BLOCKS['json'])} of them", not _json_broken, _json_broken[:4])
 
 say()
 say("== the palette is told what each block writes ==")
@@ -257,7 +460,7 @@ check("a filled-in empty body is marked as one",
       empty_body["outline"])
 
 say()
-say("== the other four languages ==")
+say("== the other languages ==")
 html = blocks.compile_project({
     "language": "html",
     "blocks": [
@@ -308,6 +511,198 @@ md = blocks.compile_project({
 })
 check("Markdown does not indent anything",
       md["code"] == "# Notes\n\n- one\n", repr(md["code"]))
+
+say()
+say("== a block-built program actually runs ==")
+#
+# The strongest check there is for a block editor: build a program out of
+# blocks, hand the file to the engine that would run it on the phone, and
+# compare what it printed. Nothing here is a mock - `registry.run_file` is the
+# same call the Run button makes.
+#
+import io  # noqa: E402
+
+from pycmd_langs import registry  # noqa: E402
+
+_WORK = tempfile.mkdtemp(prefix="creator-run-")
+
+
+def runs(name, language, blocks_, expected):
+    built = blocks.compile_project({"language": language, "blocks": blocks_})
+    if not built["ok"] or built["problems"]:
+        check(name, False, built.get("error") or built["problems"])
+        return
+    meta = next(row for row in blocks.LANGUAGES if row["id"] == language)
+    path = os.path.join(_WORK, f"built{meta['extension']}")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(built["code"])
+    out = io.StringIO()
+    try:
+        answer = registry.run_file(path, stdout=out)
+    except Exception as error:  # noqa: BLE001
+        check(name, False, f"{type(error).__name__}: {error}\n{built['code']}")
+        return
+    if not answer.get("ok"):
+        check(name, False, f"{answer.get('error')}\n{built['code']}")
+        return
+    check(name, out.getvalue() == expected,
+          f"expected {expected!r}, got {out.getvalue()!r}\n{built['code']}")
+
+
+runs("C counts, adds up and chooses", "c", [
+    {"block": "c.include", "values": {"name": "stdio.h"}},
+    {"block": "c.main", "children": [
+        {"block": "c.int", "values": {"name": "total", "value": "0"}},
+        {"block": "c.for", "values": {"name": "i", "from": "1", "to": "5"},
+         "children": [{"block": "c.increase", "values": {"name": "total", "amount": "i"}}]},
+        {"block": "c.print_labelled", "values": {"label": "total:", "value": "total"}},
+        {"block": "c.if", "values": {"test": "total > 5"},
+         "children": [{"block": "c.print", "values": {"text": "big"}}]},
+        {"block": "c.else",
+         "children": [{"block": "c.print", "values": {"text": "small"}}]},
+        {"block": "c.return_zero"},
+    ]},
+], "total: 10\nbig\n")
+
+runs("C handles text and arrays", "c", [
+    {"block": "c.include", "values": {"name": "stdio.h"}},
+    {"block": "c.include", "values": {"name": "string.h"}},
+    {"block": "c.main", "children": [
+        {"block": "c.text", "values": {"name": "name", "size": "32", "value": "Ada"}},
+        {"block": "c.int", "values": {"name": "length", "value": "0"}},
+        {"block": "c.strlen", "values": {"into": "length", "text": "name"}},
+        {"block": "c.print_labelled", "values": {"label": "len", "value": "length"}},
+        {"block": "c.array_values", "values": {"name": "scores", "values": "3, 1, 4"}},
+        {"block": "c.print_labelled", "values": {"label": "second", "value": "scores[1]"}},
+        {"block": "c.return_zero"},
+    ]},
+], "len 3\nsecond 1\n")
+
+runs("Go counts, adds up and chooses", "go", [
+    {"block": "go.package"},
+    {"block": "go.blank"},
+    {"block": "go.import", "values": {"name": "fmt"}},
+    {"block": "go.blank"},
+    {"block": "go.main", "children": [
+        {"block": "go.short_number", "values": {"name": "total", "value": "0"}},
+        {"block": "go.for", "values": {"name": "i", "from": "1", "to": "5"},
+         "children": [{"block": "go.increase", "values": {"name": "total", "amount": "i"}}]},
+        {"block": "go.print_labelled", "values": {"label": "total:", "value": "total"}},
+        {"block": "go.if", "values": {"test": "total > 5"},
+         "children": [{"block": "go.print", "values": {"text": "big"}}]},
+        {"block": "go.else",
+         "children": [{"block": "go.print", "values": {"text": "small"}}]},
+    ]},
+], "total: 10\nbig\n")
+
+runs("Go walks a slice and a map", "go", [
+    {"block": "go.package"},
+    {"block": "go.import_group", "children": [
+        {"block": "go.import_line", "values": {"name": "fmt"}},
+        {"block": "go.import_line", "values": {"name": "strings"}},
+    ]},
+    {"block": "go.main", "children": [
+        {"block": "go.slice", "values": {"name": "names", "type": "string",
+                                         "values": '"ada", "grace"'}},
+        {"block": "go.range_values", "values": {"value": "who", "name": "names"},
+         "children": [
+             {"block": "go.print_value", "values": {"value": "strings.ToUpper(who)"}},
+         ]},
+        {"block": "go.slice_length", "values": {"into": "count", "name": "names"}},
+        {"block": "go.print_labelled", "values": {"label": "count:", "value": "count"}},
+    ]},
+], "ADA\nGRACE\ncount: 2\n")
+
+runs("Rust counts, adds up and chooses", "rust", [
+    {"block": "rs.main", "children": [
+        {"block": "rs.let_mut", "values": {"name": "total", "value": "0"}},
+        {"block": "rs.for_range_inclusive", "values": {"name": "i", "from": "1", "to": "4"},
+         "children": [{"block": "rs.increase", "values": {"name": "total", "amount": "i"}}]},
+        {"block": "rs.print_labelled", "values": {"label": "total:", "value": "total"}},
+        {"block": "rs.if", "values": {"test": "total > 5"},
+         "children": [{"block": "rs.print", "values": {"text": "big"}}]},
+        {"block": "rs.else",
+         "children": [{"block": "rs.print", "values": {"text": "small"}}]},
+    ]},
+], "total: 10\nbig\n")
+
+runs("Rust builds a list and a map", "rust", [
+    {"block": "rs.use", "values": {"path": "collections::HashMap"}},
+    {"block": "rs.blank"},
+    {"block": "rs.main", "children": [
+        {"block": "rs.vec", "values": {"name": "scores", "values": "3, 1, 4"}},
+        {"block": "rs.vec_push", "values": {"name": "scores", "value": "1"}},
+        {"block": "rs.vec_sum", "values": {"into": "total", "type": "i32", "name": "scores"}},
+        {"block": "rs.print_labelled", "values": {"label": "total:", "value": "total"}},
+        {"block": "rs.map", "values": {"name": "ages", "key": "&str", "value": "i32"}},
+        {"block": "rs.map_insert", "values": {"name": "ages", "key": '"ada"', "value": "36"}},
+        {"block": "rs.map_len", "values": {"into": "pairs", "name": "ages"}},
+        {"block": "rs.print_labelled", "values": {"label": "pairs:", "value": "pairs"}},
+    ]},
+], "total: 9\npairs: 1\n")
+
+# Python is deliberately not in `run_file` - the app runs Python on its own
+# engine rather than on the interpreters written for the languages that have
+# none - so the Python blocks are run here instead, which is the same proof.
+_py = blocks.compile_project({"language": "python", "blocks": [
+    {"block": "py.set_number", "values": {"name": "total", "number": "0"}},
+    {"block": "py.count_from", "values": {"var": "i", "start": "1", "end": "5"},
+     "children": [{"block": "py.increase", "values": {"name": "total", "amount": "i"}}]},
+    {"block": "py.print_labelled", "values": {"label": "total:", "value": "total"}},
+]})
+_said = io.StringIO()
+_was = sys.stdout
+try:
+    sys.stdout = _said
+    exec(compile(_py["code"], "built.py", "exec"), {})
+finally:
+    sys.stdout = _was
+check("Python counts and adds up", _said.getvalue() == "total: 10\n",
+      repr(_said.getvalue()))
+
+_shell = blocks.compile_project({"language": "shell", "blocks": [
+    {"block": "sh.set", "values": {"name": "who", "value": "world"}},
+    {"block": "sh.echo_labelled", "values": {"label": "hello", "name": "who"}},
+    {"block": "sh.set_number", "values": {"name": "count", "value": "0"}},
+    {"block": "sh.for_list", "values": {"name": "item", "items": "a b c"}, "children": [
+        {"block": "sh.increase", "values": {"name": "count", "amount": "1"}},
+    ]},
+    {"block": "sh.echo_labelled", "values": {"label": "count", "name": "count"}},
+]})
+_sh_path = os.path.join(_WORK, "built.sh")
+with open(_sh_path, "w", encoding="utf-8") as _handle:
+    _handle.write(_shell["code"])
+_out = io.StringIO()
+_answer = registry.run_file(_sh_path, stdout=_out)
+check("Shell sets, loops and counts",
+      _answer.get("ok") and _out.getvalue() == "hello world\ncount 3\n",
+      f"{_answer}\n{_out.getvalue()!r}\n{_shell['code']}")
+
+_json = blocks.compile_project({"language": "json", "blocks": [
+    {"block": "json.object", "children": [
+        {"block": "json.text", "values": {"name": "title", "value": 'a "quoted" name'}},
+        {"block": "json.named_array", "values": {"name": "tags"}, "children": [
+            {"block": "json.item_text", "values": {"value": "one"}},
+            {"block": "json.item_text", "values": {"value": "two"}},
+        ]},
+        {"block": "json.number", "values": {"name": "count", "value": "2"}},
+        {"block": "json.bool", "values": {"name": "ready", "value": "true"}},
+        {"block": "json.null", "values": {"name": "note"}},
+    ]},
+]})
+try:
+    _parsed = json.loads(_json["code"])
+except Exception as _error:  # noqa: BLE001
+    _parsed = None
+    check("JSON parses as JSON", False, f"{_error}\n{_json['code']}")
+else:
+    check("JSON parses as JSON", True)
+check("with the commas in the right places and none too many",
+      _parsed == {"title": 'a "quoted" name', "tags": ["one", "two"],
+                  "count": 2, "ready": True, "note": None},
+      _parsed)
+
+shutil.rmtree(_WORK, ignore_errors=True)
 
 say()
 say("== what somebody types into a hole cannot break the line ==")
@@ -545,6 +940,36 @@ check("blocks build prints the code",
 missing = json.loads(plugins.run_command("blocks", "build nope"))
 check("and says so when there is no such project",
       "No project" in missing.get("result", ""), missing)
+
+say("\n== 3.0: code back into blocks, and running ==")
+example_src = open(os.path.join(CREATOR, "main.py"), encoding="utf-8").read()
+_start = example_src.index("STARTERS = {")
+_scope = {}
+exec(example_src[_start:example_src.index("\n}\n", _start) + 3], _scope)  # noqa: S102 - our own file
+for language, starter in _scope["STARTERS"].items():
+    code = blocks.compile_project(starter)["code"]
+    back = blocks.blocks_from_code(language, code)
+    again = blocks.compile_project(back["project"])["code"]
+    check(f"{language}: code -> blocks -> the same code", again == code, (code, again))
+    check(f"{language}: every line found its block", back["raw"] == 0, back)
+odd = blocks.blocks_from_code("python", "with open('f') as f:\n    data = f.read()\nweird $$ line\n")
+check("a line no block writes is kept as code",
+      blocks.compile_project(odd["project"])["code"] == "with open('f') as f:\n    data = f.read()\nweird $$ line\n", odd)
+check("and counted", odd["raw"] >= 1, odd)
+check("an unknown language is refused", not blocks.blocks_from_code("cobol", "x")["ok"])
+
+import importlib.util as _util  # noqa: E402
+_spec = _util.spec_from_file_location("creator_main_for_test", os.path.join(CREATOR, "main.py"))
+creator_main = _util.module_from_spec(_spec)
+_spec.loader.exec_module(creator_main)
+ran = creator_main.run_python('n = input("n? ")\nprint("hi", n)\n', ["Ann"])
+check("Run feeds input() from the Input box", ran["ok"] and ran["output"] == "n? Ann\nhi Ann\n", ran)
+check("Run stops a loop that never ends", "stopped after" in creator_main.run_python("while True:\n    pass\n", [], 0.5)["error"])
+bad = creator_main.run_python("x = 1\nprint(1 / 0)\n")
+check("Run says which line failed", bad["line"] == 2 and "ZeroDivisionError" in bad["error"], bad)
+check("input() with nothing typed explains itself", "Input box" in creator_main.run_python("input()")["error"])
+check("print does not reach the app's own stdout",
+      creator_main.run_python("import sys\nprint('x')\n")["output"] == "x\n")
 
 say()
 if FAILURES:

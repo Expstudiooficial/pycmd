@@ -507,7 +507,72 @@ def selftest() -> int:
     return 0
 
 
+def run_python(argv) -> int:
+    """`PyCmd.exe --python script.py [args]`: the exe as a plain Python.
+
+    The build is a whole CPython with the standard library, so a .py file
+    runs on it exactly as it would on python.org's - this is what Run uses
+    when there is no Python on the PATH, or only the Store's placeholder.
+    """
+    import runpy
+    import traceback
+
+    for name, fd in (("stdout", 1), ("stderr", 2)):
+        stream = getattr(sys, name)
+        if not _usable(stream):
+            try:
+                stream = open(fd, "w", encoding="utf-8", errors="replace", closefd=False)
+            except OSError:
+                continue
+            setattr(sys, name, stream)
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+        except (AttributeError, ValueError):
+            pass
+    if sys.stdin is None:
+        try:
+            sys.stdin = open(0, "r", encoding="utf-8", closefd=False)
+        except OSError:
+            pass
+    if not argv:
+        print(f"Python {sys.version} (PyCmd)")
+        return 0
+    if argv[0] == "-c" and len(argv) > 1:
+        sys.argv = ["-c", *argv[2:]]
+        code = argv[1]
+        target = None
+    else:
+        sys.argv = list(argv)
+        target = os.path.abspath(argv[0])
+        sys.path.insert(0, os.path.dirname(target))
+    try:
+        if target:
+            runpy.run_path(target, run_name="__main__")
+        else:
+            exec(compile(code, "<string>", "exec"), {"__name__": "__main__"})
+    except SystemExit as stop:
+        code = stop.code
+        if code is None or isinstance(code, int):
+            return code or 0
+        print(code, file=sys.stderr)
+        return 1
+    except BaseException:  # noqa: BLE001 - it is somebody's program
+        kind, value, tb = sys.exc_info()
+        traceback.print_exception(kind, value, tb.tb_next)
+        return 1
+    finally:
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except Exception:  # noqa: BLE001
+                pass
+    return 0
+
+
 def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "--python":
+        return run_python(argv[1:])
     parser = argparse.ArgumentParser(prog="pycmd", description="PyCmd for Windows")
     parser.add_argument("--home", help="keep everything here instead of %LOCALAPPDATA%")
     parser.add_argument("--serve-only", action="store_true",

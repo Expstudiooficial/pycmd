@@ -853,6 +853,19 @@ details.unit.practice summary b { font-weight: 560; }
    height unless told min-height: 0, and max-height: 100% means nothing on a
    card sized by an auto grid row - so a long guide ran off the bottom of the
    window and nothing could reach the rest of it. */
-.sheet-card { max-height: calc(100vh - 48px); min-height: 0; }
+/* 5.5: and with zoom above 100% even that ran off the window - vh is
+   counted before zoom, so at 125% the card was 58px taller than the screen
+   and the last lines of every guide could not be reached. A flex overlay
+   with a definite height lets 100% mean "the window", at any zoom. */
+.sheet { display: flex; align-items: center; justify-content: center; }
+.sheet-card { max-height: 100%; min-height: 0; overflow: hidden; }
 .sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .wrap-code { white-space: pre-wrap; word-break: break-all; }
+
+/* -- 5.5 ---------------------------------------------------------------- */
+/* A plugin's tab: header, then the panel filling the rest, at any zoom. */
+.screen.panel-screen { display: flex; flex-direction: column; overflow: hidden; }
+.panel-holder { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.panel-holder > iframe { flex: 1 1 auto; }
+.sheet-body:focus { outline: none; }
+.palette-list { max-height: min(50vh, 420px); }

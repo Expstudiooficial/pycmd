@@ -165,6 +165,11 @@ const PyCmd = (function () {
     if (typeof body === 'string') host.innerHTML = body;
     else host.appendChild(body);
     document.getElementById('sheet').hidden = false;
+    // Focused, so the wheel, the arrow keys and Page Down scroll the guide
+    // straight away rather than whatever was under the sheet.
+    host.scrollTop = 0;
+    host.tabIndex = -1;
+    try { host.focus({ preventScroll: true }); } catch (error) { /* older engines */ }
   }
 
   function closeSheet() {

@@ -37,6 +37,39 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 5.5
+
+### Creator 3.0
+
+Creator was rebuilt. Run **Python, C, Go, Rust and JavaScript** right in its
+tab, with an **Input** box for `input()`; **HTML, CSS and Markdown** get a live
+preview. **Import code** turns code you paste, or a file in your workspace, back
+into blocks, and every line is checked to write exactly what it read. Drag and
+drop, undo and redo, search with `/`, and projects that save themselves. On a
+narrow window the panes become tabs.
+
+### Python files run on every PC
+
+With no Python installed, or only the Microsoft Store placeholder (the
+`python.exe` that only says "Python was not found"), Run now uses **PyCmd's own
+Python**, and the exe carries the whole standard library. Programs read
+`input()` from the console. Printing emoji no longer crashes on Windows code
+pages, and output appears as the program prints it.
+
+### Guides and plugin tabs scroll at any zoom
+
+Above 100% zoom, the guide window and plugin tabs ran off the bottom of the
+window, so the end of a guide could not be reached. They fit the window at
+every zoom now, and an open guide scrolls with the wheel, arrow keys or Page
+Down straight away.
+
+### Plugins stay up to date
+
+A bundled plugin is reinstalled whenever its files differ from the shipped
+ones, not only when the version number changes. That is why Creator kept its
+old look. An update keeps what the plugin saved. Installed plugins are listed
+first on the Plugins tab.
+
 ## What is new in 5.0
 
 ### MCP: AI agents drive PyCmd

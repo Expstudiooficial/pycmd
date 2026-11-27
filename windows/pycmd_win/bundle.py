@@ -74,6 +74,19 @@ def stage_bundled() -> list:
     return out
 
 
+def _same_files(staged: str, plugin_id: str, plugins_module) -> bool:
+    """Whether the installed copy is the shipped one, byte for byte.
+
+    The version alone was not enough: Creator's panel was redrawn in 2.7.0
+    and kept the number 2.6.0, so a PC that had it from an earlier build
+    kept the old look for good, however many times PyCmd was updated.
+    """
+    try:
+        return str(plugins_module.same_as_installed(staged, plugin_id)) == "1"
+    except Exception:  # noqa: BLE001 - an older engine: trust the version
+        return True
+
+
 def install_bundled(plugins_module, log=None) -> dict:
     """Puts the shipped plugins in place, without switching any of them on.
 
@@ -109,7 +122,7 @@ def install_bundled(plugins_module, log=None) -> dict:
         version = manifest.get("version", "")
         if not plugin_id:
             continue
-        if present.get(plugin_id) == version:
+        if present.get(plugin_id) == version and _same_files(folder, plugin_id, plugins_module):
             continue
         try:
             reply = json.loads(plugins_module.install(folder, os.path.basename(folder), "1"))

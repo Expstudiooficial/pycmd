@@ -1578,6 +1578,57 @@ check("the MCP tab is wired", all(n in host_module.HANDLERS for n in ("mcp", "mc
 _png = _mcp50.png(b"\x00\x00\xff\xff" * 4, 2, 2)
 check("screenshots encode as PNG", _png.startswith(b"\x89PNG") and b"IEND" in _png)
 
+say("\n== 5.5 ==")
+import subprocess as _sp55  # noqa: E402
+import tempfile as _tf55  # noqa: E402
+from pycmd_win import app as _app55, bundle as _bundle55, runner as _runner55, toolchains as _tc55  # noqa: E402
+
+check("the version is 5.5", host_module.VERSION == "5.5" and host_module.BUILD == 10)
+check("a python.exe outside WindowsApps is not the Store's",
+      not _tc55._store_stub(sys.executable))
+_plan55 = _runner55.own_python_plan(__file__)
+check("PyCmd's own Python is a plan Run can use",
+      _plan55["ok"] and _plan55["commands"][0][-1] == __file__, _plan55)
+_dir55 = _tf55.mkdtemp()
+_script55 = os.path.join(_dir55, "ask.py")
+with open(_script55, "w", encoding="utf-8") as _h55:
+    _h55.write('n = input("n? ")\nprint("hi", n, "\\u2713")\n')
+_said55 = _sp55.run([sys.executable, "-m", "pycmd_win.app", "--python", _script55],
+                    input="Ann\n", capture_output=True, text=True, encoding="utf-8", timeout=60,
+                    cwd=os.path.join(ROOT, "windows"), env=dict(os.environ, PYTHONPATH=os.path.join(ROOT, "windows")))
+check("--python runs a script, input() included", "hi Ann \u2713" in _said55.stdout, (_said55.stdout, _said55.stderr))
+
+
+class _Answers55:
+    def __init__(self):
+        self.sent = False
+
+    def wanted(self):
+        pass
+
+    def get(self, timeout):
+        if self.sent:
+            return None
+        self.sent = True
+        return "Bob"
+
+
+_out55 = []
+_ran55 = _runner55.run_file(_script55, _out55.append, answers=_Answers55())
+check("a running program reads what is typed in the console", "hi Bob" in "".join(_out55), _out55)
+check("the host has an input source for runs", callable(getattr(host_module.Host, "answers", None)))
+_spec55 = open(os.path.join(ROOT, "windows", "build", "pycmd.spec"), encoding="utf-8").read()
+check("the exe carries the whole standard library", "stdlib_module_names" in _spec55)
+_css55 = open(os.path.join(ROOT, "windows", "ui", "app.css"), encoding="utf-8").read()
+check("a sheet is sized by the window, not by vh", "calc(100vh - 48px)" not in _css55 and ".panel-holder" in _css55)
+_js55 = open(os.path.join(ROOT, "windows", "ui", "screens.js"), encoding="utf-8").read()
+check("a plugin tab no longer uses vh", "height:calc(100vh - 210px)" not in _js55)
+check("installed plugins come first", _js55.index("Installed plugins") < _js55.index("(builtin.groups || []).forEach"))
+check("a bundled plugin is compared by its files", "same_as_installed" in open(
+    os.path.join(ROOT, "windows", "pycmd_win", "bundle.py"), encoding="utf-8").read())
+_cr55 = json.load(open(os.path.join(ROOT, "app", "src", "main", "assets", "plugins", "creator", "plugin.json"), encoding="utf-8"))
+check("Creator is 3.0", _cr55["version"].startswith("3."), _cr55["version"])
+
 say()
 if FAILURES:
     say(f"{len(FAILURES)} of {CHECKS[0]} checks failed: {FAILURES[:6]}")

@@ -1,1 +1,2 @@
-ce9d2185c455e8ad7571da1fc744decad0c68948af8c036bc04ff6074853030e  PyCmd.exe
+# PyCmd for Windows 5.5 (build 10) has not been built yet.
+# The checksum appears here when a Windows release tag builds it.

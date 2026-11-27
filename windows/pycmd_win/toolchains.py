@@ -593,6 +593,13 @@ def _which(program: str) -> str:
     return shutil.which(program) or ""
 
 
+def _store_stub(path: str) -> bool:
+    """True for the Microsoft Store's python.exe placeholder, which runs nothing."""
+    if "windowsapps" not in path.lower():
+        return False
+    return not _probe_version(path, ("--version",)).startswith("Python ")
+
+
 def _kill_tree(process) -> None:
     """Ends a probe and anything it started."""
     try:
@@ -691,6 +698,10 @@ def detect(toolchain_id: str, refresh: bool = False) -> dict:
         remembered = known.recall(toolchain_id)
         # A remembered "version" that is really an error message (4.5 kept
         # Erlang's "escript: Missing filename") is asked again, not shown.
+        if remembered is not None and toolchain_id == "python" and \
+                "windowsapps" in str(remembered.get("path", "")).lower() and \
+                not str(remembered.get("version", "")).strip():
+            remembered = None
         if remembered is not None and re.search(
                 r"(?i)missing|usage|error|not recognized", str(remembered.get("version", ""))):
             remembered = None
@@ -702,6 +713,11 @@ def detect(toolchain_id: str, refresh: bool = False) -> dict:
             return dict(found)
 
     path = _which(chain.program)
+    if path and chain.id == "python" and _store_stub(path):
+        # Windows ships python.exe in WindowsApps as a link to the Store. It
+        # runs nothing; it prints "Python was not found" and exits 9009, which
+        # is what 5.0 showed as the run of every .py file. Not a toolchain.
+        path = ""
     found = {"path": path, "version": "", "checked_at": int(time.time())}
     # Written from the pool in detect_all, so the assignment below is done
     # under a lock. CPython would make it atomic anyway; saying so is cheaper

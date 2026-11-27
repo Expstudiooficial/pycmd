@@ -18,6 +18,7 @@
 # your own build if you have a certificate.
 
 import os
+import sys
 
 block_cipher = None
 
@@ -76,6 +77,24 @@ hiddenimports = [
     "http.server", "socketserver", "webbrowser", "ctypes.wintypes",
 ]
 
+# The whole standard library, so `PyCmd.exe --python` - what Run uses when
+# the machine has no Python - is the same Python a PC coder has, not just the
+# corner of it the app itself imports.
+from PyInstaller.utils.hooks import collect_submodules
+
+_SKIP_STDLIB = {"tkinter", "turtle", "turtledemo", "idlelib", "test", "lib2to3",
+                "ensurepip", "venv", "pydoc_data", "this", "antigravity",
+                "curses", "readline", "pty", "tty", "termios", "fcntl", "grp",
+                "pwd", "resource", "posix", "syslog", "crypt", "nis", "spwd"}
+for _name in sorted(getattr(sys, "stdlib_module_names", ())):
+    if _name.startswith("_") or _name in _SKIP_STDLIB:
+        continue
+    try:
+        hiddenimports += collect_submodules(
+            _name, filter=lambda n: ".test" not in n and ".tests" not in n)
+    except Exception:  # noqa: BLE001 - a module this platform lacks
+        hiddenimports.append(_name)
+
 a = Analysis(
     [os.path.join(WINDOWS, "build", "entry.py")],
     pathex=[ROOT, WINDOWS, ENGINE],
@@ -88,7 +107,7 @@ a = Analysis(
     # through pywebview, and dragging tkinter or PyQt in would add tens of
     # megabytes for nothing.
     excludes=["tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6",
-              "matplotlib", "numpy", "test", "unittest", "pydoc_data"],
+              "matplotlib", "numpy", "test", "pydoc_data"],
     cipher=block_cipher,
     noarchive=False,
 )

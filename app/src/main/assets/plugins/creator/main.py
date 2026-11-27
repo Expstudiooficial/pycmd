@@ -18,10 +18,141 @@ of blocks. That is the whole point - the blocks are scaffolding, and the file
 is the thing.
 """
 
+import builtins
+import importlib.util
+import os
 import re
+import sys
+import tempfile
 import time
+import traceback
 
-import creator_blocks as blocks
+
+def _load_blocks():
+    """creator_blocks, from this folder, fresh.
+
+    A plain `import` found the copy already in sys.modules - the one from
+    before an update - so a new main.py ran against old blocks until the app
+    was restarted, and failed in ways that looked like a broken plugin.
+    """
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "creator_blocks.py")
+    spec = importlib.util.spec_from_file_location("pycmd_creator_blocks", here)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+blocks = _load_blocks()
+
+# How long Run lets a program go before stopping it, and how much it keeps.
+RUN_SECONDS = 10.0
+RUN_OUTPUT = 200_000
+
+
+def run_python(code: str, stdin_lines=(), seconds: float = RUN_SECONDS) -> dict:
+    """Runs Python here, on the app's own interpreter, and returns what it said.
+
+    print and input are the program's own, not the app's: output is collected
+    rather than sent to sys.stdout (which on the phone is the app's log), and
+    input() reads the lines given in the Input box. A trace function stops a
+    loop that never ends, which is the commonest first program there is.
+    """
+    out = []
+    size = [0]
+    feed = [str(line) for line in (stdin_lines or [])]
+
+    def say(text):
+        if size[0] < RUN_OUTPUT:
+            out.append(text[:RUN_OUTPUT - size[0]])
+        size[0] += len(text)
+
+    def _print(*values, sep=" ", end="\n", file=None, flush=False):
+        text = (" " if sep is None else str(sep)).join(str(v) for v in values) + \
+            ("\n" if end is None else str(end))
+        if file is not None and file not in (sys.stdout, sys.stderr):
+            file.write(text)
+            return
+        say(text)
+
+    def _input(prompt=""):
+        say(str(prompt))
+        if not feed:
+            raise EOFError("the program asked for input - type what it should read "
+                           "in the Input box, one line for each input()")
+        line = feed.pop(0)
+        say(line + "\n")
+        return line
+
+    deadline = time.monotonic() + max(0.5, float(seconds))
+
+    def tracer(frame, event, arg):
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"stopped after {seconds:g} seconds - is there a loop that never ends?")
+        return tracer
+
+    scope = {"__name__": "__main__", "__file__": "creator.py",
+             "__builtins__": dict(vars(builtins), print=_print, input=_input)}
+    started = time.monotonic()
+    error, line = "", 0
+    previous = sys.gettrace()
+    sys.settrace(tracer)
+    try:
+        exec(compile(code, "creator.py", "exec"), scope)  # noqa: S102 - the user's own program
+        ok = True
+    except SystemExit as stop:
+        ok = stop.code in (None, 0)
+        if not ok:
+            error = f"exit {stop.code}"
+    except SyntaxError as problem:
+        ok, line = False, problem.lineno or 0
+        error = f"SyntaxError: {problem.msg}"
+    except BaseException as problem:  # noqa: BLE001 - it is somebody's program
+        ok = False
+        error = f"{type(problem).__name__}: {problem}"
+        for frame in traceback.extract_tb(problem.__traceback__):
+            if frame.filename == "creator.py":
+                line = frame.lineno or 0
+    finally:
+        sys.settrace(previous)
+    return {"ok": ok, "output": "".join(out), "error": error, "line": line,
+            "truncated": size[0] > RUN_OUTPUT, "millis": int((time.monotonic() - started) * 1000),
+            "engine": f"Python {sys.version.split()[0]}"}
+
+
+def run_builtin(code: str, extension: str) -> dict:
+    """C, Go and Rust, on the interpreters the app carries - on both apps."""
+    try:
+        from pycmd_langs import registry
+    except ImportError:
+        return {"ok": False, "error": "this build has no built-in interpreters", "output": ""}
+    out = []
+
+    class Sink:
+        def write(self, text):
+            if sum(len(t) for t in out) < RUN_OUTPUT:
+                out.append(str(text))
+
+        def flush(self):
+            pass
+
+    folder = tempfile.mkdtemp(prefix="creator-")
+    path = os.path.join(folder, "main" + extension)
+    started = time.monotonic()
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(code)
+        result = registry.run_file(path, stdout=Sink())
+    except Exception as problem:  # noqa: BLE001
+        result = {"ok": False, "error": f"{type(problem).__name__}: {problem}"}
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(folder)
+        except OSError:
+            pass
+    return {"ok": bool(result.get("ok")), "output": "".join(out),
+            "error": str(result.get("error", "") or ""), "line": 0,
+            "millis": int((time.monotonic() - started) * 1000), "engine": "built-in interpreter"}
 
 # A drawer of projects you can still find something in.
 MAX_PROJECTS = 60
@@ -263,6 +394,57 @@ def setup(api):
             return written.get("error", "that did not save")
 
         return "blocks list | blocks langs | blocks build <name> | blocks save <name>"
+
+    @api.export
+    def run(payload):
+        """Builds the project and runs it, here, without saving anything."""
+        payload = payload or {}
+        built = blocks.compile_project(payload.get("project") or {})
+        if not built.get("ok"):
+            return built
+        stdin = str(payload.get("input", "") or "").replace("\r\n", "\n")
+        lines = stdin.split("\n") if stdin else []
+        seconds = float(api.setting("run_seconds", RUN_SECONDS) or RUN_SECONDS)
+        language = built["language"]
+        if language == "python":
+            result = run_python(built["code"], lines, seconds)
+        elif language in ("c", "go", "rust"):
+            result = run_builtin(built["code"], built["extension"])
+        else:
+            return {"ok": False, "error": f"{language} runs in the panel, not here"}
+        result["code"] = built["code"]
+        result["problems"] = built.get("problems", [])
+        return result
+
+    @api.export
+    def from_code(payload):
+        """Reads code - pasted, or a workspace file - back into blocks."""
+        payload = payload or {}
+        code = payload.get("code")
+        language = str(payload.get("language", "") or "")
+        path = str(payload.get("path", "") or "")
+        if code is None and path:
+            code = api.read(path)
+            if code is None:
+                return {"ok": False, "error": f"could not read {path}"}
+            if not language:
+                extension = os.path.splitext(path)[1].lower()
+                language = next((row["id"] for row in blocks.LANGUAGES
+                                 if row["extension"] == extension), "python")
+        return blocks.blocks_from_code(language or "python", str(code or ""))
+
+    @api.export
+    def workspace_files(payload=None):
+        """Files Creator can read back into blocks."""
+        wanted = {row["extension"] for row in blocks.LANGUAGES}
+        try:
+            names = api.files("*")
+        except Exception:  # noqa: BLE001
+            names = []
+        root = api.workspace_path()
+        rows = [os.path.relpath(str(name), root).replace(os.sep, "/") for name in names or []
+                if os.path.splitext(str(name))[1].lower() in wanted]
+        return {"ok": True, "files": sorted(rows)[:300]}
 
     api.log("Creator ready", f"{len(blocks.BY_ID)} blocks")
 

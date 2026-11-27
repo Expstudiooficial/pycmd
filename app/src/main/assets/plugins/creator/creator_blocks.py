@@ -3300,6 +3300,37 @@ HTML = HTML + HTML_MORE
 CSS = CSS + CSS_MORE
 MARKDOWN = MARKDOWN + MARKDOWN_MORE
 
+# Any line at all, for each language: what reading code back into blocks
+# falls back on when no block writes that line, and an escape hatch for
+# anything the palette does not have. `code_wrap` holds blocks, so a loop the
+# palette cannot write still keeps what is inside it as blocks.
+_PREFIX = {"python": "py", "javascript": "js", "html": "html", "css": "css",
+           "markdown": "md", "c": "c", "go": "go", "rust": "rs", "shell": "sh",
+           "json": "json"}
+_BRACED = {"javascript", "c", "go", "rust", "css"}
+
+
+def _raw_blocks(language: str) -> list:
+    prefix = _PREFIX[language]
+    rows = [_block(f"{prefix}.code", "Your code", "any line of code", "@code@",
+                   [_slot("code", "code")], about="Writes exactly what you type.")]
+    if language == "python":
+        rows.append(_block("py.code_wrap", "Your code", "any line that holds blocks",
+                           "@code@", [_slot("code", "code", default="with open('f') as f:")],
+                           wrap=True, empty="pass",
+                           about="A line ending in a colon, with blocks inside it."))
+    elif language in _BRACED:
+        rows.append(_block(f"{prefix}.code_wrap", "Your code", "any line that holds blocks",
+                           "@code@", [_slot("code", "code", default="{")], close="}",
+                           wrap=True, about="A line ending in {, with blocks inside it."))
+    return rows
+
+
+for _language, _rows in (("python", PYTHON), ("javascript", JAVASCRIPT), ("html", HTML),
+                         ("css", CSS), ("markdown", MARKDOWN), ("c", C), ("go", GO),
+                         ("rust", RUST), ("shell", SHELL), ("json", JSON)):
+    _rows.extend(_raw_blocks(_language))
+
 BLOCKS = {
     "python": PYTHON,
     "javascript": JAVASCRIPT,
@@ -3723,3 +3754,193 @@ def compile_project(project: dict) -> dict:
         "outline": outline,
         "problems": problems,
     }
+
+
+# ---------------------------------------------------------------------------
+# Reading code back into blocks
+# ---------------------------------------------------------------------------
+#
+# The module said "not a parser", and it still is not one: this does not
+# understand code, it recognises lines. Every block can render the line it
+# writes, so a line is read as a block only when that block, given the values
+# pulled out of the line, writes the same line back - a round trip checked on
+# every match, so a guess can be wrong only by falling back to "any line of
+# code", never by changing what the program says.
+
+_MATCHERS: dict = {}
+
+
+def _matcher(row: dict):
+    found = _MATCHERS.get(row["id"])
+    if found is not None:
+        return found
+    template = row["open"]
+    if "\n" in template or not template.strip():
+        _MATCHERS[row["id"]] = False
+        return False
+    names = []
+    pattern = ""
+    literal = 0
+    position = 0
+    for match in re.finditer(r"@@|@([a-z_][a-z0-9_]*)@", template):
+        chunk = template[position:match.start()]
+        pattern += re.escape(chunk)
+        literal += len(chunk.strip())
+        if match.group(0) == "@@":
+            pattern += "@"
+            literal += 1
+        else:
+            names.append(match.group(1))
+            pattern += f"(?P<s{len(names) - 1}>.*?)"
+        position = match.end()
+    tail = template[position:]
+    pattern += re.escape(tail) + r"\Z"
+    literal += len(tail.strip())
+    found = (re.compile(pattern), names, literal)
+    _MATCHERS[row["id"]] = found
+    return found
+
+
+def _unquoted(raw: str, kind: str, language: str) -> list:
+    """The values a captured piece of text might have been typed as."""
+    raw = raw.strip()
+    out = [raw]
+    if kind in ("string", "inline") and len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'`":
+        inner = raw[1:-1]
+        try:
+            import ast
+
+            value = ast.literal_eval(raw) if raw[0] != "`" else inner
+            if isinstance(value, str):
+                out.insert(0, value)
+        except (ValueError, SyntaxError):
+            pass
+        out.append(inner.replace('\\"', '"').replace("\\'", "'").replace("\\\\", "\\"))
+    if kind == "string" and language == "html":
+        import html as _html
+
+        out.insert(0, _html.unescape(raw))
+    seen, unique = set(), []
+    for value in out:
+        if value not in seen:
+            seen.add(value)
+            unique.append(value)
+    return unique
+
+
+def _read_line(text: str, language: str, want_wrap) -> dict:
+    """The block that writes exactly this line, with its values."""
+    rows = [r for r in BLOCKS[language] if not r["id"].endswith((".code", ".code_wrap"))]
+    candidates = []
+    for row in rows:
+        if want_wrap is not None and bool(row["wrap"]) != want_wrap:
+            continue
+        found = _matcher(row)
+        if not found:
+            continue
+        pattern, names, literal = found
+        match = pattern.match(text)
+        if match:
+            candidates.append((literal, row, names, match))
+    candidates.sort(key=lambda item: -item[0])
+    for _, row, names, match in candidates[:12]:
+        slots = {slot["name"]: slot for slot in row["slots"]}
+        options = []
+        for index, name in enumerate(names):
+            slot = slots.get(name, {"kind": "text", "options": []})
+            choices = _unquoted(match.group(f"s{index}"), slot.get("kind", "text"), language)
+            if slot.get("kind") == "choice":
+                choices = [c for c in choices if c in slot.get("options", [])]
+            options.append((name, choices[:3]))
+        # Try the likeliest reading first, then each slot's alternatives.
+        values = {name: (choices[0] if choices else "") for name, choices in options}
+        tries = [dict(values)]
+        for name, choices in options:
+            for alternative in choices[1:]:
+                tries.append(dict(values, **{name: alternative}))
+        for attempt in tries:
+            try:
+                if preview_of(row, language, attempt)["preview"].strip() == text:
+                    return {"block": row["id"], "values": attempt}
+            except Exception:  # noqa: BLE001 - a block that cannot render is not a match
+                continue
+    return {}
+
+
+def blocks_from_code(language: str, code: str) -> dict:
+    """Turns source back into a project: the reverse of compile_project."""
+    language = str(language or "python").strip().lower()
+    if language not in BLOCKS:
+        return {"ok": False, "error": f"'{language}' is not one of the languages here."}
+    prefix = _PREFIX[language]
+    lines = str(code or "").replace("\r\n", "\n").replace("\t", "    " if language != "go" else "\t").split("\n")
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if len(lines) > MAX_BLOCKS:
+        return {"ok": False, "error": f"that is more than {MAX_BLOCKS} lines"}
+
+    root: list = []
+    # (children, closing line or None, indent, block id)
+    stack = [(root, None, -1, "")]
+    matched = raw = 0
+
+    def add(node: dict, text: str, indent: int) -> None:
+        stack[-1][0].append(node)
+        row = BY_ID[node["block"]]
+        if row["wrap"] and len(stack) < MAX_DEPTH:
+            node["children"] = []
+            closing = None
+            if row.get("close"):
+                closing = _render(row["close"], row["slots"], node["values"], language,
+                                  [], row["id"]).strip()
+            stack.append((node["children"], closing, indent, row["id"]))
+
+    for line in lines:
+        text = line.strip()
+        if language == "json":
+            text = text.rstrip(",").strip()
+        indent = len(line) - len(line.lstrip())
+        if not text:
+            node = {"block": f"{prefix}.blank", "values": {}} if f"{prefix}.blank" in BY_ID \
+                else {"block": f"{prefix}.code", "values": {"code": ""}}
+            stack[-1][0].append(node)
+            continue
+        if language == "python":
+            while len(stack) > 1 and indent <= stack[-1][2]:
+                stack.pop()
+        else:
+            if len(stack) > 1 and stack[-1][1] is not None and text == stack[-1][1]:
+                stack.pop()
+                continue
+            # `} else {`: closes the block above and opens the one that chains.
+            if len(stack) > 1 and text.startswith("}"):
+                previous = stack[-1][3]
+                chained = _read_line(text, language, None)
+                if chained and previous in BY_ID[chained["block"]].get("chain", []):
+                    stack.pop()
+                    matched += 1
+                    add(chained, text, indent)
+                    continue
+                if text in ("}", "};", "})", "});"):
+                    stack.pop()
+                    continue
+        opens = (language == "python" and text.endswith(":")) or \
+                (language in _BRACED and text.endswith("{"))
+        node = _read_line(text, language, None)
+        if node and opens and not BY_ID[node["block"]]["wrap"]:
+            node = {}
+        if node:
+            matched += 1
+        else:
+            raw += 1
+            wrap_id = f"{prefix}.code_wrap"
+            if opens and wrap_id in BY_ID:
+                body = text[:-1].rstrip() if language in _BRACED else text
+                node = {"block": wrap_id, "values": {"code": body + (" {" if language in _BRACED else "")}}
+                BY_ID[wrap_id]  # noqa: B018 - exists
+            else:
+                node = {"block": f"{prefix}.code", "values": {"code": text}}
+        add(node, text, indent)
+
+    return {"ok": True, "project": {"language": language, "blocks": root},
+            "matched": matched, "raw": raw}

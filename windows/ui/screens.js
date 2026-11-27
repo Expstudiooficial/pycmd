@@ -686,14 +686,7 @@ async function Plugins(screen) {
       'not work here, and no amount of good will makes it.'),
   ));
 
-  (builtin.groups || []).forEach((group) => {
-    screen.appendChild(el('h2', { text: group.name }));
-    const grid = el('div', { class: 'grid' });
-    group.plugins.forEach((plugin) => grid.appendChild(builtinCard(plugin)));
-    screen.appendChild(grid);
-  });
-
-  screen.appendChild(el('h2', { text: 'Installed' }));
+  screen.appendChild(el('h2', { text: 'Installed plugins - Creator, Cloud and the rest' }));
   const installed = reply.installed || [];
   if (!installed.length) {
     screen.appendChild(el('div', { class: 'empty', text: 'None yet.' }));
@@ -734,6 +727,13 @@ async function Plugins(screen) {
     });
     screen.appendChild(grid);
   }
+  (builtin.groups || []).forEach((group) => {
+    screen.appendChild(el('h2', { text: group.name }));
+    const grid = el('div', { class: 'grid' });
+    group.plugins.forEach((plugin) => grid.appendChild(builtinCard(plugin)));
+    screen.appendChild(grid);
+  });
+
 }
 
 function builtinCard(plugin) {
@@ -895,7 +895,7 @@ async function panelFrame(plugin, panelFile, style, onClose) {
   }
 
   const frame = el('iframe', {
-    style: style || 'width:100%;height:70vh;border:0;border-radius:10px;background:var(--bg)',
+    style: style || 'width:100%;height:min(640px, 70vh);border:0;border-radius:10px;background:var(--bg)',
     src: 'about:blank',
   });
 
@@ -956,12 +956,16 @@ async function drawPanelScreen(screen, plugin) {
       el('button', { class: 'small', text: 'Reload', onclick: () => go('panel:' + plugin.id) }),
       el('button', { class: 'small', text: 'Manage plugins', onclick: () => go('plugins') }))));
 
-  const holder = el('div', { style: 'flex:1 1 auto' });
+  // The frame fills what is left of the window, in CSS rather than with
+  // calc(100vh - 210px): vh ignores the zoom setting, so at 125% the panel
+  // ran past the bottom of the window and its last rows could not be reached.
+  screen.classList.add('panel-screen');
+  const holder = el('div', { class: 'panel-holder' });
   screen.appendChild(holder);
   holder.appendChild(el('div', { class: 'empty', text: 'Loading ' + (plugin.name || plugin.id) + '…' }));
 
   const frame = await panelFrame(plugin, plugin.panel,
-    'width:100%;height:calc(100vh - 210px);min-height:360px;border:0;'
+    'width:100%;height:100%;min-height:0;border:0;'
     + 'border-radius:12px;background:var(--bg);border:1px solid var(--line)',
     () => go('plugins'));
   PyCmd.clear(holder);

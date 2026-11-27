@@ -36,8 +36,8 @@ import traceback
 
 from . import (android, builtins, bundle, copies, disk, files, install, known,
                langs, portable, runner, setup_all, store, toolchains)
-VERSION = "5.0"
-BUILD = 9
+VERSION = "5.5"
+BUILD = 10
 
 _engine_ready = False
 
@@ -136,6 +136,27 @@ class Host:
             return self._stdin.get(timeout=600)
         except queue.Empty:
             return ""
+
+    def answers(self, channel="console"):
+        """What a running program reads its input() from: the console box."""
+        host = self
+
+        class _Answers:
+            def wanted(self):
+                host.emit("input-wanted", channel=channel)
+
+            def get(self, timeout):
+                try:
+                    return host._stdin.get(timeout=timeout)
+                except queue.Empty:
+                    return None
+
+        while not self._stdin.empty():      # nothing typed for an earlier one
+            try:
+                self._stdin.get_nowait()
+            except queue.Empty:
+                break
+        return _Answers()
 
     def onFinished(self, run_id, status, millis):  # noqa: N802
         self.emit("finished", run=run_id, status=status, millis=millis)
@@ -370,7 +391,7 @@ def _console_route(host, text, channel):
 
         def work():
             started = time.monotonic()
-            result = runner.run_file(path, write)
+            result = runner.run_file(path, write, answers=host.answers(channel))
             host.onFinished(result.get("run", {}).get("id", 0),
                             "ok" if result.get("ok") else "error",
                             int((time.monotonic() - started) * 1000))
@@ -476,7 +497,8 @@ def _h_run_file(host, payload):
             host.onOutput("stdout", text, channel)
 
         started = time.monotonic()
-        result = runner.run_file(path, write, prefer=prefer, args=args, stdin=stdin)
+        result = runner.run_file(path, write, prefer=prefer, args=args, stdin=stdin,
+                                 answers=host.answers(channel))
         host.onFinished(
             result.get("run", {}).get("id", 0),
             "ok" if result.get("ok") else "error",
