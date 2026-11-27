@@ -5,11 +5,11 @@ APK over itself. Windows needs its own manifest, because the two are different
 artefacts on different schedules: ``dist-windows/latest.json`` describes the
 exe, and nothing here will ever offer somebody an APK.
 
-What this does *not* do is install anything by itself. An app that silently
-replaces its own exe while you are using it is an app that eventually replaces
-it with something broken while you are using it. PyCmd downloads the new one to
-the Downloads folder, checks its hash against the manifest, and tells you where
-it is. Replacing the old exe is one deliberate step you take.
+5.9: updates arrive as an installer (PyCmd-Setup.exe), checked against the
+manifest's SHA-256 before it runs. The installer puts PyCmd in
+%LOCALAPPDATA%/Programs/PyCmd, replacing the version that is there, and
+starts it again. Whether PyCmd only says so or installs by itself is a
+setting (Settings > Updates): off, tell me (the default), or install.
 """
 
 from __future__ import annotations
@@ -72,6 +72,9 @@ def check(current_build: int) -> dict:
         "sha256": manifest.get("sha256", ""),
         "bytes": manifest.get("bytes", 0),
         "released": manifest.get("releasedAt", ""),
+        "installerUrl": manifest.get("installerUrl", ""),
+        "installerSha256": manifest.get("installerSha256", ""),
+        "installerBytes": manifest.get("installerBytes", 0),
         "manifest": manifest,
     }
 
@@ -132,22 +135,138 @@ def _remove(path: str) -> None:
         pass
 
 
-def start_background_check(host) -> None:
-    """Looks once, quietly, a moment after start-up.
+# ---------------------------------------------------------------------------
+# 5.9: installing, and checking on a schedule
+# ---------------------------------------------------------------------------
 
-    Quietly means: a machine with no connection gets no error, because it did
-    not ask a question. Only a genuine newer build says anything.
+MODES = ("off", "notify", "auto")
+EVERY = 6 * 60 * 60          # seconds between checks while PyCmd is open
+_state = {"last": 0, "result": None, "installing": False}
+
+
+def install_dir() -> str:
+    return os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "Programs", "PyCmd")
+
+
+def is_installed() -> bool:
+    """Whether this PyCmd is the installed one rather than a loose exe."""
+    import sys
+
+    if not getattr(sys, "frozen", False):
+        return False
+    here = os.path.normcase(os.path.dirname(os.path.abspath(sys.executable)))
+    return here == os.path.normcase(install_dir())
+
+
+def settings() -> dict:
+    from .features import _settings_get
+
+    mode = _settings_get("updateMode", "notify")
+    return {"mode": mode if mode in MODES else "notify", "skip": _settings_get("updateSkip", "")}
+
+
+def set_mode(mode: str) -> dict:
+    from .features import _settings_put
+
+    if mode not in MODES:
+        return {"ok": False, "error": f"the mode is one of {', '.join(MODES)}"}
+    _settings_put("updateMode", mode)
+    return {"ok": True, **settings()}
+
+
+def skip(version: str) -> dict:
+    from .features import _settings_put
+
+    _settings_put("updateSkip", str(version))
+    return {"ok": True}
+
+
+def status(current_version: str, current_build: int) -> dict:
+    result = _state["result"] or {}
+    return {
+        "ok": True, "version": current_version, "build": current_build,
+        "installed": is_installed(), "installDir": install_dir(), **settings(),
+        "lastCheck": _state["last"], "installing": _state["installing"],
+        "available": result if result.get("newer") else None,
+    }
+
+
+def check_now(current_build: int) -> dict:
+    import time as _time
+
+    result = check(current_build)
+    _state["last"] = int(_time.time())
+    if result.get("ok"):
+        _state["result"] = result
+    return result
+
+
+def install(result: dict, silent: bool = False, progress=None) -> dict:
+    """Downloads the installer, checks it, and runs it. PyCmd is closed and
+    started again by the installer, so on success this is the last thing
+    this process does."""
+    if os.name != "nt":
+        return {"ok": False, "error": "installing updates only happens on Windows"}
+    if not result.get("installerUrl"):
+        return {"ok": False, "error": "this release has no installer; download it from the releases page"}
+    if _state["installing"]:
+        return {"ok": False, "error": "an update is already being installed"}
+    _state["installing"] = True
+    try:
+        got = download({"url": result["installerUrl"], "sha256": result.get("installerSha256", ""),
+                        "bytes": result.get("installerBytes", 0)}, progress)
+        if not got.get("ok"):
+            return got
+        import subprocess
+
+        flags = ["/VERYSILENT" if silent else "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+                 "/CLOSEAPPLICATIONS", "/SP-"]
+        detached = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        subprocess.Popen([got["path"], *flags], close_fds=True, creationflags=detached)
+        return {"ok": True, "started": True, "path": got["path"]}
+    except OSError as error:
+        return {"ok": False, "error": f"the installer would not start: {error}"}
+    finally:
+        _state["installing"] = False
+
+
+def start_background_check(host) -> None:
+    """Checks a moment after start-up, then every six hours, as the setting says.
+
+    A machine with no connection hears nothing - it did not ask a question.
+    Only a newer build says anything: a pop-up, or (on "auto") the update
+    itself, which closes PyCmd and opens the new one.
     """
-    def work():
+    def once():
         from . import host as host_module
 
-        result = check(host_module.BUILD)
-        if result.get("ok") and result.get("newer"):
-            host.emit("update-available", **{
-                k: result[k] for k in ("version", "build", "notes", "url", "sha256", "bytes")
-            })
+        mode = settings()
+        if mode["mode"] == "off":
+            return
+        result = check_now(host_module.BUILD)
+        if not (result.get("ok") and result.get("newer")):
+            return
+        if result.get("version") == mode["skip"] and mode["mode"] != "auto":
+            return
+        event = {k: result.get(k) for k in ("version", "build", "notes", "url", "sha256", "bytes",
+                                             "installerUrl", "installerBytes")}
+        if mode["mode"] == "auto" and result.get("installerUrl"):
+            host.emit("update-installing", **event)
+            outcome = install(result, silent=True)
+            if not outcome.get("ok"):
+                host.emit("update-available", **event, error=outcome.get("error", ""))
+            return
+        host.emit("update-available", **event)
 
-    timer = threading.Timer(4.0, work)
-    timer.daemon = True
-    timer.start()
+    def loop():
+        import time as _time
 
+        _time.sleep(5)
+        while True:
+            try:
+                once()
+            except Exception as error:  # noqa: BLE001 - never take the app down
+                host.log("warn", "update check failed", str(error))
+            _time.sleep(EVERY)
+
+    threading.Thread(target=loop, name="pycmd-updates", daemon=True).start()

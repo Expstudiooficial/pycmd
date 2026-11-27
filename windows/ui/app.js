@@ -209,7 +209,6 @@ const TABS = [
   { group: 'PyCmd' },
   { id: 'plugins', name: 'Plugins', key: '◈' },
   { id: 'mcp', name: 'MCP · AI agents', key: '✦' },
-  { id: 'copies', name: 'Copies', key: '⧉' },
   { id: 'docs', name: 'Guides', key: '?' },
   { id: 'settings', name: 'Settings', key: '◐' },
   { id: 'system', name: 'System', key: '⌘' },
@@ -396,7 +395,23 @@ function wireShell() {
 
   PyCmd.on('update-available', (event) => {
     PyCmd.state.update = event;
-    PyCmd.toast('PyCmd ' + event.version + ' is out. System has the details.');
+    const el = PyCmd.el;
+    PyCmd.sheet('PyCmd ' + event.version + ' is out', el('div', {},
+      el('p', { text: event.notes || 'A new version of PyCmd is ready.' }),
+      event.error ? el('p', { class: 'muted', text: 'It could not install by itself: ' + event.error }) : null,
+      el('p', { class: 'muted', text: event.installerUrl
+        ? 'Install it now: PyCmd closes, updates and opens again in a few seconds. Your files and settings stay.'
+        : 'This release has no installer yet - download it from the releases page.' }),
+      el('div', { class: 'row' },
+        event.installerUrl ? el('button', { class: 'primary', text: 'Install now', onclick: () => { PyCmd.closeSheet(); window.installUpdate(); } }) : null,
+        el('button', { text: 'Later', onclick: () => PyCmd.closeSheet() }),
+        el('button', { class: 'ghost', text: 'Skip this version', onclick: () => {
+          PyCmd.call('update.settings', { skip: event.version }); PyCmd.closeSheet(); } }),
+        el('button', { class: 'ghost', text: 'Update settings', onclick: () => { PyCmd.closeSheet(); go('settings'); } }))));
+  });
+
+  PyCmd.on('update-installing', (event) => {
+    PyCmd.toast('Installing PyCmd ' + event.version + ' - it closes and opens again by itself.');
   });
 }
 
@@ -413,7 +428,7 @@ function showAbout() {
     PyCmd.el('h2', { text: 'Where your things are' }),
     PyCmd.el('pre', { class: 'out mono', text: s.root || '' }),
     PyCmd.el('p', { class: 'muted' },
-      'Nothing is written to Program Files and nothing needs administrator rights.'),
+      'Nothing needs administrator rights. Installed, PyCmd lives in %LOCALAPPDATA%\\Programs\\PyCmd; your things in %LOCALAPPDATA%\\PyCmd.'),
   ));
 }
 

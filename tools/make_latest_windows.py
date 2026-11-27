@@ -147,9 +147,23 @@ def readable(count: int) -> str:
     return f"{count // 1024} KB"
 
 
+def _installer_fields(setup: str, tag: str) -> dict:
+    """5.9: the installer, PyCmd-Setup.exe, which the app updates itself with."""
+    if not setup:
+        return {}
+    return {
+        "installerUrl": f"{RELEASES}/download/{tag}/PyCmd-Setup.exe",
+        "latestInstallerUrl": f"{RELEASES}/latest/download/PyCmd-Setup.exe",
+        "installerSha256": digest(setup),
+        "installerBytes": os.path.getsize(setup),
+    }
+
+
 def build_manifest(exe: str, notes: str, tag: str = "") -> dict:
     version, build = source_version()
     size = os.path.getsize(exe)
+    setup = os.path.join(os.path.dirname(os.path.abspath(exe)), "PyCmd-Setup.exe")
+    setup = setup if os.path.isfile(setup) else ""
     # The asset is attached to the release under its built name, PyCmd.exe,
     # whatever the file is called on the machine that made it.
     name = "PyCmd.exe"
@@ -167,8 +181,9 @@ def build_manifest(exe: str, notes: str, tag: str = "") -> dict:
         "arch": "x64",
         "python": "3.13",
         "runtime": "Edge WebView2 (already on Windows 10 and 11)",
-        "installer": False,
+        "installer": bool(setup),
         "portable": True,
+        **_installer_fields(setup, tag or f"windows-v{version}"),
         "changelog": f"{RAW}/dist-windows/README.md",
         "checksums": f"{RAW}/dist-windows/SHA256SUMS.txt",
         "source": f"https://github.com/{REPO}/tree/{BRANCH}",

@@ -347,19 +347,19 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "5.8",
-    "title": "PyCmd for Windows 5.8",
+    "version": "5.9",
+    "title": "PyCmd for Windows 5.9",
     "items": [
-        ["Notes, built in - and you can write in it",
-         "Notes is part of PyCmd now, not a plugin, and text edits properly: double-click any card "
-         "and type, as often as you like. Your boards came with it."],
-        ["A much better board",
-         "Right-click menus, select many (Shift+drag or Select), sections that carry their cards, code "
-         "cards, **bold** and lists in notes, arrow styles and colours, lock, bring to front, Find, "
-         "snap to grid, templates (Kanban, mind map, week, project, pros and cons), drag images in, "
-         "and Export to a picture or Markdown."],
-        ["AI agents can use it",
-         "With MCP on, an AI app can read your boards and add notes to them."],
+        ["A real installer",
+         "PyCmd-Setup.exe installs PyCmd in %LOCALAPPDATA%\\Programs\\PyCmd - no administrator - with a "
+         "Start menu shortcut, an optional desktop one, and an uninstaller in Settings > Apps. "
+         "A newer installer updates the installed PyCmd in place. Your things stay where they were."],
+        ["PyCmd updates itself",
+         "It checks for a new version when it starts and every six hours, and shows a pop-up with "
+         "Install now. Settings > Updates: tell me, install by itself, or never check. Every "
+         "download is checked against its SHA-256 before it runs."],
+        ["Copies is gone",
+         "The installer keeps exactly one PyCmd, so there is nothing left for Copies to do."],
     ],
 }
 

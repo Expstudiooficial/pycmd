@@ -26,7 +26,6 @@ GROUPS = {
     "android": "Android Lab - emulators, devices, APKs, logcat",
     "builtin": "the 13 built-in plugins",
     "console": "the Python console",
-    "copies": "kept copies of older PyCmd versions",
     "disk": "any file or folder on this PC",
     "file": "files in the PyCmd workspace",
     "git": "git in the workspace",

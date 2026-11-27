@@ -37,6 +37,35 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 5.9
+
+### A real installer
+
+**PyCmd-Setup.exe** installs PyCmd properly, with no administrator rights:
+- **Where:** `%LOCALAPPDATA%\Programs\PyCmd`.
+- **Shortcuts:** a **Start menu** shortcut, and a desktop one if you tick it.
+- **Uninstall:** an uninstaller in **Settings > Apps**.
+- **Updates:** a newer installer updates the installed PyCmd in place.
+- **Your things:** workspace, settings and boards stay in `%LOCALAPPDATA%\PyCmd`, and uninstalling never touches them.
+
+The single `PyCmd.exe` is still on every release for anyone who wants it portable.
+
+### PyCmd updates itself
+
+PyCmd checks for a new version when it starts and every six hours after that.
+When it finds one, a pop-up offers **Install now**: PyCmd closes, updates, and
+opens again a few seconds later. **Settings > Updates** has three choices:
+
+- tell me (the default)
+- install new versions by themselves
+- never check
+
+Every installer is checked against the SHA-256 in the release manifest before it runs.
+
+### Copies is gone
+
+The installer keeps exactly one PyCmd, so the Copies tab had nothing left to do.
+
 ## What is new in 5.8
 
 ### Notes, built in, and you can write in it

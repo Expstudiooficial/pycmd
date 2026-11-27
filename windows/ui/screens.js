@@ -1396,11 +1396,9 @@ async function System(screen) {
     screen.appendChild(card(
       el('b', { text: 'PyCmd ' + update.version + ' is out' }),
       el('p', { class: 'muted', text: update.notes || '' }),
-      el('p', { class: 'muted' },
-        'It downloads to your Downloads folder and is checked against its ' +
-        'published checksum. Replacing the exe is a step you take yourself — ' +
-        'an app that swaps its own exe while you are using it eventually swaps ' +
-        'in a broken one.'),
+      el('div', { class: 'row' },
+        el('button', { class: 'small primary', text: 'Install it', onclick: () => window.installUpdate() }),
+        el('button', { class: 'small', text: 'Update settings', onclick: () => go('settings') })),
     ));
   }
 
@@ -1813,7 +1811,6 @@ window.Screens = {
   plugins: Plugins,
   docs: Docs,
   android: Android,
-  copies: Copies,
   system: System,
   log: Log,
 };

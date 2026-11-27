@@ -34,10 +34,10 @@ import threading
 import time
 import traceback
 
-from . import (android, builtins, bundle, copies, disk, files, install, known,
-               langs, portable, runner, setup_all, store, toolchains)
-VERSION = "5.8"
-BUILD = 13
+from . import (android, builtins, bundle, disk, files, install, known,
+               langs, portable, runner, setup_all, store, toolchains, updates)
+VERSION = "5.9"
+BUILD = 14
 
 _engine_ready = False
 
@@ -625,6 +625,38 @@ def load_installed_plugins(host) -> dict:
     return reply
 
 
+# -- updates (5.9) -----------------------------------------------------------
+
+def _h_update_status(host, payload):
+    """Current version, whether this copy is the installed one, the update setting."""
+    return updates.status(VERSION, BUILD)
+
+
+def _h_update_check(host, payload):
+    """Looks for a newer PyCmd now."""
+    result = updates.check_now(BUILD)
+    if result.get("ok"):
+        result.pop("manifest", None)
+    return result
+
+
+def _h_update_install(host, payload):
+    """Downloads the newest installer, checks its SHA-256 and runs it."""
+    result = updates.check_now(BUILD)
+    if not result.get("ok"):
+        return result
+    if not result.get("newer") and not payload.get("force"):
+        return {"ok": False, "error": f"PyCmd {VERSION} is already the newest"}
+    return updates.install(result, silent=bool(payload.get("silent")))
+
+
+def _h_update_settings(host, payload):
+    """Off, notify (a pop-up) or auto (installs by itself)."""
+    if payload.get("skip"):
+        return updates.skip(str(payload["skip"]))
+    return updates.set_mode(str(payload.get("mode", "")))
+
+
 def _h_plugin_set(host, payload):
     """Switches an installed plugin on or off, and loads or unloads it now."""
     from .features import _settings_put
@@ -1055,40 +1087,6 @@ def _h_setup_stop(host, payload):
 
 
 # ---------------------------------------------------------------------------
-# Other copies of PyCmd on this machine
-# ---------------------------------------------------------------------------
-
-def _h_copies_find(host, payload):
-    return copies.find_others(VERSION)
-
-
-def _h_copies_replace(host, payload):
-    rows = payload.get("others") or []
-    return copies.replace(rows, VERSION)
-
-
-def _h_copies_kept(host, payload):
-    return {"ok": True, "kept": copies.kept(), "keeping": copies.KEEP,
-            "running": copies.running_exe()}
-
-
-def _h_copies_rollback(host, payload):
-    return copies.restore(str(payload.get("path", "")),
-                          str(payload.get("to", "")))
-
-
-def _h_copies_archive(host, payload):
-    """Files a copy away without it having to be older, when asked by name."""
-    path = str(payload.get("path", ""))
-    version = str(payload.get("version", "")) or "unknown"
-    return copies.keep(path, version, why="archived on purpose")
-
-
-def _h_copies_elevate(host, payload):
-    return copies.elevate_and_rerun(str(payload.get("argument", "--replace-older")))
-
-
-# ---------------------------------------------------------------------------
 # The birthday
 # ---------------------------------------------------------------------------
 
@@ -1245,12 +1243,6 @@ HANDLERS = {
     "setup.state": _h_setup_state,
     "setup.start": _h_setup_start,
     "setup.stop": _h_setup_stop,
-    "copies": _h_copies_find,
-    "copies.replace": _h_copies_replace,
-    "copies.kept": _h_copies_kept,
-    "copies.rollback": _h_copies_rollback,
-    "copies.archive": _h_copies_archive,
-    "copies.elevate": _h_copies_elevate,
     "android": _h_android,
     "android.plan": _h_android_plan,
     "android.start": _h_android_start,
@@ -1286,6 +1278,10 @@ HANDLERS = {
     "plugin.load": _h_plugin_load,
     "plugin.panel": _h_plugin_panel,
     "plugin.export": _h_plugin_export,
+    "update.status": _h_update_status,
+    "update.check": _h_update_check,
+    "update.install": _h_update_install,
+    "update.settings": _h_update_settings,
     "plugin.remove": _h_plugin_remove,
     "plugin.settings": _h_plugin_settings,
     "plugin.setting.set": _h_plugin_set_setting,

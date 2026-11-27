@@ -57,7 +57,7 @@ def check(name, condition, detail=""):
 # silently shadowed the module being tested and made every check after
 # it disappear.
 from pycmd_win import android as android_lab  # noqa: E402
-from pycmd_win import (builtins, bundle, copies, envpath, install,  # noqa: E402
+from pycmd_win import (builtins, bundle, envpath, install,  # noqa: E402
                        known, langs, mobile, runner, setup_all, store,
                        toolchains)
 
@@ -497,7 +497,7 @@ DOES_RATHER_THAN_ANSWERS = {
     # "does this handler answer?" sweep should be asking it.
     "android.start", "android.stop", "setup.start", "setup.stop",
     "manager.install", "install.one", "known.forget",
-    "copies.replace", "copies.rollback", "copies.elevate", "console.secret",
+    "console.secret",
     # 5.8: the Notes board's writers
     "board.save", "board.create", "board.remove", "board.export_markdown",
     "board.export_png", "board.note", "board.import_text",
@@ -1134,88 +1134,6 @@ check("Windows' own folders are refused for writing",
 
 shutil.rmtree(_sand, ignore_errors=True)
 
-say("\n== older copies of PyCmd ==")
-
-# 2.0 shipped all of copies.py and not one button that called it, which is
-# exactly why nothing ever appeared to happen.
-_ui_all = "".join(
-    open(os.path.join(ROOT, "windows", "ui", n), encoding="utf-8").read()
-    for n in os.listdir(os.path.join(ROOT, "windows", "ui")) if n.endswith(".js"))
-for _handler in ("copies", "copies.replace", "copies.kept", "copies.rollback"):
-    check(f"something in the interface calls {_handler}",
-          f"'{_handler}'" in _ui_all, _handler)
-check("and there is a tab to reach it by",
-      "id: 'copies'" in open(os.path.join(ROOT, "windows", "ui", "app.js"),
-                             encoding="utf-8").read())
-
-# A name is not identity, and running an unknown exe to decide whether to
-# delete it is the wrong order to do those two steps in.
-_marked = os.path.join(_HOME, "PyCmd (1).exe")
-with open(_marked, "wb") as _handle:
-    _handle.write(b"MZ" + b"x" * (3 * 1024 * 1024) + copies.MARKER)
-_plain = os.path.join(_HOME, "PyCmd-notours.exe")
-with open(_plain, "wb") as _handle:
-    _handle.write(b"MZ" + b"x" * (3 * 1024 * 1024))
-_tiny = os.path.join(_HOME, "PyCmdTiny.exe")
-with open(_tiny, "wb") as _handle:
-    _handle.write(b"MZ" + copies.MARKER)
-
-check("a renamed copy is still recognised by name",
-      copies._looks_like_pycmd("PyCmd (1).exe")
-      and copies._looks_like_pycmd("PyCmd - Copy.exe"))
-check("and confirmed by reading it, not by running it",
-      copies._smells_like_pycmd(_marked))
-check("something else wearing the name is left alone",
-      not copies._smells_like_pycmd(_plain))
-check("and so is something far too small to be a build",
-      not copies._smells_like_pycmd(_tiny))
-
-_unknown = [{"path": _marked, "version": ""}]
-_out = copies.replace(_unknown, "2.0.7")
-check("a build that will not say its version is never removed on a guess",
-      not _out["removed"] and _out["refused"], _out)
-_out = copies.replace([{"path": _marked, "version": "", "chosen": True}], "2.0.7")
-check("but is removed when the person picks it",
-      _out["removed"] == [_marked], _out)
-check("and lands in the archive as 'unknown' rather than as a blank",
-      any(row["version"] == "unknown" for row in copies.kept()),
-      [r["version"] for r in copies.kept()])
-
-# A target is passed in because this runs from a checkout, where there is no
-# exe to replace - restore refuses that case on purpose, which is right and
-# also makes the script itself untestable without one.
-_pretend_exe = os.path.join(_HOME, "PyCmd-running.exe")
-with open(_pretend_exe, "wb") as _handle:
-    _handle.write(b"MZ")
-_back = copies.restore(copies.kept()[0]["path"], _pretend_exe)
-check("going back writes a swap script that actually exists",
-      _back["ok"] and os.path.isfile(_back["script"]), _back)
-check("and the script restarts PyCmd afterwards",
-      'start ""' in open(_back["script"], encoding="utf-8").read())
-_found = copies.find_others("2.0.0")
-check("looking for them answers rather than raising", _found["ok"])
-check("and only looks where a download actually lands",
-      all(os.path.isdir(p) for p in _found["lookedIn"]), _found["lookedIn"])
-_fake = os.path.join(_HOME, "PyCmd-older.exe")
-open(_fake, "wb").write(b"MZ")
-_out = copies.replace([{"path": _fake, "version": "1.0.0"}], "2.0.0")
-check("an older copy is filed away, not destroyed",
-      _out["removed"] and not os.path.exists(_fake) and copies.kept(), _out)
-_newer = os.path.join(_HOME, "PyCmd-newer.exe")
-open(_newer, "wb").write(b"MZ")
-_out = copies.replace([{"path": _newer, "version": "9.9.9"}], "2.0.0")
-check("a newer one is refused with a reason, not silently skipped",
-      not _out["removed"] and _out["refused"] and os.path.exists(_newer), _out)
-check("version ordering is numeric, so 1.0.10 is newer than 1.0.9",
-      copies._order("1.0.10") > copies._order("1.0.9"))
-_before = len(copies.kept())
-for _i in range(copies.KEEP + 3):
-    _f = os.path.join(_HOME, f"old{_i}.exe")
-    open(_f, "wb").write(b"MZ")
-    copies.keep(_f, f"0.{_i}.0")
-check("only a handful of old builds are kept",
-      len(copies.kept()) == copies.KEEP, len(copies.kept()))
-
 say("\n== the exe is not in the repository ==")
 _tracked = subprocess.run(["git", "ls-files", "dist-windows"], cwd=ROOT,
                           capture_output=True, text=True).stdout.split()
@@ -1666,7 +1584,7 @@ check("the ten tools reach the shared engine, not a Windows program of the same 
                                                       "wc", "grep", "diff", "cal", "loc")))
 
 say("\n== 5.8 ==")
-check("the version is 5.8", host_module.VERSION == "5.8" and host_module.BUILD == 13)
+check("the version is 5.8 or later", host_module.BUILD >= 13)
 check("Notes is built in, not a plugin", "board" not in _bundle55.BUNDLED and "/web/board.html" in _ui57)
 check("old notes still move onto the board", "board.import_text" in _ui57)
 check("every board call is the app's", all(f"board.{n}" in host_module.HANDLERS for n in ("listing", "load", "save", "create", "export_png", "note")))
@@ -1675,6 +1593,35 @@ _ws58 = _tf55.mkdtemp()
 import pycmd_board as _pb58  # noqa: E402
 _r58 = json.loads(_pb58.api("note", json.dumps({"text": "from the test"}), _ws58))
 check("note drops a card on the board", _r58.get("ok") and "from the test" in open(os.path.join(_ws58, ".pycmd", "boards.json"), encoding="utf-8").read(), _r58)
+
+say("\n== 5.9 ==")
+check("the version is 5.9", host_module.VERSION == "5.9" and host_module.BUILD == 14)
+check("Copies is gone", not any(k.startswith("copies") for k in host_module.HANDLERS)
+      and not os.path.exists(os.path.join(ROOT, "windows", "pycmd_win", "copies.py"))
+      and "id: 'copies'" not in open(os.path.join(ROOT, "windows", "ui", "app.js"), encoding="utf-8").read())
+check("the updater has its calls", all(f"update.{n}" in host_module.HANDLERS for n in ("status", "check", "install", "settings")))
+from pycmd_win import updates as _up59  # noqa: E402
+check("updates default to telling you", _up59.settings()["mode"] in _up59.MODES)
+check("a mode outside off/notify/auto is refused", not _up59.set_mode("sometimes")["ok"])
+check("a checkout is not the installed PyCmd", not _up59.is_installed())
+check("it installs per user, with no administrator", _up59.install_dir().endswith(os.path.join("Programs", "PyCmd")))
+_iss = open(os.path.join(ROOT, "windows", "build", "installer.iss"), encoding="utf-8").read()
+check("the installer is per-user, updates in place and closes a running PyCmd",
+      "PrivilegesRequired=lowest" in _iss and "AppId={{6B0F6B8E" in _iss and "CloseApplications=force" in _iss
+      and "{autoprograms}" in _iss and "ShouldRelaunch" in _iss)
+_wf = open(os.path.join(ROOT, ".github", "workflows", "windows.yml"), encoding="utf-8").read()
+check("CI builds the installer, proves it, and publishes it",
+      "installer.iss" in _wf and "unins000.exe" in _wf and "PyCmd-Setup.exe" in _wf.split("softprops/action-gh-release")[1])
+_d59 = _tf55.mkdtemp()
+for _n59, _b59 in (("PyCmd.exe", b"MZ exe"), ("PyCmd-Setup.exe", b"MZ setup")):
+    with open(os.path.join(_d59, _n59), "wb") as _h59:
+        _h59.write(_b59)
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import make_latest_windows as _mlw  # noqa: E402
+_m59 = _mlw.build_manifest(os.path.join(_d59, "PyCmd.exe"), "notes", "windows-v5.9.0")
+check("the manifest names the installer and its checksum",
+      _m59["installer"] and _m59["installerUrl"].endswith("/windows-v5.9.0/PyCmd-Setup.exe") and len(_m59["installerSha256"]) == 64, _m59)
+check("--updated is understood", "--updated" in open(os.path.join(ROOT, "windows", "pycmd_win", "app.py"), encoding="utf-8").read())
 
 say()
 if FAILURES:

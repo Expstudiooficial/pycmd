@@ -117,6 +117,43 @@ jobs:
           if (Test-Path "version.txt") { Write-Host ("it says: " + (Get-Content "version.txt" -Raw)) }
           if ($v.ExitCode -ne 0) { throw "--version exited $($v.ExitCode)" }
 
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress | Out-Null
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { $iscc = (Get-Command iscc -ErrorAction Stop).Source }
+          $version = python -c "import sys; sys.path.insert(0, 'windows'); from pycmd_win import host; print(host.VERSION)"
+          & $iscc "/DAppVersion=$version" "/DSourceExe=$PWD\dist-windows\build\PyCmd.exe" windows\build\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "the installer did not build" }
+          if (-not (Test-Path dist-windows/build/PyCmd-Setup.exe)) { throw "no installer was produced" }
+
+      # Installs it the way a person would get it, updates it the way PyCmd
+      # updates itself (the same installer over the top, silently), and takes
+      # it off again - on a real Windows machine, every build.
+      - name: Prove the installer installs, updates and uninstalls
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path dist-windows/build/PyCmd-Setup.exe).Path
+          $quiet = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/nolaunch=1")
+          $p = Start-Process $setup -ArgumentList $quiet -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "a silent install exited $($p.ExitCode)" }
+          $exe = Join-Path $env:LOCALAPPDATA "Programs\PyCmd\PyCmd.exe"
+          if (-not (Test-Path $exe)) { throw "PyCmd.exe is not in %LOCALAPPDATA%\Programs\PyCmd" }
+          $link = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\PyCmd.lnk"
+          if (-not (Test-Path $link)) { throw "there is no Start menu shortcut" }
+          $v = Start-Process $exe -ArgumentList "--version" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "installed-version.txt"
+          if ($v.ExitCode -ne 0) { throw "the installed PyCmd would not start" }
+          Write-Host ("installed: " + (Get-Content installed-version.txt -Raw))
+          $u = Start-Process $setup -ArgumentList $quiet -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "installing over the top (an update) exited $($u.ExitCode)" }
+          $uninstaller = Join-Path (Split-Path $exe) "unins000.exe"
+          if (-not (Test-Path $uninstaller)) { throw "there is no uninstaller" }
+          Start-Process $uninstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          foreach ($i in 1..30) { if (-not (Test-Path $exe)) { break }; Start-Sleep -Milliseconds 500 }
+          if (Test-Path $exe) { throw "uninstalling left PyCmd.exe behind" }
+          Write-Host "installs, updates and uninstalls"
+
       - name: Report its size and hash
         shell: pwsh
         run: |
@@ -129,7 +166,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: PyCmd-windows
-          path: dist-windows/build/PyCmd.exe
+          path: |
+            dist-windows/build/PyCmd.exe
+            dist-windows/build/PyCmd-Setup.exe
           if-no-files-found: error
 
       # The point of building on Windows rather than cross-compiling: these are
@@ -182,6 +221,8 @@ jobs:
           name: PyCmd for Windows ${{ env.PYCMD_VERSION }}
           body_path: release-notes.md
           make_latest: true
-          files: dist-windows/build/PyCmd.exe
+          files: |
+            dist-windows/build/PyCmd-Setup.exe
+            dist-windows/build/PyCmd.exe
           overwrite_files: true
           fail_on_unmatched_files: true

@@ -501,9 +501,52 @@ async function Notes(screen) {
 // Settings
 // ---------------------------------------------------------------------------
 
+/* 5.9: updates come as an installer. Off / tell me / install by itself. */
+async function updatesCard() {
+  const st = await PyCmd.call('update.status', {});
+  const said = el('p', { class: 'muted', text: '' });
+  const mode = el('select', {},
+    ...[['notify', 'Tell me when there is a new version'], ['auto', 'Install new versions by themselves'], ['off', 'Never check']]
+      .map(([v, t]) => el('option', { value: v, text: t })));
+  mode.value = st.mode || 'notify';
+  mode.addEventListener('change', async () => {
+    const r = await PyCmd.call('update.settings', { mode: mode.value });
+    PyCmd.toast(r.ok ? 'Saved.' : r.error);
+  });
+  const install = el('button', { class: 'small primary', text: 'Install it', hidden: true,
+    onclick: () => installUpdate() });
+  const check = el('button', { class: 'small', text: 'Check now', onclick: async () => {
+    said.textContent = 'Checking…';
+    const r = await PyCmd.call('update.check', {});
+    if (!r.ok) { said.textContent = r.error || 'Could not check.'; return; }
+    said.textContent = r.newer ? 'PyCmd ' + r.version + ' is out. ' + (r.notes || '') : 'You have the newest PyCmd.';
+    install.hidden = !r.newer;
+  } });
+  const where = st.installed
+    ? 'Installed in ' + st.installDir + '. Updates replace it in place; your things stay in %LOCALAPPDATA%\\PyCmd.'
+    : 'This is a loose PyCmd.exe. The first update installs PyCmd properly - Start menu, uninstaller, the lot - in ' + st.installDir + '.';
+  if (st.available) { said.textContent = 'PyCmd ' + st.available.version + ' is out.'; install.hidden = false; }
+  return card(
+    el('div', { class: 'row spread' }, el('b', { text: 'PyCmd ' + (st.version || '') }), mode),
+    el('p', { class: 'muted', text: where }),
+    said,
+    el('div', { class: 'row' }, check, install));
+}
+
+async function installUpdate(silent) {
+  PyCmd.toast('Downloading the update and checking it…');
+  const r = await PyCmd.call('update.install', { silent: !!silent });
+  if (r.ok) PyCmd.toast('Installing - PyCmd closes and opens again by itself.');
+  else PyCmd.sheet('The update did not install', el('p', { text: r.error || 'Something went wrong.' }));
+}
+window.installUpdate = installUpdate;
+
 async function Settings(screen) {
   screen.appendChild(head('Settings', 'How PyCmd looks, and the few things it remembers.'));
   await lookLoad();
+
+  screen.appendChild(el('h2', { text: 'Updates' }));
+  screen.appendChild(await updatesCard());
 
   // The account lives on Learn, where the progress is; it is here as well
   // because Settings is where people look for "sign out".
