@@ -639,6 +639,16 @@ def _vswhere_cl() -> str:
     """
     if not WINDOWS:
         return ""
+    if _msvc_cache:
+        return _msvc_cache[0]
+    _msvc_cache.append(_load_msvc())
+    return _msvc_cache[0]
+
+
+_msvc_cache: list = []   # once per launch: vswhere + vcvars64 take seconds
+
+
+def _load_msvc() -> str:
     vswhere = os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe")
     if not os.path.isfile(vswhere):
         return ""
