@@ -211,6 +211,53 @@ def _ensure_project(path: str, language_id: str, toolchain: str, write) -> None:
 BUILT_IN = {"c": "C", "go": "Go", "rust": "Rust", "javascript": "JavaScript"}
 
 
+# Pages: a .html file "runs" by being served and opened in the browser. Served
+# rather than opened as file:// so relative links, fetch() and modules work.
+PAGE_EXTENSIONS = (".html", ".htm", ".xhtml", ".svg")
+_page_servers: dict = {}
+
+
+def serve_page(path: str) -> str:
+    """The http://127.0.0.1 address of this file, its folder served on demand."""
+    import functools
+    import http.server
+
+    folder = os.path.dirname(os.path.abspath(path))
+    server = _page_servers.get(folder)
+    if server is None:
+        class Quiet(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def end_headers(self):
+                self.send_header("Cache-Control", "no-store")
+                super().end_headers()
+
+        handler = functools.partial(Quiet, directory=folder)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, name="pycmd-page", daemon=True).start()
+        _page_servers[folder] = server
+    from urllib.parse import quote
+
+    return f"http://127.0.0.1:{server.server_address[1]}/{quote(os.path.basename(path))}"
+
+
+def run_page(path: str, write, run) -> dict:
+    url = serve_page(path)
+    write(f"[PyCmd] {os.path.basename(path)} is a page - serving its folder and opening it:\n"
+          f"[PyCmd]   {url}\n")
+    try:
+        import webbrowser
+
+        webbrowser.open(url)
+    except Exception as error:  # noqa: BLE001
+        write(f"[PyCmd] could not open a browser ({error}); open the address yourself.\n")
+    run.toolchain = "browser"
+    run.exit_code = 0
+    return {"ok": True, "exit": 0, "toolchain": "browser", "url": url, "run": run.as_dict()}
+
+
 def own_python() -> list:
     """The command that runs a script on PyCmd's own Python."""
     import sys
@@ -368,6 +415,8 @@ def run_file(path: str, write, prefer: str = "", run_id: str = "", args=None,
     _runs[run.id] = run
 
     try:
+        if path.lower().endswith(PAGE_EXTENSIONS):
+            return run_page(path, write, run)
         plan = toolchains.plan_for(path, language_id, prefer=prefer)
 
         if not plan.get("ok") and language_id == "python":

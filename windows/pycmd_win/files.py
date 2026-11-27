@@ -96,7 +96,8 @@ def _entry(path: str) -> dict:
         "language": language.get("name", ""),
         "language_id": language.get("id", ""),
         "mode": language.get("mode", ""),
-        "runnable": language.get("mode") == "run",
+        # A page runs too: Run serves it and opens it in the browser.
+        "runnable": language.get("mode") == "run" or path.lower().endswith((".html", ".htm")),
     }
 
 

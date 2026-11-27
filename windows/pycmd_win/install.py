@@ -162,6 +162,14 @@ def available() -> list:
     return [manager.as_dict() for manager in MANAGERS]
 
 
+# Arguments a package needs beyond its name. Build Tools without a workload
+# install an empty shell with no compiler in it - which is what 5.5 did.
+EXTRA_ARGS = {
+    ("msvc", "winget"): ("--override", "--quiet --wait --norestart --add "
+                         "Microsoft.VisualStudio.Workload.VCTools --includeRecommended"),
+}
+
+
 def best_manager(chain) -> str:
     """Which installed manager can install this toolchain, preferring cheap.
 
@@ -222,7 +230,9 @@ def plan(toolchain_id: str) -> dict:
             "needsAdmin": manager.needs_admin,
             "canBootstrap": manager.can_bootstrap,
             "command": " ".join([manager.program] +
-                                [p.format(package=package) for p in manager.install_verb]),
+                                [p.format(package=package) for p in manager.install_verb] +
+                                [f'"{a}"' if " " in a else a
+                                 for a in EXTRA_ARGS.get((chain.id, manager_id), ())]),
         })
 
     if not routes:
@@ -542,7 +552,7 @@ def install(toolchain_id: str, write=None, allow_bootstrap: bool = True,
         # with "scoop is not there" on every machine that had scoop.
         command = [where] + [
             part.format(package=route["package"]) for part in manager.install_verb
-        ]
+        ] + list(EXTRA_ARGS.get((toolchain_id, manager_id), ()))
         write(f"[PyCmd] {chain.name} through {manager.name}\n")
         ok, output = _run(command, INSTALL_TIMEOUT, write)
 

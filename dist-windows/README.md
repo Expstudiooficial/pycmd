@@ -37,6 +37,38 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 5.6
+
+### HTML runs
+
+Press **Run** on an `.html` file and PyCmd serves its folder on a local
+address and opens it in your browser. That works from the editor, Files, the
+Run tab, or `run index.html` in the console. Relative links, scripts and
+`fetch()` work because it is served rather than opened as a file.
+
+### Installs that work
+
+Seven toolchains offered install lines that do not exist: `scoop install tcl`,
+`clojure`, `ocaml` and `guile` are in no Scoop bucket, and there is no
+Chocolatey `guile`. Now:
+
+- **Tcl** installs with `choco install magicsplat-tcl-tk`.
+- **Clojure** installs with `choco install clojure` (it also needs a JDK).
+- **Haskell** installs with `choco install ghc`.
+- **OCaml** installs with `choco install ocpwin`.
+- **GnuCOBOL** installs with `choco install gnucobol`.
+- **Scheme** files run on **Racket**, since Guile has no Windows build.
+- **MSVC** installs the Build Tools *with* the C++ workload. Before, it installed
+  them with no compiler in them.
+
+### Found where installers put them
+
+Tcl, GHC, OCaml, GnuCOBOL and Racket are found in the folders their installers
+use, even when PATH was not updated. MSVC is found through Visual Studio's own
+locator and its build environment is loaded automatically, so no Developer
+Command Prompt is needed. GnuCOBOL gets its config and copybook folders set up
+too.
+
 ## What is new in 5.5
 
 ### Creator 3.0

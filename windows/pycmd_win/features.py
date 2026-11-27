@@ -347,24 +347,19 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "5.5",
-    "title": "PyCmd for Windows 5.5",
+    "version": "5.6",
+    "title": "PyCmd for Windows 5.6",
     "items": [
-        ["Creator 3.0",
-         "Rebuilt: run Python, C, Go, Rust and JavaScript right in the Creator tab, with an Input "
-         "box for input(); live previews for HTML, CSS and Markdown; paste code and get it back as "
-         "blocks; drag and drop, undo and redo, search, and projects that save themselves."],
-        ["Python files run on every PC",
-         "No Python installed, or only the Microsoft Store placeholder? Run now uses PyCmd's own "
-         "Python - the whole standard library is in the exe. input() works in the console, and "
-         "printing emoji no longer crashes on Windows code pages."],
-        ["Guides and plugin tabs scroll at any zoom",
-         "Above 100% zoom the guide window and plugin tabs ran off the bottom of the window. They "
-         "fit now, and an open guide scrolls with the wheel or the keyboard straight away."],
-        ["Plugins stay up to date",
-         "A bundled plugin is replaced whenever its files change, not only when its version "
-         "number does - which is why Creator kept its old look - and an update keeps what the "
-         "plugin saved. Installed plugins are at the top of the Plugins tab."],
+        ["HTML runs",
+         "Press Run on an .html file - in the editor, Files, the Run tab or `run index.html` in the "
+         "console - and PyCmd serves its folder and opens it in your browser."],
+        ["Installs that work",
+         "Seven toolchains offered install lines that do not exist. Tcl, Clojure, Haskell, OCaml and "
+         "GnuCOBOL now use real packages, Scheme runs on Racket (Guile has no Windows build), and "
+         "MSVC installs with its C++ compiler."],
+        ["Found where installers put them",
+         "Tcl, GHC, OCaml, GnuCOBOL and Racket are found even when their installer did not add them "
+         "to PATH, and MSVC works without a Developer Command Prompt."],
     ],
 }
 

@@ -235,8 +235,8 @@ check("scoop is tried first", install.PREFERENCE[0] == "scoop", install.PREFEREN
 # Every toolchain must be installable somehow, or say plainly that it is not.
 _routeless = [c.id for c in toolchains.TOOLCHAINS
               if not any(install._package_for(c, m) for m in install.PREFERENCE)]
-check("everything has an install route except what ships with Windows",
-      sorted(_routeless) == ["cmd", "powershell"], _routeless)
+check("everything has an install route except what ships with Windows, and Guile (no Windows build)",
+      sorted(_routeless) == ["cmd", "guile", "powershell"], _routeless)
 
 _noplan = []
 for _chain in toolchains.TOOLCHAINS:
@@ -1583,7 +1583,7 @@ import subprocess as _sp55  # noqa: E402
 import tempfile as _tf55  # noqa: E402
 from pycmd_win import app as _app55, bundle as _bundle55, runner as _runner55, toolchains as _tc55  # noqa: E402
 
-check("the version is 5.5", host_module.VERSION == "5.5" and host_module.BUILD == 10)
+check("the version is 5.5 or later", host_module.BUILD >= 10)
 check("a python.exe outside WindowsApps is not the Store's",
       not _tc55._store_stub(sys.executable))
 _plan55 = _runner55.own_python_plan(__file__)
@@ -1628,6 +1628,31 @@ check("a bundled plugin is compared by its files", "same_as_installed" in open(
     os.path.join(ROOT, "windows", "pycmd_win", "bundle.py"), encoding="utf-8").read())
 _cr55 = json.load(open(os.path.join(ROOT, "app", "src", "main", "assets", "plugins", "creator", "plugin.json"), encoding="utf-8"))
 check("Creator is 3.0", _cr55["version"].startswith("3."), _cr55["version"])
+
+say("\n== 5.6 ==")
+check("the version is 5.6", host_module.VERSION == "5.6" and host_module.BUILD == 11)
+_rows56 = {c.id: c for c in _tc55.TOOLCHAINS}
+_bad56 = {"scoop install tcl", "scoop install clojure", "scoop install ocaml", "scoop install guile",
+          "choco install guile", "winget install Haskell.GHCup"}
+check("no install line names a package that does not exist",
+      not any(line in _bad56 for c in _rows56.values() for line in (c.winget, c.scoop, c.choco)))
+check("Tcl, Clojure, Haskell, OCaml and COBOL each have a real package",
+      _rows56["tclsh"].choco and _rows56["clojure"].choco and _rows56["runghc"].choco
+      and _rows56["ocaml"].choco and _rows56["cobc"].choco)
+check("Scheme files run on Racket", "racket-scheme" in _rows56 and "scheme" in _rows56["racket-scheme"].languages)
+from pycmd_win import install as _in56  # noqa: E402
+check("MSVC installs with the C++ workload", "VCTools" in " ".join(_in56.EXTRA_ARGS[("msvc", "winget")]))
+check("toolchains are looked for outside PATH", "runghc" in _tc55.ELSEWHERE and "tclsh" in _tc55.ELSEWHERE)
+_page56 = os.path.join(_dir55, "index.html")
+with open(_page56, "w", encoding="utf-8") as _h56:
+    _h56.write("<h1>hello</h1>")
+import webbrowser as _wb56  # noqa: E402
+_wb56.open = lambda url: True
+_ran56 = _runner55.run_file(_page56, lambda text: None)
+import urllib.request as _ur56  # noqa: E402
+check("Run on an .html file serves it", _ran56["ok"] and b"hello" in _ur56.urlopen(_ran56["url"]).read(), _ran56)
+from pycmd_win import files as _files56  # noqa: E402
+check("an .html file shows a Run button", _files56._entry(_page56)["runnable"])
 
 say()
 if FAILURES:

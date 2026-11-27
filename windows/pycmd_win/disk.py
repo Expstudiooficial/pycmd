@@ -644,7 +644,7 @@ def find_runnable(root: str, limit: int = 400, depth: int = 6) -> dict:
             # `mode` is the registry's word for it: "run" means PyCmd has a
             # way to execute the file. There is no "runnable" key - looking
             # for one found nothing, every time, silently.
-            if language.get("mode") != "run":
+            if language.get("mode") != "run" and not name.lower().endswith((".html", ".htm")):
                 continue
             try:
                 size = os.path.getsize(full)

@@ -287,7 +287,8 @@ TOOLCHAINS = [
         "tclsh", "Tcl", ["tcl"], "tclsh", _steps_run("{exe}", "{src}"),
         version_args=("-encoding", "utf-8", os.devnull),
         version_pattern=r"()",
-        scoop="scoop install tcl", site="https://www.tcl.tk/",
+        choco="choco install magicsplat-tcl-tk", site="https://www.magicsplat.com/tcl-installer/",
+        note="Scoop has no Tcl; this is the Magicsplat build, which is what most Windows Tcl users run.",
     ),
     Toolchain(
         "awk", "AWK", ["awk"], "gawk", _steps_run("{exe}", "-f", "{src}"),
@@ -350,8 +351,9 @@ TOOLCHAINS = [
         version_pattern=r"Version (\d+\.\d+\.\d+)",
         winget="winget install Microsoft.VisualStudio.2022.BuildTools",
         site="https://visualstudio.microsoft.com/downloads/",
-        note="Only on the PATH inside a Developer Command Prompt, so PyCmd "
-             "usually will not see it unless it was started from one.",
+        note="PyCmd installs the Build Tools with the C++ workload, then finds cl.exe "
+             "itself and loads its environment - no Developer Command Prompt needed. "
+             "The download is a few GB; for something lighter, install GCC or Clang.",
     ),
     Toolchain(
         "objc", "Clang (Objective-C)", ["objectivec"], "clang",
@@ -462,7 +464,8 @@ TOOLCHAINS = [
         "clojure", "Clojure", ["clojure"], "clojure",
         _steps_run("{exe}", "-M", "{src}"),
         version_args=("--version",),
-        scoop="scoop install clojure", site="https://clojure.org/guides/install_clojure",
+        choco="choco install clojure", site="https://clojure.org/guides/install_clojure",
+        note="Clojure runs on Java: install a JDK too (Toolchains -> Java) if it says java is missing.",
     ),
     Toolchain(
         "dotnet", ".NET SDK", ["csharp", "fsharp", "visualbasic"], "dotnet",
@@ -491,14 +494,16 @@ TOOLCHAINS = [
     Toolchain(
         "runghc", "Haskell", ["haskell"], "runghc", _steps_run("{exe}", "{src}"),
         version_args=("--version",),
-        winget="winget install Haskell.GHCup", choco="choco install ghc",
+        choco="choco install ghc",
         site="https://www.haskell.org/ghcup/",
     ),
     Toolchain(
         "ocaml", "OCaml", ["ocaml"], "ocaml", _steps_run("{exe}", "{src}"),
         version_args=("-version",),
-        scoop="scoop install ocaml", choco="choco install ocpwin",
+        choco="choco install ocpwin",
         site="https://ocaml.org/install",
+        note="OCPWin is an older OCaml (4.02) that installs in one step. An opam "
+             "install (ocaml.org) is found too, once `opam init` has made a switch.",
     ),
     Toolchain(
         "racket", "Racket", ["racket"], "racket", _steps_run("{exe}", "{src}"),
@@ -526,8 +531,18 @@ TOOLCHAINS = [
     Toolchain(
         "guile", "Scheme (Guile)", ["scheme"], "guile",
         _steps_run("{exe}", "-s", "{src}"),
-        version_args=("--version",), scoop="scoop install guile", choco="choco install guile",
+        version_args=("--version",),
         site="https://www.gnu.org/software/guile/",
+        note="Guile has no Windows package. Scheme files run on Racket instead "
+             "(the next row) - install that and .scm files just work.",
+    ),
+    Toolchain(
+        "racket-scheme", "Scheme (Racket)", ["scheme"], "racket",
+        _steps_run("{exe}", "-f", "{src}"),
+        version_args=("--version",),
+        winget="winget install Racket.Racket", scoop="scoop install racket",
+        choco="choco install racket", site="https://racket-lang.org/",
+        note="Racket loads a .scm file as plain Scheme: define, let, display and the rest.",
     ),
 
     # -- the older ones, still very much in use ---------------------------
@@ -583,6 +598,103 @@ def for_language(language_id: str):
 # ---------------------------------------------------------------------------
 # Finding them
 # ---------------------------------------------------------------------------
+
+# Where installers put things without adding them to PATH (or before a new
+# PATH reaches this process). Globs, %VARS% expanded. Checked after PATH.
+ELSEWHERE = {
+    "tclsh": [r"%LOCALAPPDATA%\Apps\Tcl*\bin", r"%ProgramFiles%\Tcl*\bin", r"C:\Tcl*\bin"],
+    "runghc": [r"C:\ghcup\bin", r"%APPDATA%\ghcup\bin", r"C:\tools\ghc-*\bin",
+            r"%ProgramData%\chocolatey\lib\ghc*\tools\ghc-*\bin"],
+    "ocaml": [r"%LOCALAPPDATA%\opam\default\bin", r"%LOCALAPPDATA%\opam\*\bin",
+              r"%ProgramFiles%\OCPWin*\bin", r"%ProgramFiles(x86)%\OCPWin*\bin"],
+    "cobc": [r"%ProgramData%\chocolatey\lib\gnucobol*\tools\bin",
+             r"%ProgramData%\chocolatey\lib\gnucobol*\tools\*\bin", r"C:\GnuCOBOL*\bin",
+             r"%ProgramFiles%\GnuCOBOL*\bin", r"%ProgramFiles(x86)%\GnuCOBOL*\bin"],
+    "clojure": [r"%ProgramFiles%\WindowsPowerShell\Modules\ClojureTools"],
+    "racket": [r"%ProgramFiles%\Racket", r"%ProgramFiles(x86)%\Racket"],
+}
+# Other names the same program goes by.
+ALIASES = {"tclsh": ("tclsh90", "tclsh86t", "tclsh86"), "clojure": ("clj",)}
+
+
+def _elsewhere(program: str) -> str:
+    import glob
+
+    names = (program,) + ALIASES.get(program, ())
+    for pattern in ELSEWHERE.get(program, ()):
+        for folder in sorted(glob.glob(os.path.expandvars(pattern)), reverse=True):
+            for name in names:
+                for ext in ((".exe", ".cmd", ".bat", ".ps1") if WINDOWS else ("",)):
+                    candidate = os.path.join(folder, name + ext)
+                    if os.path.isfile(candidate):
+                        return candidate
+    return ""
+
+
+def _vswhere_cl() -> str:
+    """cl.exe from a Visual Studio / Build Tools install, with its environment loaded.
+
+    cl needs INCLUDE, LIB and its own PATH, which only vcvars64.bat sets. They
+    are read once and put into this process, so every later build sees them.
+    """
+    if not WINDOWS:
+        return ""
+    vswhere = os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe")
+    if not os.path.isfile(vswhere):
+        return ""
+    try:
+        root = subprocess.run([vswhere, "-latest", "-products", "*", "-requires",
+                               "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                               "-property", "installationPath"], capture_output=True, text=True,
+                              timeout=20, creationflags=_no_window()).stdout.strip().splitlines()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if not root:
+        return ""
+    vcvars = os.path.join(root[0], "VC", "Auxiliary", "Build", "vcvars64.bat")
+    if not os.path.isfile(vcvars):
+        return ""
+    try:
+        dump = subprocess.run(f'cmd /d /c ""{vcvars}" >nul && set"', capture_output=True,
+                              text=True, timeout=60, creationflags=_no_window(), shell=False).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    for line in dump.splitlines():
+        name, sep, value = line.partition("=")
+        if sep and name.upper() in ("PATH", "INCLUDE", "LIB", "LIBPATH", "VCINSTALLDIR",
+                                    "WINDOWSSDKDIR", "UCRTVERSION", "VCTOOLSINSTALLDIR"):
+            os.environ[name] = value
+    return shutil.which("cl") or ""
+
+
+def _cobol_env(path: str) -> None:
+    """GnuCOBOL finds its config, copybooks and C compiler from these, not from PATH."""
+    root = os.path.dirname(os.path.dirname(path))
+    for name, sub in (("COB_CONFIG_DIR", "config"), ("COB_COPY_DIR", "copy"),
+                      ("COB_INCLUDE_PATH", "include"), ("COB_LIB_PATH", "lib")):
+        if not os.environ.get(name) and os.path.isdir(os.path.join(root, sub)):
+            os.environ[name] = os.path.join(root, sub)
+    bin_dir = os.path.dirname(path)
+    if bin_dir.lower() not in os.environ.get("PATH", "").lower():
+        os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+
+
+def _locate(chain) -> str:
+    """PATH first, then the places its installer is known to use."""
+    path = _which(chain.program)
+    if not path:
+        for alias in ALIASES.get(chain.program, ()):
+            path = _which(alias)
+            if path:
+                break
+    if not path:
+        path = _elsewhere(chain.program)
+    if not path and chain.id == "msvc":
+        path = _vswhere_cl()
+    if path and chain.id == "cobc":
+        _cobol_env(path)
+    return path
+
 
 def _which(program: str) -> str:
     """Where a program is, or "".
@@ -705,6 +817,12 @@ def detect(toolchain_id: str, refresh: bool = False) -> dict:
         if remembered is not None and re.search(
                 r"(?i)missing|usage|error|not recognized", str(remembered.get("version", ""))):
             remembered = None
+        if remembered is not None and chain.id == "msvc" and WINDOWS:
+            # cl.exe is useless without the environment vcvars64.bat sets.
+            if not _vswhere_cl():
+                remembered = None
+        if remembered is not None and chain.id == "cobc":
+            _cobol_env(remembered["path"])
         if remembered is not None:
             found = {"path": remembered["path"], "version": remembered["version"],
                      "checked_at": int(time.time()), "remembered": True}
@@ -712,7 +830,7 @@ def detect(toolchain_id: str, refresh: bool = False) -> dict:
                 _found[toolchain_id] = found
             return dict(found)
 
-    path = _which(chain.program)
+    path = _locate(chain)
     if path and chain.id == "python" and _store_stub(path):
         # Windows ships python.exe in WindowsApps as a link to the Store. It
         # runs nothing; it prints "Python was not found" and exits 9009, which

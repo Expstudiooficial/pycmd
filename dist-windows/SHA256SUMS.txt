@@ -1,1 +1,2 @@
-c35b5fa1218e52d3db00346840489813fe3dced5649be293b88166c7f2f191bb  PyCmd.exe
+# PyCmd for Windows 5.6 (build 11) has not been built yet.
+# The checksum appears here when a Windows release tag builds it.
