@@ -100,6 +100,15 @@ fun MoreScreen(
         }
         item {
             DestinationRow(
+                icon = PyIcons.NoteAdd,
+                title = "Notes",
+                subtitle = "A board for plans: notes, to-dos, images and arrows",
+                badge = null,
+                onClick = { onSelect(Tab.NOTES) },
+            )
+        }
+        item {
+            DestinationRow(
                 icon = PyIcons.Terminal,
                 title = "MCP · AI agents",
                 subtitle = "Let Claude Code, Antigravity, Cursor and others drive PyCmd",

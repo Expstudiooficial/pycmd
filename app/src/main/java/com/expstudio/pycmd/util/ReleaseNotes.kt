@@ -41,6 +41,30 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 37,
+            versionName = "3.7.0",
+            headline = "Notes is built in, you can write in it, and the board does a lot more.",
+            added = listOf(
+                "Notes (More > Notes) is part of PyCmd now, full screen, instead of the Board " +
+                    "plugin. Your boards moved over by themselves.",
+                "Long-press a card, an arrow or the board for what you can do with it. Use " +
+                    "Select to pick several cards and move, colour or delete them together.",
+                "Sections hold cards and move them with them. There are code cards, and " +
+                    "notes understand **bold**, *italic*, `code` and - lists.",
+                "Arrows can be one-way, two-way or plain lines, dashed, and any colour. Cards " +
+                    "can be locked, brought to the front or sent to the back.",
+                "Find, snap to grid, and templates: Kanban, mind map, my week, project, and " +
+                    "pros and cons.",
+                "Add pictures from your gallery, and Export a board as a picture (.png) or as " +
+                    "Markdown.",
+                "AI agents over MCP can read your boards and add notes to them.",
+            ),
+            fixed = listOf(
+                "Text in a card can be edited: tap it twice, as often as you like. In 3.6 the " +
+                    "board took the taps before they reached the text.",
+            ),
+        ),
+        ReleaseNote(
             versionCode = 36,
             versionName = "3.6.0",
             headline = "Board: notes, images and to-dos you arrange and connect. And ten new console tools.",

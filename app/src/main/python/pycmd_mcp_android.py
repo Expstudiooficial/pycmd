@@ -155,6 +155,23 @@ def build(version="") -> pycmd_mcp.Registry:
         "where it is, ui_navigate to change tab, ui_screenshot to look, console_run to type "
         "into the Console. Call help first if unsure.")
     path = "a path inside the workspace, e.g. 'site/index.html' ('' is the top)"
+    def board(call):
+        def run(text="", template="", id=""):
+            import json as _json
+
+            import pycmd_board
+
+            body = {"text": text} if call == "note" else ({"template": template} if call == "create" else {"id": id})
+            return _json.loads(pycmd_board.api(call, _json.dumps(body), _state["workspace"]))
+        return run
+
+    r.add("board_note", "Drops a note (a sticky card) on the current board in the Notes tab.",
+          board("note"), {"text": "what the note says"}, ["text"])
+    r.add("board_list", "Lists the boards in the Notes tab.", board("listing"), {}, read_only=True)
+    r.add("board_read", "Reads one board in full: its cards (notes, to-dos, links...) and the arrows between them.",
+          board("load"), {"id": "board id from board_list (empty for the current one)"}, read_only=True)
+    r.add("board_new", "Makes a new board: blank, kanban, mindmap, week, project or proscons.",
+          board("create"), {"template": "blank | kanban | mindmap | week | project | proscons"})
     r.add("files_list", "Lists a folder in the workspace.", files_list, {"path": path},
           read_only=True)
     r.add("file_read", "Reads a text file from the workspace.", file_read, {"path": path},

@@ -187,6 +187,7 @@ object PythonEngine {
     private lateinit var cloudflare: PyObject
     private lateinit var music: PyObject
     private lateinit var teach: PyObject
+    private lateinit var board: PyObject
 
     private lateinit var appContext: Context
     private lateinit var workspaceDir: File
@@ -338,6 +339,7 @@ object PythonEngine {
             cloudflare = python.getModule("pycmd_cloudflare")
             music = python.getModule("pycmd_music")
             teach = python.getModule("pycmd_teach")
+            board = python.getModule("pycmd_board")
 
             val version = runtime.callAttr(
                 "configure",
@@ -1397,6 +1399,17 @@ object PythonEngine {
         sourceName: String = "",
         bundled: Boolean = false,
     ): JSONObject = pluginCall("install", path, sourceName, if (bundled) "1" else "")
+
+    /**
+     * One call to the Notes board (pycmd_board), answered as JSON text. Blocking on
+     * purpose: the board page calls it through a @JavascriptInterface, which
+     * runs on the WebView's own bridge thread, never on the main one.
+     */
+    fun boardCallBlocking(name: String, json: String, workspace: String): String {
+        if (!::board.isInitialized) return "{\"ok\":false,\"error\":\"Python is still starting - try again in a moment.\"}"
+        return runCatching { board.callAttr("api", name, json, workspace).toString() }
+            .getOrElse { "{\"ok\":false,\"error\":" + JSONObject.quote(it.message ?: "board call failed") + "}" }
+    }
 
     suspend fun listPlugins(): JSONObject = pluginCall("listing")
 

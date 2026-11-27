@@ -91,6 +91,7 @@ enum class Tab(val label: String) {
     MUSIC("Music"),
     TEACH("PyCmdTeach"),
     MCP("MCP"),
+    NOTES("Notes"),
     APPEARANCE("Appearance"),
     SYSTEM("System");
 
@@ -115,7 +116,7 @@ enum class Tab(val label: String) {
             APPEARANCE -> "appearance"
             // The console and the editor are a full-screen WebView each, with
             // nowhere to put a card that would not be in the way.
-            CONSOLE, EDITOR, MORE, TOOL, PLUGIN_PANEL, MCP -> null
+            CONSOLE, EDITOR, MORE, TOOL, PLUGIN_PANEL, MCP, NOTES -> null
         }
 }
 
@@ -660,6 +661,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * between updates.
      */
     private suspend fun installBundledPlugins() {
+        // 3.7: Notes is built in. The Board plugin's boards move into the
+        // workspace and the plugin is removed, before anything else is installed.
+        withContext(Dispatchers.IO) {
+            val reply = engine.boardCallBlocking("retire", "{}", workspaceRootPath())
+            if (reply.contains("\"retired\": true")) DebugLog.info(TAG_VIEW, "Board plugin is now the built-in Notes", "")
+        }
         val staged = workspace.stageBundledPlugins()
         if (staged.isEmpty()) return
 
@@ -1468,6 +1475,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         "teach", "pycmdteach" -> Tab.TEACH
         "appearance", "themes" -> Tab.APPEARANCE
         "mcp", "agents", "ai" -> Tab.MCP
+        "notes", "board", "boards" -> Tab.NOTES
         "more" -> Tab.MORE
         else -> null
     }
@@ -3794,6 +3802,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun workspaceRootPath(): String = workspace.root.absolutePath
+
+    /** The Notes board's bridge: called from the WebView's JavaScript thread. */
+    fun boardCall(name: String, json: String): String =
+        engine.boardCallBlocking(name, json, workspaceRootPath())
 
     /** What the MCP bridge needs to read for ui_state. */
     fun mcpScreenState(): JSONObject = JSONObject()

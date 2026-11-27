@@ -1,17 +1,34 @@
 # Prebuilt APK
 
-`PyCmd-3.6.0.apk` — ready to install, nothing else needed.
+`PyCmd-3.7.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 3.6.0 |
+| Version | 3.7.0 |
 | Size | 27 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
 The universal APK, as in 2.7.0: one file for a phone and for an emulator.
+
+## What is new in 3.7.0
+
+**Notes is built in** (More > Notes), full screen, and replaces the Board plugin. Your boards moved over by themselves.
+
+**Fixed:** you can write in a card. Tap it twice, as often as you like. In 3.6 the board took the taps before they reached the text.
+
+**What the board does now:**
+- **Menus:** long-press a card, an arrow or the board for what you can do with it.
+- **Select many:** **Select** lets you move, colour, duplicate or delete several cards together.
+- **Sections and cards:** sections group cards and carry them along when moved. There are code cards, and `**bold**`, `*italic*`, `` `code` `` and `- lists` work in notes.
+- **Arrows:** one-way, two-way or plain lines, solid or dashed, in any colour.
+- **Arranging:** lock a card, or bring it to the front or send it to the back. Snap to grid.
+- **Find** jumps to a card.
+- **Templates:** Kanban, mind map, my week, project, and pros and cons.
+- **Pictures** from your gallery, and **Export** as a picture (.png) or Markdown.
+- **AI agents** over MCP can read boards and add notes.
 
 ## What is new in 3.6.0
 

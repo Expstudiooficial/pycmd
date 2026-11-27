@@ -262,7 +262,7 @@ object CustomPlugins {
     private const val PREFS = "pycmd-custom-plugins"
     private const val KEY_ENABLED = "enabled"
     private const val KEY_OFFERED = "offered_default_on"
-    private val DEFAULT_ON = setOf("pycmd.board")
+    private val DEFAULT_ON = emptySet<String>()   // Board was here until Notes became built in (3.7)
     private const val TAG = "plugins"
 
     private var prefs: SharedPreferences? = null

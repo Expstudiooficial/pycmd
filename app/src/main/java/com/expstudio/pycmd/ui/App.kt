@@ -314,7 +314,7 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
         // A destination reached through More goes back to More first.
         val parent = if (tab in setOf(
                 Tab.PACKAGES, Tab.DOWNLOADS, Tab.PLUGINS, Tab.DOCS, Tab.SYSTEM,
-                Tab.PAGES, Tab.MUSIC, Tab.TEACH, Tab.APPEARANCE, Tab.MCP,
+                Tab.PAGES, Tab.MUSIC, Tab.TEACH, Tab.APPEARANCE, Tab.MCP, Tab.NOTES,
             )
         ) {
             Tab.MORE
@@ -649,6 +649,8 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                 )
 
                 Tab.APPEARANCE -> AppearanceScreen()
+
+                Tab.NOTES -> NotesScreen(onCall = viewModel::boardCall)
 
                 Tab.MCP -> McpScreen(
                     state = mcpState,

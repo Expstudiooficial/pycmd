@@ -1,0 +1,868 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Notes</title>
+<style>
+  /* The built-in Notes board, shared by the phone (a full-screen WebView) and
+     the PC (an iframe). It talks to the app through window.PyBoard.call(). */
+  :root {
+    --b-bg: var(--bg, #0b0f0c); --b-fg: var(--fg, #e6ede7); --b-surface: var(--surface, #121915);
+    --b-high: var(--surface-high, #1a231e); --b-line: var(--outline, #26332b); --b-muted: var(--muted, #8b9a90);
+    --b-accent: var(--accent, #5fd38d); --b-soft: var(--accent-soft, rgba(95, 211, 141, .14));
+    --b-on: var(--on-accent, #04140a); --b-danger: var(--danger, #e8635f);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100vh; overflow: hidden; }
+  body { background: var(--b-bg); color: var(--b-fg); font: 13.5px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
+         display: flex; flex-direction: column; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { background: var(--b-high); border: 1px solid var(--b-line); border-radius: 9px; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--b-accent); }
+  button.on, button.primary { background: var(--b-accent); color: var(--b-on); border-color: var(--b-accent); font-weight: 600; }
+  button:disabled { opacity: .4; cursor: default; }
+  input, select { background: var(--b-bg); border: 1px solid var(--b-line); border-radius: 8px; padding: 5px 8px; outline: none; }
+  input:focus, select:focus { border-color: var(--b-accent); }
+  .bar { display: flex; gap: 6px; align-items: center; padding: 7px 10px; background: var(--b-surface);
+         border-bottom: 1px solid var(--b-line); overflow-x: auto; flex: 0 0 auto; scrollbar-width: none; }
+  .bar::-webkit-scrollbar { display: none; }
+  .sep { width: 1px; align-self: stretch; background: var(--b-line); margin: 0 2px; flex: 0 0 auto; }
+  #boardName { width: 140px; font-weight: 600; flex: 0 0 auto; }
+  #search { width: 130px; flex: 0 0 auto; }
+  .swatch { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 2px solid var(--b-line); flex: 0 0 auto; }
+  .swatch.on { border-color: var(--b-fg); }
+  .muted { color: var(--b-muted); font-size: 12px; white-space: nowrap; }
+
+  #vp { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
+        cursor: default; background-color: var(--b-bg); background-image: radial-gradient(circle, var(--b-line) 1.2px, transparent 1.3px); }
+  #vp.panning { cursor: grabbing; }
+  #vp.connecting .card { cursor: crosshair; }
+  #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  #wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; z-index: 1; pointer-events: none; }
+  #wires .line { fill: none; stroke-width: 2.2; }
+  #wires .hit { fill: none; stroke: transparent; stroke-width: 18; pointer-events: stroke; cursor: pointer; }
+  #wires text { font-size: 12px; fill: var(--b-fg); paint-order: stroke; stroke: var(--b-bg); stroke-width: 4px; }
+  #temp { stroke: var(--b-accent); stroke-dasharray: 6 5; fill: none; stroke-width: 2; }
+  #band { position: absolute; border: 1.5px dashed var(--b-accent); background: var(--b-soft); display: none; z-index: 50; pointer-events: none; }
+
+  .card { position: absolute; border-radius: 12px; background: var(--card, var(--b-surface)); color: var(--ink, var(--b-fg));
+          border: 1px solid rgba(0, 0, 0, .14); box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .55); display: flex; flex-direction: column;
+          overflow: hidden; z-index: 2; }
+  .card.none { border-color: var(--b-line); }
+  .card.sel { outline: 2.5px solid var(--b-accent); outline-offset: 2px; z-index: 6; }
+  .card.found { box-shadow: 0 0 0 4px #ffd54a; }
+  .card.target { outline: 2.5px dashed var(--b-accent); outline-offset: 3px; }
+  .card.locked::after { content: "🔒"; position: absolute; right: 6px; top: 4px; font-size: 11px; opacity: .55; }
+  .card.heading { background: transparent; border: 0; box-shadow: none; }
+  .card.heading .text { font-size: 26px; font-weight: 800; letter-spacing: -.01em; padding: 6px 4px; }
+  .card.frame { background: color-mix(in srgb, var(--card, var(--b-surface)) 22%, transparent); border: 2px dashed color-mix(in srgb, var(--card, var(--b-line)) 70%, transparent);
+                box-shadow: none; z-index: 0; color: var(--b-fg); }
+  .card.frame.sel { z-index: 0; }
+  .card.frame .text { font-weight: 700; font-size: 15px; flex: 0 0 auto; }
+  .card.code { --card: #10161c; --ink: #d6e2ea; }
+  .card.code .text { font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; font-size: 12.5px; white-space: pre; overflow: auto; }
+  .text { padding: 10px 12px; white-space: pre-wrap; word-break: break-word; outline: none; flex: 1 1 auto; overflow: hidden; min-height: 1.5em; }
+  .text b { font-weight: 700; } .text code { background: rgba(0, 0, 0, .12); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+  .text ul { margin: 2px 0; padding-left: 18px; } .text a { color: inherit; }
+  [contenteditable="true"] { cursor: text; background: rgba(255, 255, 255, .16); user-select: text; -webkit-user-select: text; box-shadow: inset 0 0 0 2px var(--b-accent); }
+  .text:empty::before, .item span:empty::before { content: attr(data-hint); opacity: .45; }
+  .todo .title { font-weight: 700; padding: 9px 12px 2px; flex: 0 0 auto; }
+  .items { padding: 2px 10px 6px; overflow: auto; flex: 1 1 auto; }
+  .item { display: flex; gap: 7px; align-items: flex-start; padding: 2px 0; }
+  .item input { margin-top: 3px; width: 16px; height: 16px; flex: 0 0 auto; }
+  .item span { flex: 1; outline: none; min-height: 1.3em; border-radius: 4px; }
+  .item.done span { text-decoration: line-through; opacity: .6; }
+  .add-item { margin: 0 10px 8px; padding: 2px 8px; font-size: 12px; background: rgba(0, 0, 0, .08); border-color: rgba(0, 0, 0, .15); color: inherit; align-self: flex-start; }
+  .card img { width: 100%; flex: 1 1 auto; min-height: 0; object-fit: cover; pointer-events: none; display: block; }
+  .card.image .text { flex: 0 0 auto; padding: 6px 10px; font-size: 12px; }
+  .card.link a { color: inherit; font-size: 12px; word-break: break-all; padding: 0 12px 10px; display: block; opacity: .8; }
+  .dot { position: absolute; right: 3px; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%;
+         background: var(--b-accent); border: 2px solid var(--b-bg); display: none; cursor: crosshair; z-index: 3; }
+  .grip { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; display: none;
+          background: linear-gradient(135deg, transparent 50%, var(--b-accent) 50%); }
+  .card.sel .dot, .card.sel .grip, .card:hover .dot { display: block; }
+  .card.locked .grip, .card.locked .dot { display: none !important; }
+  .yellow { --card: #fbe38e; --ink: #2a2310; } .green { --card: #b7ebc6; --ink: #0f2a18; }
+  .blue { --card: #b9d6ff; --ink: #0d1d33; } .pink { --card: #f9c3d9; --ink: #33101f; }
+  .purple { --card: #d6c6ff; --ink: #1d1236; } .orange { --card: #ffd0a6; --ink: #331b06; }
+  .gray { --card: #d9dde0; --ink: #1c2125; } .red { --card: #ffb3ad; --ink: #330b08; }
+  .hint { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); text-align: center; color: var(--b-muted); pointer-events: none; }
+  .hint b { display: block; color: var(--b-fg); font-size: 16px; margin-bottom: 4px; }
+  .zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; align-items: center; background: var(--b-surface);
+          border: 1px solid var(--b-line); border-radius: 10px; padding: 4px; z-index: 40; }
+  .zoom span { min-width: 44px; text-align: center; font-size: 12px; }
+  .menu { position: fixed; z-index: 60; background: var(--b-surface); border: 1px solid var(--b-line); border-radius: 12px;
+          padding: 5px; min-width: 190px; box-shadow: 0 16px 40px -12px rgba(0, 0, 0, .7); display: flex; flex-direction: column; }
+  .menu button { border: 0; background: none; text-align: left; border-radius: 8px; padding: 7px 10px; }
+  .menu button:hover { background: var(--b-high); }
+  .menu hr { border: 0; border-top: 1px solid var(--b-line); margin: 4px 2px; width: auto; }
+  .menu .danger { color: var(--b-danger); }
+  .sheet { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 70; }
+  .sheet[hidden] { display: none; }
+  .sheet .box { background: var(--b-surface); border: 1px solid var(--b-line); border-radius: 14px; width: min(480px, 100%);
+                max-height: 86vh; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .sheet h3 { margin: 0; font-size: 15px; }
+  .sheet .row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .sheet .list { display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow: auto; }
+  .sheet .list button { text-align: left; }
+  .tpl { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  .tpl button { padding: 12px 8px; text-align: left; }
+  .tpl small { display: block; color: var(--b-muted); font-size: 11.5px; }
+  .toast { position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%); background: var(--b-high); border: 1px solid var(--b-accent);
+           padding: 7px 13px; border-radius: 10px; z-index: 80; max-width: 90%; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <select id="boards" title="Your boards"></select>
+  <input id="boardName" spellcheck="false" title="This board's name">
+  <button id="bNew" title="A new board, blank or from a template">New</button>
+  <span class="sep"></span>
+  <button id="bAdd" class="primary" title="Add a card (N for a note)">+ Add</button>
+  <button id="bSelect" title="Select several: drag a box around cards (or hold Shift)">▢ Select</button>
+  <button id="bConnect" title="Connect: tap one card, then another (or drag a card's green dot)">↗ Connect</button>
+  <span class="sep"></span>
+  <span id="swatches" style="display:flex;gap:4px"></span>
+  <button id="bMore" title="More for what is selected (or right-click / long-press a card)">⋯</button>
+  <span class="sep"></span>
+  <input id="search" placeholder="Find…  (Ctrl+F)" spellcheck="false">
+  <button id="bSnap" title="Snap cards to the grid">Snap</button>
+  <button id="bUndo" title="Undo (Ctrl+Z)">↶</button>
+  <button id="bRedo" title="Redo (Ctrl+Y)">↷</button>
+  <button id="bExport" title="Export as a picture or Markdown">Export</button>
+  <span class="muted" id="saved"></span>
+</div>
+<div id="vp">
+  <div id="world"><svg id="wires"><defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+  </defs><g id="links"></g><path id="temp"/></svg></div>
+  <div id="band"></div>
+  <div class="hint" id="hint" hidden><b>An empty board</b>Double-click (or double-tap) anywhere to add a note, or press + Add.</div>
+  <div class="zoom"><button id="zOut" title="Zoom out">−</button><span id="zLabel">100%</span><button id="zIn" title="Zoom in">+</button><button id="zFit" title="Show everything (F)">Fit</button></div>
+</div>
+<div class="sheet" id="sheet" hidden><div class="box" id="sheetBox"></div></div>
+<input type="file" id="file" accept="image/*" hidden>
+<script>
+(function () {
+  'use strict';
+  if (!window.PyBoard && window.PyBoardNative) {
+    window.PyBoard = { call: function (n, p) { return Promise.resolve(JSON.parse(window.PyBoardNative.call(n, JSON.stringify(p || {})))); } };
+  }
+  var $ = function (id) { return document.getElementById(id); };
+  var COLORS = ['none', 'yellow', 'green', 'blue', 'pink', 'purple', 'orange', 'red', 'gray'];
+  var SW = { none: 'transparent', yellow: '#fbe38e', green: '#b7ebc6', blue: '#b9d6ff', pink: '#f9c3d9', purple: '#d6c6ff', orange: '#ffd0a6', red: '#ffb3ad', gray: '#d9dde0' };
+  var SIZES = { note: [220, 140], heading: [320, 60], todo: [240, 150], image: [260, 220], link: [240, 90], code: [320, 170], frame: [420, 320] };
+  var B = null, id = '', sel = [], selLink = null, past = [], future = [], connect = false, connectFrom = null;
+  var selectMode = false, saveTimer = 0, editing = null, clip = null, found = [], foundAt = -1;
+  var vp = $('vp'), world = $('world'), n = 0;
+  function uid(p) { n += 1; return p + Date.now().toString(36) + n; }
+  function call(name, payload) {
+    return window.PyBoard.call(name, payload || {}).then(function (r) { return r || {}; }, function (e) { return { ok: false, error: String(e) }; });
+  }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  var tt = 0;
+  function toast(t) { var x = document.querySelector('.toast') || document.body.appendChild(el('div', 'toast')); x.textContent = t; x.hidden = false; clearTimeout(tt); tt = setTimeout(function () { x.hidden = true; }, 2400); }
+  function esc(t) { return String(t || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  // A little Markdown, for reading: **bold**, *italic*, `code`, links and "- " lists.
+  function rich(text) {
+    var lines = esc(text).split('\n'), out = [], list = false;
+    lines.forEach(function (l) {
+      var m = /^\s*[-*] (.*)$/.exec(l);
+      if (m) { if (!list) { out.push('<ul>'); list = true; } out.push('<li>' + inline(m[1]) + '</li>'); return; }
+      if (list) { out.push('</ul>'); list = false; }
+      out.push(inline(l) + '\n');
+    });
+    if (list) out.push('</ul>');
+    return out.join('').replace(/\n$/, '');
+  }
+  function inline(t) {
+    return t.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<i>$2</i>')
+      .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  }
+
+  // ------------------------------------------------------------ model
+  function card(cid) { for (var i = 0; i < B.cards.length; i++) if (B.cards[i].id === cid) return B.cards[i]; return null; }
+  function selected() { return sel.map(card).filter(Boolean); }
+  function snap() { return JSON.stringify({ cards: B.cards, links: B.links, name: B.name }); }
+  function remember() { past.push(snap()); if (past.length > 100) past.shift(); future = []; buttons(); }
+  function restore(t) { var d = JSON.parse(t); B.cards = d.cards; B.links = d.links; B.name = d.name; $('boardName').value = B.name; sel = sel.filter(card); selLink = null; draw(); changed(); }
+  function undo() { stopEdit(); if (!past.length) return; future.push(snap()); restore(past.pop()); }
+  function redo() { stopEdit(); if (!future.length) return; past.push(snap()); restore(future.pop()); }
+  function buttons() { $('bUndo').disabled = !past.length; $('bRedo').disabled = !future.length; }
+  function changed() {
+    buttons(); $('saved').textContent = '…'; clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      call('save', { id: id, board: B }).then(function (r) { $('saved').textContent = r.ok ? 'saved' : 'not saved'; if (!r.ok) toast(r.error || 'That did not save.'); });
+    }, 600);
+  }
+  function snapTo(v) { return B.view.snap ? Math.round(v / 20) * 20 : Math.round(v); }
+
+  // ------------------------------------------------------------ view
+  function applyView() {
+    var v = B.view; world.style.transform = 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.z + ')';
+    vp.style.backgroundSize = (22 * v.z) + 'px ' + (22 * v.z) + 'px';
+    vp.style.backgroundPosition = v.x + 'px ' + v.y + 'px';
+    $('zLabel').textContent = Math.round(v.z * 100) + '%';
+    $('bSnap').classList.toggle('on', !!v.snap);
+  }
+  function toWorld(cx, cy) { var r = vp.getBoundingClientRect(), v = B.view; return { x: (cx - r.left - v.x) / v.z, y: (cy - r.top - v.y) / v.z }; }
+  function zoomAt(z, cx, cy) {
+    var r = vp.getBoundingClientRect(), v = B.view, nz = Math.min(3, Math.max(.15, z));
+    var px = cx == null ? r.width / 2 : cx - r.left, py = cy == null ? r.height / 2 : cy - r.top;
+    v.x = px - (px - v.x) * (nz / v.z); v.y = py - (py - v.y) * (nz / v.z); v.z = nz; applyView();
+  }
+  function bounds(cards) {
+    var b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    cards.forEach(function (c) { b.x0 = Math.min(b.x0, c.x); b.y0 = Math.min(b.y0, c.y); b.x1 = Math.max(b.x1, c.x + c.w); b.y1 = Math.max(b.y1, c.y + c.h); });
+    return b;
+  }
+  function fit(cards) {
+    cards = cards || B.cards;
+    if (!cards.length) { B.view.x = 0; B.view.y = 0; B.view.z = 1; applyView(); return; }
+    var b = bounds(cards), r = vp.getBoundingClientRect(), pad = 50;
+    var z = Math.max(.15, Math.min(1.4, (r.width - pad * 2) / (b.x1 - b.x0), (r.height - pad * 2) / (b.y1 - b.y0)));
+    B.view.z = z; B.view.x = (r.width - (b.x1 - b.x0) * z) / 2 - b.x0 * z; B.view.y = (r.height - (b.y1 - b.y0) * z) / 2 - b.y0 * z; applyView();
+  }
+  var viewTimer = 0;
+  function saveView() { clearTimeout(viewTimer); viewTimer = setTimeout(changed, 900); }
+
+  // ------------------------------------------------------------ drawing
+  function draw() {
+    Array.prototype.slice.call(world.querySelectorAll('.card')).forEach(function (x) { x.remove(); });
+    B.cards.forEach(function (c) { world.appendChild(cardEl(c)); });
+    wires(); mark(); $('hint').hidden = B.cards.length > 0; applyView();
+  }
+  function textNode(c, cls, value, hint, single, set) {
+    var t = el('div', cls); t.dataset.edit = '1'; t.dataset.hint = hint; if (single) t.dataset.single = '1';
+    t._raw = value || ''; t._set = set;
+    if (c.type === 'code' || single) t.textContent = t._raw; else t.innerHTML = rich(t._raw);
+    return t;
+  }
+  function cardEl(c) {
+    var d = el('div', 'card ' + c.type + ' ' + (c.color || 'none') + (c.locked ? ' locked' : ''));
+    d.dataset.id = c.id; place(d, c);
+    var set = function (v) { c.text = v; };
+    if (c.type === 'image') {
+      var img = el('img'); img.src = c.src || ''; img.alt = c.text || 'image'; d.appendChild(img);
+      d.appendChild(textNode(c, 'text', c.text, 'caption', true, set));
+    } else if (c.type === 'todo') {
+      d.appendChild(textNode(c, 'text title', c.text, 'List', true, set));
+      var list = el('div', 'items');
+      (c.items || []).forEach(function (it, i) {
+        var row = el('div', 'item' + (it.done ? ' done' : ''));
+        var box = el('input'); box.type = 'checkbox'; box.checked = !!it.done;
+        box.addEventListener('change', function () { remember(); it.done = box.checked; row.classList.toggle('done', it.done); changed(); });
+        var span = el('span'); span.dataset.edit = '1'; span.dataset.single = '1'; span.dataset.item = String(i); span.dataset.hint = 'item';
+        span.textContent = it.t || ''; span._raw = it.t || ''; span._set = function (v) { it.t = v; };
+        row.appendChild(box); row.appendChild(span); list.appendChild(row);
+      });
+      d.appendChild(list);
+      var add = el('button', 'add-item', '+ item'); add.dataset.act = 'add-item'; d.appendChild(add);
+    } else {
+      var hint = { heading: 'Heading', link: 'Title', frame: 'Section', code: '// code' }[c.type] || 'Write something…';
+      d.appendChild(textNode(c, 'text', c.text, hint, c.type === 'heading' || c.type === 'frame' || c.type === 'link', set));
+      if (c.type === 'link') { var a = el('a', '', c.url || ''); a.href = c.url || '#'; a.target = '_blank'; a.rel = 'noopener'; d.appendChild(a); }
+    }
+    d.appendChild(el('div', 'dot')); d.appendChild(el('div', 'grip'));
+    return d;
+  }
+  function redrawCard(c) { var old = world.querySelector('.card[data-id="' + c.id + '"]'); var neu = cardEl(c); if (old) old.replaceWith(neu); else world.appendChild(neu); mark(); wires(); }
+  function place(d, c) { d.style.left = c.x + 'px'; d.style.top = c.y + 'px'; d.style.width = c.w + 'px'; d.style.height = c.h + 'px'; }
+  function nodeOf(c) { return world.querySelector('.card[data-id="' + c.id + '"]'); }
+  function mark() {
+    Array.prototype.forEach.call(world.querySelectorAll('.card'), function (x) {
+      x.classList.toggle('sel', sel.indexOf(x.dataset.id) >= 0);
+      x.classList.toggle('found', found.length > 0 && found[foundAt] === x.dataset.id);
+    });
+    var first = selected()[0];
+    Array.prototype.forEach.call(document.querySelectorAll('.swatch'), function (s) { s.classList.toggle('on', !!first && (first.color || 'none') === s.dataset.c); });
+  }
+  function edgePoint(c, tx, ty) {
+    var cx = c.x + c.w / 2, cy = c.y + c.h / 2, dx = tx - cx, dy = ty - cy;
+    if (!dx && !dy) return { x: cx, y: cy };
+    var s = Math.min(Math.abs((c.w / 2 + 6) / (dx || 1e-9)), Math.abs((c.h / 2 + 6) / (dy || 1e-9)));
+    return { x: cx + dx * s, y: cy + dy * s };
+  }
+  function linkGeometry(l) {
+    var a = card(l.from), b = card(l.to);
+    var p = edgePoint(a, b.x + b.w / 2, b.y + b.h / 2), q = edgePoint(b, a.x + a.w / 2, a.y + a.h / 2);
+    return { p: p, q: q };
+  }
+  function wires() {
+    var g = $('links'); g.innerHTML = ''; var NS = 'http://www.w3.org/2000/svg';
+    B.links = B.links.filter(function (l) { return card(l.from) && card(l.to); });
+    B.links.forEach(function (l) {
+      var geo = linkGeometry(l), d = 'M' + geo.p.x + ',' + geo.p.y + ' L' + geo.q.x + ',' + geo.q.y;
+      var color = selLink === l.id ? 'var(--b-accent)' : (l.color && l.color !== 'none' ? SW[l.color] : 'var(--b-muted)');
+      var grp = document.createElementNS(NS, 'g'); grp.dataset.id = l.id;
+      var line = document.createElementNS(NS, 'path'); line.setAttribute('d', d); line.setAttribute('class', 'line');
+      line.style.stroke = color; if (selLink === l.id) line.style.strokeWidth = '3.2';
+      if (l.dashed) line.setAttribute('stroke-dasharray', '7 6');
+      var style = l.style || 'arrow';
+      if (style !== 'line') line.setAttribute('marker-end', 'url(#arrow)');
+      if (style === 'both') line.setAttribute('marker-start', 'url(#arrow)');
+      var hit = document.createElementNS(NS, 'path'); hit.setAttribute('d', d); hit.setAttribute('class', 'hit'); hit.dataset.link = l.id;
+      grp.appendChild(line); grp.appendChild(hit);
+      if (l.label) {
+        var t = document.createElementNS(NS, 'text'); t.setAttribute('x', (geo.p.x + geo.q.x) / 2); t.setAttribute('y', (geo.p.y + geo.q.y) / 2 - 7);
+        t.setAttribute('text-anchor', 'middle'); t.textContent = l.label; grp.appendChild(t);
+      }
+      g.appendChild(grp);
+    });
+  }
+
+  // ------------------------------------------------------------ editing text
+  function startEdit(node) {
+    if (!node || editing === node) return;
+    var cardNode = node.closest('.card'), c = card(cardNode.dataset.id);
+    if (c && c.locked) { toast('This card is locked - unlock it to write in it.'); return; }
+    stopEdit();
+    editing = node; node.textContent = node._raw || ''; node.contentEditable = 'true';
+    var before = snap(), first = true;
+    node.focus();
+    var r = document.createRange(); r.selectNodeContents(node); r.collapse(false);
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    node.oninput = function () {
+      if (first) { past.push(before); future = []; first = false; buttons(); }
+      node._raw = node.innerText.replace(/\n$/, ''); node._set(node._raw); changed();
+    };
+    node.onkeydown = function (e) {
+      e.stopPropagation();
+      if (e.key === 'Escape') { e.preventDefault(); stopEdit(); return; }
+      if (e.key === 'Enter' && node.dataset.single) {
+        e.preventDefault();
+        if (node.dataset.item != null && c) {   // a new item under this one
+          var at = Number(node.dataset.item); remember(); c.items.splice(at + 1, 0, { t: '', done: false }); grow(c); stopEdit(); redrawCard(c); changed();
+          var spans = nodeOf(c).querySelectorAll('.item span'); startEdit(spans[at + 1]); return;
+        }
+        stopEdit();
+      }
+      if (e.key === 'Tab' && node.closest('.code')) { e.preventDefault(); document.execCommand('insertText', false, '    '); }
+    };
+    node.onblur = function () { setTimeout(function () { if (editing === node && document.activeElement !== node) stopEdit(); }, 0); };
+  }
+  function stopEdit() {
+    if (!editing) return;
+    var node = editing; editing = null;
+    node.contentEditable = 'false'; node.oninput = node.onkeydown = node.onblur = null;
+    var cardNode = node.closest('.card');
+    if (cardNode && !node.dataset.single && !cardNode.classList.contains('code')) node.innerHTML = rich(node._raw);
+    wires();
+  }
+  function editCard(c, point) {
+    var d = nodeOf(c); if (!d) return;
+    var target = point ? document.elementFromPoint(point.x, point.y) : null;
+    var node = (target && target.closest && target.closest('[data-edit]')) || d.querySelector('[data-edit]');
+    if (node && d.contains(node)) startEdit(node);
+  }
+  function grow(c) { if (c.type === 'todo') c.h = Math.max(c.h, 96 + (c.items || []).length * 24); }
+
+  // ------------------------------------------------------------ adding
+  function centre() { var r = vp.getBoundingClientRect(); return toWorld(r.left + r.width / 2, r.top + r.height / 2); }
+  function free(c) {
+    var hits = function (x, y) { return B.cards.some(function (o) { return o.type !== 'frame' && x < o.x + o.w + 16 && x + c.w + 16 > o.x && y < o.y + o.h + 16 && y + c.h + 16 > o.y; }); };
+    var x0 = c.x, y0 = c.y;
+    for (var ring = 0; ring < 16; ring++) {
+      for (var k = 0; k < Math.max(1, ring * 8); k++) {
+        var a = (k / Math.max(1, ring * 8)) * Math.PI * 2, x = Math.round(x0 + Math.cos(a) * ring * 60), y = Math.round(y0 + Math.sin(a) * ring * 45);
+        if (!hits(x, y)) { c.x = snapTo(x); c.y = snapTo(y); return; }
+      }
+    }
+  }
+  function addCard(type, extra, at) {
+    remember(); stopEdit();
+    var p = at || centre(), size = SIZES[type] || SIZES.note;
+    var c = Object.assign({ id: uid('c'), type: type, x: snapTo(p.x - size[0] / 2), y: snapTo(p.y - size[1] / 2), w: size[0], h: size[1],
+      color: { heading: 'none', image: 'none', code: 'none', todo: 'green', link: 'blue', frame: 'blue' }[type] || 'yellow', text: '' }, extra || {});
+    if (type === 'todo' && !c.items) c.items = [{ t: '', done: false }];
+    if (!at && type !== 'frame') free(c);
+    if (type === 'frame') B.cards.unshift(c); else B.cards.push(c);
+    sel = [c.id]; selLink = null; draw(); changed();
+    if (type !== 'image' && type !== 'link') {
+      var node = nodeOf(c).querySelector(type === 'todo' ? '.item span' : '[data-edit]');
+      setTimeout(function () { startEdit(node); }, 0);
+    }
+    return c;
+  }
+  function shrinkUrl(url) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        var s = Math.min(1, 1200 / Math.max(img.width, img.height));
+        if (s === 1 && url.length < 500000) return resolve({ src: url, w: img.width, h: img.height });
+        var cv = document.createElement('canvas'); cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        resolve({ src: cv.toDataURL('image/jpeg', .86), w: cv.width, h: cv.height });
+      };
+      img.onerror = function () { reject(new Error('that is not an image')); };
+      img.src = url;
+    });
+  }
+  function shrink(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = function () { reject(new Error('could not read it')); };
+      reader.onload = function () { shrinkUrl(reader.result).then(resolve, reject); };
+      reader.readAsDataURL(file);
+    });
+  }
+  function addImage(f, at) {
+    var w = Math.min(320, f.w || 260), h = Math.round(w * ((f.h || 200) / (f.w || 260))) + 30;
+    addCard('image', { src: f.src, w: w, h: Math.min(440, h) }, at);
+  }
+  $('file').addEventListener('change', function () { var f = this.files[0]; this.value = ''; if (f) shrink(f).then(function (x) { addImage(x); }, function (e) { toast(e.message); }); });
+  document.addEventListener('paste', function (e) {
+    if (editing || /INPUT|TEXTAREA/.test((document.activeElement || {}).tagName)) return;
+    var items = (e.clipboardData && e.clipboardData.items) || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image/') === 0) { e.preventDefault(); shrink(items[i].getAsFile()).then(function (x) { addImage(x); }); return; }
+    }
+    var text = e.clipboardData && e.clipboardData.getData('text');
+    if (text && text.trim()) {
+      e.preventDefault(); var t = text.trim();
+      if (/^https?:\/\/\S+$/.test(t)) addCard('link', { url: t, text: t.replace(/^https?:\/\//, '').split('/')[0] });
+      else addCard(/[{};]\s*$|^\s*(def|function|class|import|#include)\b/m.test(t) ? 'code' : 'note', { text: t.slice(0, 6000) });
+      return;
+    }
+    if (clip) pasteCards();
+  });
+  // Drop image files or text straight onto the board.
+  vp.addEventListener('dragover', function (e) { e.preventDefault(); });
+  vp.addEventListener('drop', function (e) {
+    e.preventDefault(); var at = toWorld(e.clientX, e.clientY), f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f && /^image\//.test(f.type)) return shrink(f).then(function (x) { addImage(x, at); });
+    var t = e.dataTransfer.getData('text'); if (t) addCard('note', { text: t.slice(0, 6000) }, at);
+  });
+
+  // ------------------------------------------------------------ menus and sheets
+  var menuEl = null;
+  function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
+  function menu(x, y, items) {
+    closeMenu(); menuEl = el('div', 'menu');
+    items.forEach(function (it) {
+      if (it === '-') { menuEl.appendChild(el('hr')); return; }
+      var b = el('button', it.danger ? 'danger' : '', it.label); b.onclick = function () { closeMenu(); it.run(); }; menuEl.appendChild(b);
+    });
+    document.body.appendChild(menuEl);
+    var w = menuEl.offsetWidth, h = menuEl.offsetHeight;
+    menuEl.style.left = Math.max(6, Math.min(x, innerWidth - w - 6)) + 'px'; menuEl.style.top = Math.max(6, Math.min(y, innerHeight - h - 6)) + 'px';
+  }
+  document.addEventListener('pointerdown', function (e) { if (menuEl && !menuEl.contains(e.target)) closeMenu(); }, true);
+  var closeSheetCb = null;
+  function sheet(title) { var box = $('sheetBox'); box.innerHTML = ''; box.appendChild(el('h3', '', title)); $('sheet').hidden = false; return box; }
+  function close() { $('sheet').hidden = true; if (closeSheetCb) { var f = closeSheetCb; closeSheetCb = null; f(null); } }
+  function ask(title, fields) {
+    return new Promise(function (resolve) {
+      var box = sheet(title), inputs = {}, ok = el('button', 'primary', 'OK');
+      fields.forEach(function (f) { var i = el('input'); i.value = f.value || ''; i.placeholder = f.hint || ''; i.addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') ok.click(); if (e.key === 'Escape') close(); }); inputs[f.name] = i; box.appendChild(i); });
+      var row = el('div', 'row'), cancel = el('button', '', 'Cancel'); cancel.onclick = close;
+      ok.onclick = function () { var out = {}; Object.keys(inputs).forEach(function (k) { out[k] = inputs[k].value.trim(); }); closeSheetCb = null; $('sheet').hidden = true; resolve(out); };
+      row.appendChild(cancel); row.appendChild(ok); box.appendChild(row);
+      closeSheetCb = resolve; setTimeout(function () { var first = box.querySelector('input'); if (first) { first.focus(); first.select(); } }, 30);
+    });
+  }
+  $('sheet').addEventListener('pointerdown', function (e) { if (e.target === $('sheet')) close(); });
+  function addMenu(x, y, at) {
+    menu(x, y, [
+      { label: '📝  Note', run: function () { addCard('note', null, at); } },
+      { label: 'H  Heading', run: function () { addCard('heading', null, at); } },
+      { label: '☑  To-do list', run: function () { addCard('todo', null, at); } },
+      { label: '{ }  Code', run: function () { addCard('code', null, at); } },
+      { label: '🖼  Image…', run: imageSheet },
+      { label: '🔗  Link…', run: linkSheet },
+      { label: '▭  Section (a frame to group cards)', run: function () { addCard('frame', { text: 'Section' }, at); } },
+    ]);
+  }
+  function imageSheet() {
+    var box = sheet('Add an image');
+    var pick = el('button', 'primary', 'Choose a picture…'); pick.onclick = function () { close(); $('file').click(); };
+    box.appendChild(el('div', 'muted', 'You can also paste or drop an image onto the board. Or pick one from your workspace:'));
+    var list = el('div', 'list', 'loading…'); box.appendChild(list);
+    var row = el('div', 'row'), cancel = el('button', '', 'Cancel'); cancel.onclick = close; row.appendChild(cancel); row.appendChild(pick); box.appendChild(row);
+    call('images').then(function (r) {
+      list.textContent = ''; if (!(r.files || []).length) list.appendChild(el('div', 'muted', 'No images in the workspace.'));
+      (r.files || []).forEach(function (f) {
+        var b = el('button', '', f); b.onclick = function () { call('image', { path: f }).then(function (got) { if (!got.ok) return toast(got.error); shrinkUrl(got.src).then(function (x) { close(); addImage(x); }); }); };
+        list.appendChild(b);
+      });
+    });
+  }
+  function linkSheet() {
+    ask('Add a link', [{ name: 'url', hint: 'https://…' }, { name: 'text', hint: 'title (optional)' }]).then(function (v) {
+      if (!v || !v.url) return; var url = /^[a-z]+:\/\//i.test(v.url) ? v.url : 'https://' + v.url;
+      addCard('link', { url: url, text: v.text || url.replace(/^https?:\/\//, '').split('/')[0] });
+    });
+  }
+  var TEMPLATES = [['blank', 'Blank', 'An empty board'], ['kanban', 'Kanban', 'To do · Doing · Done'], ['mindmap', 'Mind map', 'One idea, four branches'],
+    ['week', 'My week', 'A list for each day'], ['project', 'Project', 'Idea to ship, in steps'], ['proscons', 'Pros and cons', 'Weigh a decision']];
+  function newBoard() {
+    var box = sheet('A new board'), grid = el('div', 'tpl');
+    TEMPLATES.forEach(function (t) {
+      var b = el('button'); b.appendChild(document.createTextNode(t[1])); b.appendChild(el('small', '', t[2]));
+      b.onclick = function () { close(); call('create', { template: t[0] }).then(function (r) { if (!r.ok) return toast(r.error); open(r.id).then(function () { fit(); }); }); };
+      grid.appendChild(b);
+    });
+    box.appendChild(grid);
+    var row = el('div', 'row'), cancel = el('button', '', 'Cancel'); cancel.onclick = close; row.appendChild(cancel); box.appendChild(row);
+  }
+  function cardMenu(x, y, c) {
+    if (sel.indexOf(c.id) < 0) { sel = [c.id]; selLink = null; mark(); }
+    var many = sel.length > 1;
+    menu(x, y, [
+      many ? null : { label: '✎  Write in it', run: function () { editCard(c); } },
+      { label: '⧉  Duplicate' + (many ? ' ' + sel.length : ''), run: duplicate },
+      { label: '⬆  Bring to front', run: function () { order(1); } },
+      { label: '⬇  Send to back', run: function () { order(-1); } },
+      { label: (c.locked ? '🔓  Unlock' : '🔒  Lock') + (many ? ' all' : ''), run: function () { remember(); var to = !c.locked; selected().forEach(function (x) { x.locked = to; }); draw(); changed(); } },
+      many ? null : { label: '↗  Connect from here', run: function () { toggleConnect(true); connectFrom = c.id; toast('Now tap the card it leads to.'); } },
+      c.type === 'link' ? { label: '🔗  Edit the address', run: function () { ask('Link', [{ name: 'url', value: c.url }, { name: 'text', value: c.text }]).then(function (v) { if (v) { remember(); c.url = v.url; c.text = v.text; redrawCard(c); changed(); } }); } } : null,
+      '-',
+      { label: '✕  Delete' + (many ? ' ' + sel.length : ''), danger: true, run: removeSel },
+    ].filter(Boolean));
+  }
+  function linkMenu(x, y, l) {
+    selLink = l.id; sel = []; mark(); wires();
+    var set = function (k, v) { return function () { remember(); l[k] = v; wires(); changed(); }; };
+    menu(x, y, [
+      { label: '🏷  Label…', run: function () { ask('Label this arrow', [{ name: 'label', value: l.label || '', hint: 'e.g. then, needs, because' }]).then(function (v) { if (v) { remember(); l.label = v.label.slice(0, 60); wires(); changed(); } }); } },
+      { label: '→  One-way arrow', run: set('style', 'arrow') },
+      { label: '↔  Two-way arrow', run: set('style', 'both') },
+      { label: '—  Plain line', run: set('style', 'line') },
+      { label: (l.dashed ? '━  Solid' : '┅  Dashed'), run: set('dashed', !l.dashed) },
+      { label: '⇄  Reverse', run: function () { remember(); var f = l.from; l.from = l.to; l.to = f; wires(); changed(); } },
+      '-',
+      { label: '✕  Delete arrow', danger: true, run: function () { remember(); B.links = B.links.filter(function (x) { return x.id !== l.id; }); selLink = null; wires(); changed(); } },
+    ]);
+  }
+  function exportMenu(x, y) {
+    menu(x, y, [
+      { label: '🖼  Picture (.png) in your workspace', run: exportPng },
+      { label: '📄  Markdown (.md) in your workspace', run: function () { call('export_markdown', { board: B }).then(function (r) { toast(r.ok ? 'Saved ' + r.path : (r.error || 'That did not save.')); }); } },
+    ]);
+  }
+
+  // ------------------------------------------------------------ actions
+  function duplicate() {
+    var copies = []; remember();
+    selected().forEach(function (c) { var k = JSON.parse(JSON.stringify(c)); k.id = uid('c'); k.x += 30; k.y += 30; B.cards.push(k); copies.push(k.id); });
+    sel = copies; draw(); changed();
+  }
+  function order(dir) {
+    remember(); var moving = selected();
+    B.cards = B.cards.filter(function (c) { return moving.indexOf(c) < 0; });
+    B.cards = dir > 0 ? B.cards.concat(moving) : moving.concat(B.cards);
+    draw(); changed();
+  }
+  function removeSel() {
+    if (selLink) { remember(); B.links = B.links.filter(function (l) { return l.id !== selLink; }); selLink = null; wires(); changed(); return; }
+    if (!sel.length) return; remember();
+    B.cards = B.cards.filter(function (c) { return sel.indexOf(c.id) < 0; });
+    B.links = B.links.filter(function (l) { return sel.indexOf(l.from) < 0 && sel.indexOf(l.to) < 0; });
+    sel = []; draw(); changed();
+  }
+  function copyCards() { clip = JSON.stringify(selected()); }
+  function pasteCards() {
+    if (!clip) return; remember(); var ids = [];
+    JSON.parse(clip).forEach(function (c) { c.id = uid('c'); c.x += 40; c.y += 40; B.cards.push(c); ids.push(c.id); });
+    sel = ids; draw(); changed();
+  }
+  function linkExists(a, b) { return B.links.some(function (l) { return (l.from === a && l.to === b) || (l.from === b && l.to === a); }); }
+  function makeLink(a, b) { if (!a || !b || a === b || linkExists(a, b)) return; remember(); B.links.push({ id: uid('l'), from: a, to: b, label: '', style: 'arrow' }); wires(); changed(); }
+  function toggleConnect(on) { connect = on; connectFrom = null; $('bConnect').classList.toggle('on', on); vp.classList.toggle('connecting', on); if (on) toast('Tap a card, then the card it leads to.'); }
+  function toggleSelect(on) { selectMode = on; $('bSelect').classList.toggle('on', on); if (on) toast('Drag a box around the cards you want.'); }
+  function insideFrame(f) { return B.cards.filter(function (c) { return c !== f && c.type !== 'frame' && c.x + c.w / 2 > f.x && c.x + c.w / 2 < f.x + f.w && c.y + c.h / 2 > f.y && c.y + c.h / 2 < f.y + f.h; }); }
+
+  // PNG: drawn from the data rather than screenshotting the page, so it is
+  // the whole board at any zoom, and works the same in every WebView.
+  function exportPng() {
+    if (!B.cards.length) return toast('The board is empty.');
+    var b = bounds(B.cards), pad = 40, w = b.x1 - b.x0 + pad * 2, h = b.y1 - b.y0 + pad * 2;
+    var scale = Math.min(2, 8000 / Math.max(w, h)), cv = document.createElement('canvas');
+    cv.width = Math.ceil(w * scale); cv.height = Math.ceil(h * scale);
+    var g = cv.getContext('2d'), css = getComputedStyle(document.body);
+    g.scale(scale, scale); g.translate(pad - b.x0, pad - b.y0);
+    g.fillStyle = css.backgroundColor || '#0b0f0c'; g.fillRect(b.x0 - pad, b.y0 - pad, w, h);
+    var ink = function (c) { return { none: css.color }[c.color || 'none'] || (c.type === 'frame' || c.type === 'heading' ? css.color : '#1d1f1c'); };
+    function wrap(text, x, y, maxW, lh, maxY) {
+      String(text || '').split('\n').forEach(function (para) {
+        var line = ''; para.split(' ').forEach(function (word) {
+          var test = line ? line + ' ' + word : word;
+          if (g.measureText(test).width > maxW && line) { if (y < maxY) g.fillText(line, x, y); y += lh; line = word; } else line = test;
+        });
+        if (y < maxY) g.fillText(line, x, y); y += lh;
+      });
+      return y;
+    }
+    var images = B.cards.filter(function (c) { return c.type === 'image' && c.src; }).map(function (c) {
+      return new Promise(function (res) { var i = new Image(); i.onload = function () { res([c.id, i]); }; i.onerror = function () { res([c.id, null]); }; i.src = c.src; });
+    });
+    Promise.all(images).then(function (pairs) {
+      var loaded = {}; pairs.forEach(function (p) { loaded[p[0]] = p[1]; });
+      B.cards.filter(function (c) { return c.type === 'frame'; }).concat(B.cards.filter(function (c) { return c.type !== 'frame'; })).forEach(function (c) {
+        var bg = SW[c.color] || '#1a231e', r = 12;
+        g.save(); g.beginPath(); if (g.roundRect) g.roundRect(c.x, c.y, c.w, c.h, r); else g.rect(c.x, c.y, c.w, c.h);
+        if (c.type === 'frame') { g.globalAlpha = .22; g.fillStyle = bg; g.fill(); g.globalAlpha = 1; g.setLineDash([8, 6]); g.strokeStyle = bg; g.lineWidth = 2; g.stroke(); }
+        else if (c.type !== 'heading') { g.fillStyle = c.type === 'code' ? '#10161c' : (c.color === 'none' ? '#1a231e' : bg); g.fill(); }
+        g.clip(); g.fillStyle = c.type === 'code' ? '#d6e2ea' : ink(c);
+        if (c.type === 'image' && loaded[c.id]) { g.drawImage(loaded[c.id], c.x, c.y, c.w, c.h - 26); g.font = '12px system-ui'; g.fillText(c.text || '', c.x + 10, c.y + c.h - 9); }
+        else if (c.type === 'heading') { g.font = '800 26px system-ui'; wrap(c.text, c.x + 4, c.y + 34, c.w - 8, 30, c.y + c.h); }
+        else if (c.type === 'todo') {
+          g.font = '700 14px system-ui'; var y = wrap(c.text || 'To do', c.x + 12, c.y + 24, c.w - 24, 20, c.y + c.h); g.font = '13.5px system-ui';
+          (c.items || []).forEach(function (it) { g.fillText((it.done ? '☑ ' : '☐ ') + (it.t || ''), c.x + 12, y + 4); y += 22; });
+        } else { g.font = c.type === 'code' ? '12.5px monospace' : (c.type === 'frame' ? '700 15px system-ui' : '14px system-ui'); wrap(c.text, c.x + 12, c.y + 26, c.w - 24, 20, c.y + c.h); }
+        g.restore();
+      });
+      B.links.forEach(function (l) {
+        var geo = linkGeometry(l); g.strokeStyle = l.color && l.color !== 'none' ? SW[l.color] : '#8b9a90'; g.lineWidth = 2.2; g.setLineDash(l.dashed ? [7, 6] : []);
+        g.beginPath(); g.moveTo(geo.p.x, geo.p.y); g.lineTo(geo.q.x, geo.q.y); g.stroke(); g.setLineDash([]);
+        var head = function (from, to) { var a = Math.atan2(to.y - from.y, to.x - from.x); g.fillStyle = g.strokeStyle; g.beginPath(); g.moveTo(to.x, to.y);
+          g.lineTo(to.x - 11 * Math.cos(a - .4), to.y - 11 * Math.sin(a - .4)); g.lineTo(to.x - 11 * Math.cos(a + .4), to.y - 11 * Math.sin(a + .4)); g.fill(); };
+        if ((l.style || 'arrow') !== 'line') head(geo.p, geo.q); if (l.style === 'both') head(geo.q, geo.p);
+        if (l.label) { g.font = '12px system-ui'; g.fillStyle = css.color; g.textAlign = 'center'; g.fillText(l.label, (geo.p.x + geo.q.x) / 2, (geo.p.y + geo.q.y) / 2 - 7); g.textAlign = 'start'; }
+      });
+      call('export_png', { board: { name: B.name }, png: cv.toDataURL('image/png') }).then(function (r) { toast(r.ok ? 'Saved ' + r.path : (r.error || 'That did not save.')); });
+    });
+  }
+
+  // ------------------------------------------------------------ pointers
+  // Double-click, double-tap and long-press are worked out here, from the
+  // pointer events, rather than left to the browser: the board holds the
+  // pointer while dragging, and a held pointer never delivers a dblclick to
+  // the text inside a card - which is why 3.6 could not edit text.
+  var pointers = {}, gesture = null, last = { t: 0, key: '', x: 0, y: 0 }, pressTimer = 0;
+  function cancelPress() { clearTimeout(pressTimer); pressTimer = 0; }
+  vp.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  vp.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('.zoom')) return;
+    if (editing && editing.contains(e.target)) return;              // placing the caret
+    if (e.target.closest('input[type=checkbox], a')) return;
+    var addItem = e.target.closest('[data-act="add-item"]');
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var ids = Object.keys(pointers);
+    if (ids.length === 2) {
+      cancelPress(); var a = pointers[ids[0]], b = pointers[ids[1]];
+      gesture = { kind: 'pinch', d: Math.hypot(a.x - b.x, a.y - b.y), z: B.view.z, vx: B.view.x, vy: B.view.y, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+      return;
+    }
+    stopEdit(); closeMenu();
+    var now = Date.now(), cardNode = e.target.closest('.card'), linkHit = e.target.dataset && e.target.dataset.link;
+    var key = cardNode ? cardNode.dataset.id : (linkHit ? 'l:' + linkHit : 'bg');
+    var double = now - last.t < 400 && last.key === key && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 24;
+    last = { t: double ? 0 : now, key: key, x: e.clientX, y: e.clientY };
+
+    if (e.button === 2) {   // right-click
+      if (cardNode) cardMenu(e.clientX, e.clientY, card(cardNode.dataset.id));
+      else if (linkHit) linkMenu(e.clientX, e.clientY, B.links.filter(function (l) { return l.id === linkHit; })[0]);
+      else addMenu(e.clientX, e.clientY, toWorld(e.clientX, e.clientY));
+      return;
+    }
+    if (addItem) {
+      var ac = card(cardNode.dataset.id); remember(); ac.items = ac.items || []; ac.items.push({ t: '', done: false }); grow(ac); redrawCard(ac); changed();
+      var spans = nodeOf(ac).querySelectorAll('.item span'); var target = spans[spans.length - 1]; setTimeout(function () { startEdit(target); }, 0);
+      return;
+    }
+    if (linkHit) {
+      var l = B.links.filter(function (x) { return x.id === linkHit; })[0];
+      if (double) { ask('Label this arrow', [{ name: 'label', value: l.label || '' }]).then(function (v) { if (v) { remember(); l.label = v.label.slice(0, 60); wires(); changed(); } }); return; }
+      selLink = l.id; sel = []; mark(); wires();
+      pressTimer = setTimeout(function () { gesture = null; linkMenu(e.clientX, e.clientY, l); }, 550);
+      gesture = { kind: 'none', x: e.clientX, y: e.clientY };
+      return;
+    }
+    if (cardNode) {
+      var c = card(cardNode.dataset.id);
+      if (connect) {
+        if (!connectFrom) { connectFrom = c.id; sel = [c.id]; mark(); toast('Now tap the card to connect it to.'); }
+        else { makeLink(connectFrom, c.id); toggleConnect(false); }
+        return;
+      }
+      if (double && !e.target.classList.contains('dot')) { editCard(c, { x: e.clientX, y: e.clientY }); return; }
+      if (e.shiftKey || e.ctrlKey || e.metaKey) { var at = sel.indexOf(c.id); if (at >= 0) sel.splice(at, 1); else sel.push(c.id); selLink = null; mark(); wires(); return; }
+      if (sel.indexOf(c.id) < 0) sel = [c.id];
+      selLink = null; mark(); wires();
+      if (e.target.classList.contains('dot')) { gesture = { kind: 'wire', from: c.id }; return; }
+      if (e.target.classList.contains('grip') && !c.locked) { gesture = { kind: 'resize', c: c, x: e.clientX, y: e.clientY, w: c.w, h: c.h, moved: false }; return; }
+      var moving = selected().filter(function (x) { return !x.locked; });
+      selected().forEach(function (x) { if (x.type === 'frame' && !x.locked) insideFrame(x).forEach(function (k) { if (moving.indexOf(k) < 0 && !k.locked) moving.push(k); }); });
+      gesture = { kind: 'move', x: e.clientX, y: e.clientY, moved: false, items: moving.map(function (x) { return { c: x, x: x.x, y: x.y }; }) };
+      pressTimer = setTimeout(function () { if (gesture && !gesture.moved) { gesture = null; cardMenu(e.clientX, e.clientY, c); } }, 550);
+      return;
+    }
+    // the background
+    if (connect) { toggleConnect(false); return; }
+    if (double) { addCard('note', null, toWorld(e.clientX, e.clientY)); return; }
+    if (selectMode || e.shiftKey) {
+      gesture = { kind: 'band', x: e.clientX, y: e.clientY, keep: e.shiftKey ? sel.slice() : [] };
+      return;
+    }
+    sel = []; selLink = null; mark(); wires();
+    gesture = { kind: 'pan', x: e.clientX, y: e.clientY, vx: B.view.x, vy: B.view.y };
+    pressTimer = setTimeout(function () { if (gesture && gesture.kind === 'pan' && Math.hypot(gesture.lx - gesture.x || 0, gesture.ly - gesture.y || 0) < 8) { gesture = null; addMenu(e.clientX, e.clientY, toWorld(e.clientX, e.clientY)); } }, 600);
+  });
+  vp.addEventListener('pointermove', function (e) {
+    if (pointers[e.pointerId]) pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (!gesture) return;
+    var z = B.view.z, far = Math.hypot(e.clientX - (gesture.x || 0), e.clientY - (gesture.y || 0)) > 6;
+    if (far) cancelPress();
+    if (gesture.kind === 'pinch') {
+      var ids = Object.keys(pointers); if (ids.length < 2) return;
+      var a = pointers[ids[0]], b = pointers[ids[1]], d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      B.view.x = gesture.vx + (cx - gesture.cx); B.view.y = gesture.vy + (cy - gesture.cy); B.view.z = gesture.z;
+      zoomAt(gesture.z * d / gesture.d, cx, cy);
+    } else if (gesture.kind === 'pan') {
+      gesture.lx = e.clientX; gesture.ly = e.clientY;
+      if (!gesture.moved && !far) return;
+      if (!gesture.moved) { gesture.moved = true; vp.classList.add('panning'); try { vp.setPointerCapture(e.pointerId); } catch (x) { /* fine */ } }
+      B.view.x = gesture.vx + e.clientX - gesture.x; B.view.y = gesture.vy + e.clientY - gesture.y; applyView();
+    } else if (gesture.kind === 'move') {
+      if (!gesture.moved && !far) return;
+      if (!gesture.moved) { remember(); gesture.moved = true; try { vp.setPointerCapture(e.pointerId); } catch (x) { /* fine */ } }
+      var dx = (e.clientX - gesture.x) / z, dy = (e.clientY - gesture.y) / z;
+      gesture.items.forEach(function (it) { it.c.x = snapTo(it.x + dx); it.c.y = snapTo(it.y + dy); var d = nodeOf(it.c); if (d) place(d, it.c); });
+      wires();
+    } else if (gesture.kind === 'resize') {
+      if (!gesture.moved) { remember(); gesture.moved = true; try { vp.setPointerCapture(e.pointerId); } catch (x) { /* fine */ } }
+      gesture.c.w = Math.max(90, snapTo(gesture.w + (e.clientX - gesture.x) / z)); gesture.c.h = Math.max(40, snapTo(gesture.h + (e.clientY - gesture.y) / z));
+      place(nodeOf(gesture.c), gesture.c); wires();
+    } else if (gesture.kind === 'wire') {
+      try { vp.setPointerCapture(e.pointerId); } catch (x) { /* fine */ }
+      var from = card(gesture.from), p = toWorld(e.clientX, e.clientY), s = edgePoint(from, p.x, p.y);
+      $('temp').setAttribute('d', 'M' + s.x + ',' + s.y + ' L' + p.x + ',' + p.y);
+      var over = document.elementFromPoint(e.clientX, e.clientY), t = over && over.closest && over.closest('.card');
+      Array.prototype.forEach.call(world.querySelectorAll('.card.target'), function (x) { x.classList.remove('target'); });
+      if (t && t.dataset.id !== gesture.from) t.classList.add('target');
+    } else if (gesture.kind === 'band') {
+      try { vp.setPointerCapture(e.pointerId); } catch (x) { /* fine */ }
+      var r = vp.getBoundingClientRect(), x0 = Math.min(gesture.x, e.clientX), y0 = Math.min(gesture.y, e.clientY);
+      var band = $('band'); band.style.display = 'block'; band.style.left = (x0 - r.left) + 'px'; band.style.top = (y0 - r.top) + 'px';
+      band.style.width = Math.abs(e.clientX - gesture.x) + 'px'; band.style.height = Math.abs(e.clientY - gesture.y) + 'px';
+      var a1 = toWorld(x0, y0), a2 = toWorld(Math.max(gesture.x, e.clientX), Math.max(gesture.y, e.clientY));
+      sel = gesture.keep.concat(B.cards.filter(function (c) { return c.x < a2.x && c.x + c.w > a1.x && c.y < a2.y && c.y + c.h > a1.y; }).map(function (c) { return c.id; }));
+      mark();
+    }
+  });
+  function endPointer(e) {
+    delete pointers[e.pointerId]; cancelPress();
+    if (!gesture) return;
+    if (gesture.kind === 'wire') {
+      $('temp').setAttribute('d', '');
+      var over = document.elementFromPoint(e.clientX, e.clientY), t = over && over.closest && over.closest('.card');
+      Array.prototype.forEach.call(world.querySelectorAll('.card.target'), function (x) { x.classList.remove('target'); });
+      if (t) makeLink(gesture.from, t.dataset.id);
+    }
+    if (gesture.kind === 'band') { $('band').style.display = 'none'; if (selectMode && sel.length) toggleSelect(false); }
+    if ((gesture.kind === 'move' || gesture.kind === 'resize') && gesture.moved) changed();
+    if (gesture.kind === 'pan' || gesture.kind === 'pinch') saveView();
+    if (gesture.kind === 'pinch' && Object.keys(pointers).length) { gesture = null; return; }
+    gesture = null; vp.classList.remove('panning');
+  }
+  vp.addEventListener('pointerup', endPointer);
+  vp.addEventListener('pointercancel', endPointer);
+  vp.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey || (Math.abs(e.deltaY) >= 40 && !e.deltaX && !e.shiftKey)) zoomAt(B.view.z * Math.pow(1.0015, -e.deltaY), e.clientX, e.clientY);
+    else { B.view.x -= e.shiftKey ? e.deltaY : e.deltaX; B.view.y -= e.shiftKey ? 0 : e.deltaY; applyView(); }
+    saveView();
+  }, { passive: false });
+
+  // ------------------------------------------------------------ toolbar
+  $('bConnect').onclick = function () { toggleConnect(!connect); };
+  $('bSelect').onclick = function () { toggleSelect(!selectMode); };
+  $('bAdd').onclick = function (e) { var r = e.currentTarget.getBoundingClientRect(); addMenu(r.left, r.bottom + 4); };
+  $('bMore').onclick = function (e) {
+    var r = e.currentTarget.getBoundingClientRect(), first = selected()[0];
+    if (first) cardMenu(r.left, r.bottom + 4, first);
+    else if (selLink) linkMenu(r.left, r.bottom + 4, B.links.filter(function (l) { return l.id === selLink; })[0]);
+    else menu(r.left, r.bottom + 4, [
+      { label: '⤢  Show everything', run: function () { fit(); saveView(); } },
+      { label: '▢  Select all', run: function () { sel = B.cards.map(function (c) { return c.id; }); mark(); } },
+      { label: '✎  Rename this board', run: function () { $('boardName').focus(); $('boardName').select(); } },
+      '-',
+      { label: '✕  Delete this board', danger: true, run: function () { ask('Delete "' + B.name + '"? Type DELETE to confirm.', [{ name: 'yes', hint: 'DELETE' }]).then(function (v) { if (v && v.yes.toUpperCase() === 'DELETE') call('remove', { id: id }).then(function () { open(''); toast('Board deleted.'); }); }); } },
+    ]);
+  };
+  $('bExport').onclick = function (e) { var r = e.currentTarget.getBoundingClientRect(); exportMenu(r.left, r.bottom + 4); };
+  $('bSnap').onclick = function () { B.view.snap = !B.view.snap; applyView(); changed(); };
+  COLORS.forEach(function (c) {
+    var s = el('button', 'swatch'); s.dataset.c = c; s.title = c === 'none' ? 'No colour' : c; s.style.background = SW[c];
+    if (c === 'none') s.style.backgroundImage = 'linear-gradient(135deg, transparent 45%, var(--b-danger) 45%, var(--b-danger) 55%, transparent 55%)';
+    s.onclick = function () {
+      if (selLink) { remember(); B.links.forEach(function (l) { if (l.id === selLink) l.color = c; }); wires(); changed(); return; }
+      if (!sel.length) return toast('Select a card first.');
+      remember(); selected().forEach(function (x) { x.color = c; redrawCard(x); }); changed();
+    };
+    $('swatches').appendChild(s);
+  });
+  $('bUndo').onclick = undo; $('bRedo').onclick = redo;
+  $('zIn').onclick = function () { zoomAt(B.view.z * 1.25); saveView(); };
+  $('zOut').onclick = function () { zoomAt(B.view.z / 1.25); saveView(); };
+  $('zFit').onclick = function () { fit(); saveView(); };
+  $('boardName').addEventListener('input', function (e) { B.name = e.target.value; refreshList(); changed(); });
+  $('boardName').addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); });
+  $('boards').onchange = function () { open($('boards').value); };
+  $('bNew').onclick = newBoard;
+  $('search').addEventListener('input', function () {
+    var q = this.value.trim().toLowerCase();
+    found = !q ? [] : B.cards.filter(function (c) {
+      return (c.text || '').toLowerCase().indexOf(q) >= 0 || (c.url || '').toLowerCase().indexOf(q) >= 0 ||
+        (c.items || []).some(function (i) { return (i.t || '').toLowerCase().indexOf(q) >= 0; });
+    }).map(function (c) { return c.id; });
+    foundAt = found.length ? 0 : -1; jump();
+  });
+  $('search').addEventListener('keydown', function (e) {
+    e.stopPropagation();
+    if (e.key === 'Enter' && found.length) { foundAt = (foundAt + (e.shiftKey ? found.length - 1 : 1)) % found.length; jump(); }
+    if (e.key === 'Escape') { this.value = ''; found = []; mark(); this.blur(); }
+  });
+  function jump() {
+    mark(); $('saved').textContent = found.length ? (foundAt + 1) + ' of ' + found.length : ($('search').value ? 'not found' : '');
+    var c = card(found[foundAt]); if (!c) return;
+    var r = vp.getBoundingClientRect();
+    B.view.x = r.width / 2 - (c.x + c.w / 2) * B.view.z; B.view.y = r.height / 2 - (c.y + c.h / 2) * B.view.z; applyView();
+  }
+  document.addEventListener('keydown', function (e) {
+    if (editing || !$('sheet').hidden || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    var mod = e.ctrlKey || e.metaKey, k = (e.key || '').toLowerCase();
+    if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    else if (mod && k === 'd') { e.preventDefault(); duplicate(); }
+    else if (mod && k === 'a') { e.preventDefault(); sel = B.cards.map(function (c) { return c.id; }); mark(); }
+    else if (mod && k === 'c' && sel.length) { copyCards(); }
+    else if (mod && k === 'f') { e.preventDefault(); $('search').focus(); }
+    else if (k === 'delete' || k === 'backspace') { e.preventDefault(); removeSel(); }
+    else if (k === 'escape') { sel = []; selLink = null; toggleConnect(false); toggleSelect(false); closeMenu(); mark(); wires(); }
+    else if (k === 'n' && !mod) { e.preventDefault(); addCard('note'); }
+    else if (k === 'f' && !mod) { e.preventDefault(); fit(); saveView(); }
+    else if (k === 'enter' && sel.length === 1) { e.preventDefault(); editCard(card(sel[0])); }
+    else if (k.indexOf('arrow') === 0 && sel.length) {
+      e.preventDefault(); var step = e.shiftKey ? 20 : 2, dx = k === 'arrowleft' ? -step : k === 'arrowright' ? step : 0, dy = k === 'arrowup' ? -step : k === 'arrowdown' ? step : 0;
+      selected().forEach(function (c) { if (!c.locked) { c.x += dx; c.y += dy; place(nodeOf(c), c); } }); wires(); changed();
+    }
+  });
+
+  // ------------------------------------------------------------ boards
+  var listing = [];
+  function refreshList() {
+    var s = $('boards'); s.innerHTML = '';
+    listing.forEach(function (b) { var o = el('option', '', b.id === id ? (B.name || 'Board') : b.name); o.value = b.id; if (b.id === id) o.selected = true; s.appendChild(o); });
+  }
+  function open(which) {
+    return call('listing').then(function (l) { listing = l.boards || []; return call('load', { id: which || l.current }); }).then(function (r) {
+      if (!r.ok) return toast(r.error || 'That board would not open.');
+      id = r.id; B = r.board; B.cards = B.cards || []; B.links = B.links || []; B.view = B.view || { x: 0, y: 0, z: 1 };
+      past = []; future = []; sel = []; selLink = null; buttons(); $('boardName').value = B.name || 'Board'; refreshList(); draw();
+      if (!B.view.x && !B.view.y && B.view.z === 1 && B.cards.length) fit();
+      $('saved').textContent = '';
+    });
+  }
+  window.boardReload = function () { open(id); };
+  (function start(tries) {
+    if (window.PyBoard) { open(''); return; }
+    if (tries > 250) { document.body.innerHTML = '<p style="padding:20px">Notes could not reach PyCmd.</p>'; return; }
+    setTimeout(function () { start(tries + 1); }, 40);
+  }(0));
+}());
+</script>
+</body>
+</html>
