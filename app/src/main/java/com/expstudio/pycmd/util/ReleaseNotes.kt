@@ -41,6 +41,22 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 38,
+            versionName = "3.8.0",
+            headline = "Notes on every device: your boards sync between your phone and your PC.",
+            added = listOf(
+                "Sign in to your PyCmd account and Notes syncs through its cloud storage. A board " +
+                    "you make on the phone is on the PC, and the other way round.",
+                "It syncs by itself a few seconds after you stop, and when Notes opens. " +
+                    "Sync does it now. Where both changed, the newer board wins, and a " +
+                    "deleted board stays deleted everywhere.",
+            ),
+            fixed = listOf(
+                "A board dropped into one workspace no longer shows up in another workspace " +
+                    "that has never been saved.",
+            ),
+        ),
+        ReleaseNote(
             versionCode = 37,
             versionName = "3.7.0",
             headline = "Notes is built in, you can write in it, and the board does a lot more.",

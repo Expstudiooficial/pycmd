@@ -29,8 +29,8 @@ android {
         applicationId = "com.expstudio.pycmd"
         minSdk = 24
         targetSdk = 35
-        versionCode = 37
-        versionName = "3.7.0"
+        versionCode = 38
+        versionName = "3.8.0"
 
         ndk {
             abiFilters += targetAbis

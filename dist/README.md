@@ -1,17 +1,26 @@
 # Prebuilt APK
 
-`PyCmd-3.7.0.apk` — ready to install, nothing else needed.
+`PyCmd-3.8.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 3.7.0 |
+| Version | 3.8.0 |
 | Size | 27 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
 The universal APK, as in 2.7.0: one file for a phone and for an emulator.
+
+## What is new in 3.8.0
+
+**Notes on every device.** Sign in to your PyCmd account and Notes syncs through its cloud storage:
+- **Both ways:** a board made on the phone is on the PC, and the other way round.
+- **Automatic:** it syncs a few seconds after you stop, and when Notes opens. **☁ Sync** does it now.
+- **Merging:** where both changed, the newer board wins. A deleted board stays deleted everywhere.
+
+**Fixed:** a board dropped into one workspace no longer shows up in another workspace that has never been saved.
 
 ## What is new in 3.7.0
 
