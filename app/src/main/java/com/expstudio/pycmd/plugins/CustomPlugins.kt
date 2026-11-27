@@ -261,6 +261,8 @@ object CustomPlugins {
 
     private const val PREFS = "pycmd-custom-plugins"
     private const val KEY_ENABLED = "enabled"
+    private const val KEY_OFFERED = "offered_default_on"
+    private val DEFAULT_ON = setOf("pycmd.board")
     private const val TAG = "plugins"
 
     private var prefs: SharedPreferences? = null
@@ -291,7 +293,14 @@ object CustomPlugins {
         _installed.value = plugins
         // A plugin that is no longer on disk should not keep a switch.
         val alive = plugins.map { it.id }.toSet()
-        val pruned = _enabled.value.filter { it in alive }.toSet()
+        var pruned = _enabled.value.filter { it in alive }.toSet()
+        // Built-in plugins that start switched on - once. Turned off, they stay off.
+        val offered = prefs?.getStringSet(KEY_OFFERED, emptySet()).orEmpty()
+        val fresh = DEFAULT_ON.filter { it in alive && it !in offered }
+        if (fresh.isNotEmpty()) {
+            pruned = pruned + fresh
+            prefs?.edit()?.putStringSet(KEY_OFFERED, offered + fresh)?.apply()
+        }
         if (pruned != _enabled.value) {
             _enabled.value = pruned
             prefs?.edit()?.putStringSet(KEY_ENABLED, pruned)?.apply()

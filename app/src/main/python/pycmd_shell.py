@@ -664,6 +664,336 @@ def help_text() -> str:
 
 
 # name -> (function, one-line usage, extra help)
+# ---------------------------------------------------------------------------
+# 3.6 / 5.7: ten small tools, the same on the phone and the PC
+# ---------------------------------------------------------------------------
+
+def _cmd_calc(args: list) -> int:
+    """A calculator: + - * / // % ** ^ ( ), and math's functions and constants."""
+    import ast
+    import math
+    import operator
+
+    text = " ".join(args).replace("^", "**").replace("×", "*").replace("÷", "/").strip()
+    if not text:
+        _err("calc: what should I work out?  e.g.  calc 2^10 / 3   ·   calc sqrt(2) * pi")
+        return 1
+    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+           ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+           ast.Pow: operator.pow, ast.USub: operator.neg, ast.UAdd: operator.pos}
+    names = {k: v for k, v in vars(math).items() if not k.startswith("_")}
+    names.update(abs=abs, round=round, min=min, max=max)
+
+    def walk(node):
+        if isinstance(node, ast.Expression):
+            return walk(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in ops:
+            left, right = walk(node.left), walk(node.right)
+            if isinstance(node.op, ast.Pow) and abs(right) > 10000:
+                raise ValueError("that power is too big")
+            return ops[type(node.op)](left, right)
+        if isinstance(node, ast.UnaryOp) and type(node.op) in ops:
+            return ops[type(node.op)](walk(node.operand))
+        if isinstance(node, ast.Name) and node.id in names and not callable(names[node.id]):
+            return names[node.id]
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and callable(names.get(node.func.id)):
+            return names[node.func.id](*[walk(a) for a in node.args])
+        raise ValueError("only numbers, + - * / ^ % ( ) and math functions")
+
+    try:
+        value = walk(ast.parse(text, mode="eval"))
+    except ZeroDivisionError:
+        _err("calc: division by zero")
+        return 1
+    except (ValueError, SyntaxError, TypeError, OverflowError) as error:
+        _err(f"calc: {error}")
+        return 1
+    if isinstance(value, float) and value.is_integer() and abs(value) < 1e15:
+        value = int(value)
+    _out(f"{value:,}" if isinstance(value, int) and abs(value) >= 10000 else str(value))
+    return 0
+
+
+def _todo_path() -> str:
+    return os.path.join(_workspace(), ".pycmd", "todo.json")
+
+
+def _cmd_todo(args: list) -> int:
+    import json
+
+    path = _todo_path()
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            items = json.load(handle)
+    except (OSError, ValueError):
+        items = []
+    verb = args[0].lower() if args else "list"
+    rest = " ".join(args[1:]).strip()
+
+    def save():
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(items, handle, indent=1)
+
+    def pick():
+        try:
+            index = int(rest) - 1
+            if 0 <= index < len(items):
+                return index
+        except ValueError:
+            pass
+        _err(f"todo: which one? a number from 1 to {len(items)}" if items else "todo: the list is empty")
+        return None
+
+    if verb == "add" and rest:
+        items.append({"t": rest, "done": False})
+        save()
+        _out(f"added #{len(items)}: {rest}")
+        return 0
+    if verb in ("done", "undo", "rm", "remove"):
+        index = pick()
+        if index is None:
+            return 1
+        if verb in ("rm", "remove"):
+            gone = items.pop(index)
+            _out(f"removed: {gone['t']}")
+        else:
+            items[index]["done"] = verb == "done"
+            _out(("done: " if verb == "done" else "not done: ") + items[index]["t"])
+        save()
+        return 0
+    if verb == "clear":
+        before = len(items)
+        items = [i for i in items if not i.get("done")]
+        save()
+        _out(f"cleared {before - len(items)} done")
+        return 0
+    if verb not in ("list", "ls"):
+        _err("todo [list] · todo add <text> · todo done <n> · todo undo <n> · todo rm <n> · todo clear")
+        return 1
+    if not items:
+        _out("Nothing to do. Add something: todo add <text>")
+        return 0
+    for number, item in enumerate(items, 1):
+        _out(f"{number:>3}. [{'x' if item.get('done') else ' '}] {item['t']}")
+    left = sum(1 for i in items if not i.get("done"))
+    _out(f"     {left} left of {len(items)}")
+    return 0
+
+
+def _cmd_passgen(args: list) -> int:
+    import secrets
+    import string
+
+    length, symbols, count = 20, True, 1
+    for arg in args:
+        if arg in ("--no-symbols", "-n"):
+            symbols = False
+        elif arg.startswith("x") and arg[1:].isdigit():
+            count = max(1, min(20, int(arg[1:])))
+        elif arg.isdigit():
+            length = max(6, min(128, int(arg)))
+    alphabet = string.ascii_letters + string.digits + ("!@#$%^&*-_=+?" if symbols else "")
+    for _ in range(count):
+        while True:
+            word = "".join(secrets.choice(alphabet) for _ in range(length))
+            if (any(c.islower() for c in word) and any(c.isupper() for c in word)
+                    and any(c.isdigit() for c in word)):
+                break
+        _out(word)
+    return 0
+
+
+def _cmd_hash(args: list) -> int:
+    import hashlib
+
+    kinds = ("md5", "sha1", "sha256", "sha512")
+    kind = next((a.lower() for a in args if a.lower() in kinds), "sha256")
+    rest = [a for a in args if a.lower() not in kinds]
+    if not rest:
+        _err("hash <file or text> [md5|sha1|sha256|sha512]")
+        return 1
+    target = " ".join(rest)
+    path = _resolve(target)
+    digest = hashlib.new(kind)
+    if os.path.isfile(path):
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        _out(f"{digest.hexdigest()}  {target}  ({kind})")
+    else:
+        digest.update(target.encode("utf-8"))
+        _out(f"{digest.hexdigest()}  (text, {kind})")
+    return 0
+
+
+def _cmd_base64(args: list) -> int:
+    import base64
+    import binascii
+
+    if len(args) < 2 or args[0] not in ("encode", "decode", "e", "d"):
+        _err("base64 encode <text or file>  ·  base64 decode <text>")
+        return 1
+    rest = " ".join(args[1:])
+    if args[0] in ("encode", "e"):
+        path = _resolve(rest)
+        data = open(path, "rb").read() if os.path.isfile(path) else rest.encode("utf-8")
+        _out(base64.b64encode(data).decode("ascii"))
+        return 0
+    try:
+        raw = base64.b64decode(rest.strip() + "=" * (-len(rest.strip()) % 4))
+    except (binascii.Error, ValueError):
+        _err("base64: that is not base64")
+        return 1
+    try:
+        _out(raw.decode("utf-8"))
+    except UnicodeDecodeError:
+        _out(f"{len(raw)} bytes that are not text")
+    return 0
+
+
+def _cmd_wc(args: list) -> int:
+    if not args:
+        _err("wc <file> [more files]")
+        return 1
+    totals = [0, 0, 0]
+    for name in args:
+        text = _read_text(_resolve(name)) if os.path.isfile(_resolve(name)) else None
+        if text is None:
+            _err(f"wc: {name}: not a text file")
+            return 1
+        counts = [text.count("\n") + (0 if text.endswith("\n") or not text else 1), len(text.split()), len(text)]
+        totals = [a + b for a, b in zip(totals, counts)]
+        _out(f"{counts[0]:>8} lines {counts[1]:>8} words {counts[2]:>9} chars  {name}")
+    if len(args) > 1:
+        _out(f"{totals[0]:>8} lines {totals[1]:>8} words {totals[2]:>9} chars  total")
+    return 0
+
+
+_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "build", "dist", ".pycmd"}
+
+
+def _cmd_grep(args: list) -> int:
+    import re
+
+    flags = re.IGNORECASE if "-i" in args else 0
+    words = [a for a in args if a != "-i"]
+    if not words:
+        _err("grep <pattern> [file or folder] [-i]   e.g.  grep TODO   ·   grep \"def \\w+\" src -i")
+        return 1
+    try:
+        pattern = re.compile(words[0], flags)
+    except re.error as error:
+        _err(f"grep: {error}")
+        return 1
+    root = _resolve(words[1]) if len(words) > 1 else os.getcwd()
+    files = [root] if os.path.isfile(root) else []
+    if os.path.isdir(root):
+        for folder, dirs, names in os.walk(root):
+            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+            files += [os.path.join(folder, n) for n in names]
+    shown = 0
+    for path in files:
+        if os.path.getsize(path) > 2_000_000:
+            continue
+        text = _read_text(path, 2_000_000) if path else None
+        if not text or "\0" in text[:1024]:
+            continue
+        for number, line in enumerate(text.splitlines(), 1):
+            if pattern.search(line):
+                _out(f"{_shorten(path)}:{number}: {line.strip()[:200]}")
+                shown += 1
+                if shown >= 300:
+                    _out("... stopped at 300 matches")
+                    return 0
+    if not shown:
+        _out("no matches")
+    return 0 if shown else 1
+
+
+def _cmd_diff(args: list) -> int:
+    import difflib
+
+    if len(args) != 2:
+        _err("diff <file> <other file>")
+        return 1
+    texts = []
+    for name in args:
+        text = _read_text(_resolve(name)) if os.path.isfile(_resolve(name)) else None
+        if text is None:
+            _err(f"diff: {name}: not a text file")
+            return 1
+        texts.append(text.splitlines(keepends=True))
+    lines = list(difflib.unified_diff(texts[0], texts[1], fromfile=args[0], tofile=args[1]))
+    if not lines:
+        _out("the same")
+        return 0
+    _out("".join(lines).rstrip("\n"))
+    return 1
+
+
+def _cmd_cal(args: list) -> int:
+    import calendar
+    import datetime
+
+    today = datetime.date.today()
+    numbers = [int(a) for a in args if a.isdigit()]
+    if len(numbers) == 1 and numbers[0] > 12:
+        _out(calendar.TextCalendar(calendar.MONDAY).formatyear(numbers[0]).rstrip())
+        return 0
+    month = numbers[0] if numbers and 1 <= numbers[0] <= 12 else today.month
+    year = numbers[1] if len(numbers) > 1 else today.year
+    text = calendar.TextCalendar(calendar.MONDAY).formatmonth(year, month).rstrip()
+    if (year, month) == (today.year, today.month):
+        text += f"\n\nToday is {today:%A %d %B %Y}."
+    _out(text)
+    return 0
+
+
+_LOC_LANGS = {
+    ".py": "Python", ".js": "JavaScript", ".mjs": "JavaScript", ".ts": "TypeScript", ".tsx": "TypeScript",
+    ".jsx": "JavaScript", ".html": "HTML", ".htm": "HTML", ".css": "CSS", ".c": "C", ".h": "C/C++ header",
+    ".cpp": "C++", ".cc": "C++", ".hpp": "C/C++ header", ".cs": "C#", ".java": "Java", ".kt": "Kotlin",
+    ".go": "Go", ".rs": "Rust", ".rb": "Ruby", ".php": "PHP", ".swift": "Swift", ".dart": "Dart",
+    ".lua": "Lua", ".sh": "Shell", ".ps1": "PowerShell", ".sql": "SQL", ".md": "Markdown",
+    ".json": "JSON", ".yml": "YAML", ".yaml": "YAML", ".toml": "TOML", ".xml": "XML",
+}
+
+
+def _cmd_loc(args: list) -> int:
+    root = _resolve(args[0]) if args else os.getcwd()
+    if not os.path.isdir(root):
+        _err(f"loc: {args[0] if args else root} is not a folder")
+        return 1
+    table = {}
+    for folder, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith(".")]
+        for name in names:
+            language = _LOC_LANGS.get(os.path.splitext(name)[1].lower())
+            if not language:
+                continue
+            text = _read_text(os.path.join(folder, name), 5_000_000)
+            if not text:
+                continue
+            row = table.setdefault(language, [0, 0, 0])
+            lines = text.splitlines()
+            row[0] += 1
+            row[1] += sum(1 for line in lines if line.strip())
+            row[2] += len(lines)
+    if not table:
+        _out("no code here")
+        return 0
+    width = max(len(k) for k in table)
+    _out(f"{'language':<{width}}  {'files':>6}  {'code':>8}  {'lines':>8}")
+    for language, (files, code, lines) in sorted(table.items(), key=lambda kv: -kv[1][1]):
+        _out(f"{language:<{width}}  {files:>6}  {code:>8,}  {lines:>8,}")
+    total = [sum(r[i] for r in table.values()) for i in range(3)]
+    _out(f"{'total':<{width}}  {total[0]:>6}  {total[1]:>8,}  {total[2]:>8,}")
+    return 0
+
+
 COMMANDS = {
     "pip": (_cmd_pip, "install, remove and list Python packages",
             "pip install flask  ·  pip install rich==13.9.4  ·  pip list\n"
@@ -694,6 +1024,16 @@ COMMANDS = {
     "version": (_cmd_version, "what Python this is", ""),
     "env": (_cmd_env, "the environment variables that matter here", ""),
     "which": (_cmd_which, "what a word means to this console", ""),
+    "calc": (_cmd_calc, "a calculator  (calc 2^10 / 3 · calc sqrt(2) * pi)", ""),
+    "todo": (_cmd_todo, "a to-do list  (todo add <text> · todo done 2 · todo)", ""),
+    "passgen": (_cmd_passgen, "a strong random password  (passgen 24 · passgen x5 · --no-symbols)", ""),
+    "hash": (_cmd_hash, "the hash of a file or text  (hash app.py md5)", ""),
+    "base64": (_cmd_base64, "base64 encode / decode text or a file", ""),
+    "wc": (_cmd_wc, "count lines, words and characters", ""),
+    "grep": (_cmd_grep, "find text in files  (grep TODO · grep \"def \\w+\" src -i)", ""),
+    "diff": (_cmd_diff, "what changed between two files", ""),
+    "cal": (_cmd_cal, "a calendar  (cal · cal 3 2027 · cal 2027)", ""),
+    "loc": (_cmd_loc, "lines of code in a folder, by language", ""),
     "help": (_cmd_help, "this list", ""),
 }
 

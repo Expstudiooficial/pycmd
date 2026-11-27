@@ -41,6 +41,21 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 36,
+            versionName = "3.6.0",
+            headline = "Board: notes, images and to-dos you arrange and connect. And ten new console tools.",
+            added = listOf(
+                "Board, a new plugin that starts switched on: drop notes, headings, to-do lists, " +
+                    "images and links anywhere, drag them around, colour them and connect them " +
+                    "with arrows. Pinch to zoom, drag the background to move, tap a card twice " +
+                    "to write in it.",
+                "Several boards, undo, and Export .md, which writes a board to your workspace " +
+                    "as Markdown. `note <text>` in the console drops a note on your board.",
+                "Ten console tools, the same as on the PC: calc, todo, passgen, hash, base64, " +
+                    "wc, grep, diff, cal and loc. `help` lists them all.",
+            ),
+        ),
+        ReleaseNote(
             versionCode = 35,
             versionName = "3.5.0",
             headline = "Creator 3.0: build code from blocks, run it right there, and turn code back into blocks.",

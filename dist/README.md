@@ -1,17 +1,42 @@
 # Prebuilt APK
 
-`PyCmd-3.5.0.apk` — ready to install, nothing else needed.
+`PyCmd-3.6.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 3.5.0 |
+| Version | 3.6.0 |
 | Size | 27 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
 The universal APK, as in 2.7.0: one file for a phone and for an emulator.
+
+## What is new in 3.6.0
+
+**Board.** A new plugin that starts switched on:
+- **Cards:** notes, headings, to-do lists, images and links, anywhere you like.
+- **Arranging:** drag cards around, colour them, and connect them with arrows (drag a card's green dot onto another).
+- **Moving around:** pinch to zoom, drag the background to move, and tap a card twice to write in it.
+- **Boards:** keep as many as you like, with undo, and **Export .md** writes one to the workspace.
+
+`note <text>` in the console drops a note on your board.
+
+**Ten console tools**, the same as on the PC:
+
+| Command | Does |
+|---|---|
+| `calc` | a calculator (`calc 2^10 / 3`, `calc sqrt(2) * pi`) |
+| `todo` | a to-do list (`todo add …`, `todo done 2`) |
+| `passgen` | a strong random password |
+| `hash` | the hash of a file or text |
+| `base64` | base64 encoding and decoding |
+| `wc` | counts lines and words |
+| `grep` | finds text in files |
+| `diff` | compares two files |
+| `cal` | a calendar |
+| `loc` | lines of code by language |
 
 ## What is new in 3.5.0
 
