@@ -36,8 +36,8 @@ import traceback
 
 from . import (android, builtins, bundle, disk, files, install, known,
                langs, portable, runner, setup_all, store, toolchains, updates)
-VERSION = "5.9.1"
-BUILD = 15
+VERSION = "6.0"
+BUILD = 16
 
 _engine_ready = False
 

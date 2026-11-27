@@ -347,12 +347,17 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "5.9.1",
-    "title": "PyCmd for Windows 5.9.1",
+    "version": "6.0",
+    "title": "PyCmd for Windows 6.0",
     "items": [
-        ["A desktop shortcut, for everyone",
-         "The installer puts PyCmd on the desktop every time - new installs and updates. 5.9 made it "
-         "a tick-box that silent installs and updates never ticked."],
+        ["Updates open again",
+         "After an update, PyCmd could stop with \"Failed to load Python DLL\": the new PyCmd went "
+         "looking for Python in the old one's deleted temp folder. Programs PyCmd starts now get a "
+         "clean environment, and every build proves it on a real Windows machine."],
+        ["Notes on every device",
+         "Sign in and Notes syncs through your account: a board you make here is on your phone, "
+         "and the other way round. It syncs by itself a few seconds after you stop, or press Sync. "
+         "Deleted boards stay deleted everywhere."],
     ],
 }
 
@@ -433,13 +438,17 @@ def _board(call):
         import pycmd_board
         from . import files
 
+        if call == "sync":
+            from . import learn
+
+            learn._engine()          # the account lives with PyCmd Learn
         return json.loads(pycmd_board.api(call, json.dumps(payload or {}), files.root()))
     handler.__doc__ = f"Notes board: {call.replace('_', ' ')}."
     return handler
 
 
 BOARD_CALLS = ("listing", "load", "save", "create", "remove", "images", "image",
-               "export_markdown", "export_png", "note", "import_text")
+               "export_markdown", "export_png", "note", "import_text", "sync")
 
 
 def _h_notes_moved(host, payload):

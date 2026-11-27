@@ -118,7 +118,11 @@ def _read(workspace: str) -> dict:
         return data
     # Nothing on disk until something is saved: opening Notes, or asking what
     # boards there are, leaves the workspace exactly as it was.
-    return {"boards": {"b1": _WELCOME}, "current": "b1"}
+    # A copy each time (the shared one was being written into), saved=0 so
+    # an untouched welcome board never wins a sync against a real board.
+    welcome = json.loads(json.dumps(_WELCOME))
+    welcome["saved"] = 0
+    return {"boards": {"b1": welcome}, "current": "b1"}
 
 
 _WELCOME = template("welcome")
@@ -189,6 +193,66 @@ def _markdown(board: dict) -> str:
     return "\n".join(lines)
 
 
+CLOUD_PATH = "pycmd/boards.json"
+CLOUD_LIMIT = 700 * 1024
+
+
+def _merge(local: dict, remote: dict) -> tuple:
+    """Every board, the newer copy of each; a board deleted after it was last
+    saved stays deleted. Returns (merged, boards that came from the cloud)."""
+    gone = dict(remote.get("deleted") or {})
+    for key, when in (local.get("deleted") or {}).items():
+        gone[key] = max(when, gone.get(key, 0))
+    boards, pulled = {}, []
+    for key in set(local.get("boards", {})) | set(remote.get("boards", {})):
+        mine, theirs = local.get("boards", {}).get(key), remote.get("boards", {}).get(key)
+        pick = mine if theirs is None or (mine is not None and mine.get("saved", 0) >= theirs.get("saved", 0)) else theirs
+        if gone.get(key, 0) >= pick.get("saved", 0):
+            continue
+        if pick is theirs:
+            pulled.append(key)
+        boards[key] = pick
+    if not boards:
+        boards = {"b1": template("blank", "My board")}
+    current = local.get("current") if local.get("current") in boards else next(iter(boards))
+    return {"boards": boards, "current": current, "deleted": gone}, pulled
+
+
+def _sync(workspace: str, current: str = "") -> dict:
+    """Notes on every device: pulls, merges, pushes - through the account's
+    800 KB of cloud storage."""
+    try:
+        from pycmd_teach import cloud
+    except ImportError:
+        return {"ok": False, "error": "Cloud storage is not in this build."}
+    if not cloud._token():
+        return {"ok": False, "signed_out": True,
+                "error": "Sign in to your PyCmd account (Settings) to keep Notes the same on every device."}
+    try:
+        remote = {}
+        try:
+            got = cloud.file_get(CLOUD_PATH)
+            if got.get("text"):
+                remote = json.loads(got["text"])
+        except cloud.CloudError as error:
+            if error.status != 404:
+                raise
+        local = _read(workspace)
+        merged, pulled = _merge(local, remote if isinstance(remote, dict) else {})
+        payload = json.dumps(merged).encode("utf-8")
+        if len(payload) > CLOUD_LIMIT:
+            return {"ok": False, "error": f"Your boards are {len(payload) // 1024} KB with their pictures, and "
+                                          f"cloud storage holds 800 KB. Remove a few pictures to sync."}
+        _write(workspace, merged)
+        put = cloud.file_put(CLOUD_PATH, payload)
+        if put.get("ok") is False:
+            return {"ok": False, "error": put.get("error", "That did not upload.")}
+        return {"ok": True, "boards": len(merged["boards"]), "pulled": len(pulled),
+                "current_changed": current in pulled, "kb": len(payload) // 1024}
+    except cloud.CloudError as error:
+        return {"ok": False, "error": str(error)}
+
+
 def api(name: str, payload: str = "{}", workspace: str = "") -> str:
     try:
         body = json.loads(payload or "{}")
@@ -250,7 +314,9 @@ def _call(name: str, body: dict, workspace: str) -> dict:
         return {"ok": True, "id": board_id, "board": board}
     if name == "remove":
         data = _read(workspace)
-        data["boards"].pop(str(body.get("id") or ""), None)
+        gone = str(body.get("id") or "")
+        data["boards"].pop(gone, None)
+        data.setdefault("deleted", {})[gone] = int(time.time()) + 1
         if not data["boards"]:
             data["boards"] = {"b1": template("blank", "My board")}
         data["current"] = next(iter(data["boards"]))
@@ -305,6 +371,8 @@ def _call(name: str, body: dict, workspace: str) -> dict:
     if name == "import_text":
         text = str(body.get("text") or "").strip()
         return {"ok": True, "added": _drop_note(workspace, text, "blue") if text else False}
+    if name == "sync":
+        return _sync(workspace, str(body.get("id") or ""))
     if name == "retire":
         legacy, _ = _legacy_plugin_state()
         if legacy and not os.path.exists(_path(workspace)):

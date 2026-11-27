@@ -37,6 +37,26 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 6.0
+
+### Updates open again
+
+After an in-app update, the new PyCmd could stop with **"Failed to load Python
+DLL"**. The PyCmd that started the installer passed its own temp-folder
+settings down the line, and the new PyCmd went looking for Python in a folder
+that was deleted when the old one closed. Programs PyCmd starts (the
+installer, compilers, your own programs) now get a clean environment. Every
+build checks it on a real Windows machine: one PyCmd starts another and
+exits, and the second must still open.
+
+### Notes on every device
+
+Sign in to your PyCmd account and **Notes syncs** through its cloud storage:
+- **Both ways:** a board made on the PC is on your phone, and the other way round.
+- **Automatic:** it syncs a few seconds after you stop editing, or press **☁ Sync**.
+- **Merging:** where both changed, the newer board wins. A deleted board stays deleted on every device.
+- **Size:** boards with pictures count toward your 800 KB.
+
 ## What is new in 5.9.1
 
 ### A desktop shortcut, for everyone

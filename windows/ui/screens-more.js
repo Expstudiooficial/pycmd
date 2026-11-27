@@ -472,6 +472,7 @@ const BOARD_CALLS = {
   remove: (p) => PyCmd.call('board.remove', p), images: (p) => PyCmd.call('board.images', p),
   image: (p) => PyCmd.call('board.image', p), export_markdown: (p) => PyCmd.call('board.export_markdown', p),
   export_png: (p) => PyCmd.call('board.export_png', p), note: (p) => PyCmd.call('board.note', p),
+  sync: (p) => PyCmd.call('board.sync', p),
 };
 
 async function Notes(screen) {

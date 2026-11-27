@@ -147,6 +147,16 @@ jobs:
           $v = Start-Process $exe -ArgumentList "--version" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "installed-version.txt"
           if ($v.ExitCode -ne 0) { throw "the installed PyCmd would not start" }
           Write-Host ("installed: " + (Get-Content installed-version.txt -Raw))
+          # 5.9.1: after an update the new PyCmd looked for Python in the old
+          # one's deleted temp folder. Start the installed one from inside a
+          # PyCmd that then exits, as an update does; it must still start.
+          $probe = (Resolve-Path tools/ci_relaunch_probe.py).Path
+          $out = Join-Path $env:RUNNER_TEMP "relaunch.txt"
+          $portable = (Resolve-Path dist-windows/build/PyCmd.exe).Path
+          Start-Process $portable -ArgumentList "--python", "`"$probe`"", "`"$exe`"", "`"$out`"" -Wait -NoNewWindow
+          foreach ($i in 1..40) { if ((Test-Path $out) -and ((Get-Content $out -Raw) -match "PyCmd")) { break }; Start-Sleep -Milliseconds 500 }
+          if (-not ((Test-Path $out) -and ((Get-Content $out -Raw) -match "PyCmd for Windows"))) { throw "PyCmd started by PyCmd did not start after its parent closed" }
+          Write-Host ("relaunched: " + (Get-Content $out -Raw))
           $u = Start-Process $setup -ArgumentList $quiet -Wait -PassThru
           if ($u.ExitCode -ne 0) { throw "installing over the top (an update) exited $($u.ExitCode)" }
           $uninstaller = Join-Path (Split-Path $exe) "unins000.exe"

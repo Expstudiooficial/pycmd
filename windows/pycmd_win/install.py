@@ -255,6 +255,12 @@ def plan(toolchain_id: str) -> dict:
     }
 
 
+def _clean() -> dict:
+    from .runner import clean_env
+
+    return clean_env()
+
+
 def _run(command, timeout: float, write) -> tuple:
     """Runs one install, streaming what it says. Returns (ok, output).
 
@@ -268,7 +274,7 @@ def _run(command, timeout: float, write) -> tuple:
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL, text=True, encoding="utf-8",
-            errors="replace", bufsize=1, creationflags=_no_window(),
+            errors="replace", bufsize=1, creationflags=_no_window(), env=_clean(),
         )
     except FileNotFoundError:
         return False, f"{command[0]} is not there"

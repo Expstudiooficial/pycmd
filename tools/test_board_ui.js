@@ -114,6 +114,9 @@ const cardWith = (text) => `.card:has(.text)`;
   await page.waitForTimeout(900);
   const saved = engine('listing');
   check('it all saved', saved.boards.length === 2, saved);
+  await q(() => document.getElementById('bSync').click());
+  await page.waitForTimeout(800);
+  check('Sync without an account says how to sign in', await q(() => /Sign in/.test((document.querySelector('.toast') || {}).textContent || '')));
   check('no page errors with a mouse', errors.length === 0, errors);
 
   console.log('== Notes board, with fingers ==');

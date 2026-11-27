@@ -221,8 +221,14 @@ def install(result: dict, silent: bool = False, progress=None) -> dict:
 
         flags = ["/VERYSILENT" if silent else "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
                  "/CLOSEAPPLICATIONS", "/SP-"]
+        from .runner import clean_env, forget_dll_directory
+
         detached = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        subprocess.Popen([got["path"], *flags], close_fds=True, creationflags=detached)
+        # A clean environment, or the PyCmd the installer starts afterwards
+        # looks for its Python in this one's deleted temp folder (5.9.1 bug).
+        forget_dll_directory()
+        subprocess.Popen([got["path"], *flags], close_fds=True, creationflags=detached, env=clean_env(),
+                         cwd=os.path.dirname(got["path"]))
         return {"ok": True, "started": True, "path": got["path"]}
     except OSError as error:
         return {"ok": False, "error": f"the installer would not start: {error}"}

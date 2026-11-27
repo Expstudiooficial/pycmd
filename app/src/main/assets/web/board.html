@@ -131,6 +131,7 @@
   <button id="bUndo" title="Undo (Ctrl+Z)">↶</button>
   <button id="bRedo" title="Redo (Ctrl+Y)">↷</button>
   <button id="bExport" title="Export as a picture or Markdown">Export</button>
+  <button id="bSync" title="Keep Notes the same on your phone and PC (needs your PyCmd account)">☁ Sync</button>
   <span class="muted" id="saved"></span>
 </div>
 <div id="vp">
@@ -154,7 +155,7 @@
   var SW = { none: 'transparent', yellow: '#fbe38e', green: '#b7ebc6', blue: '#b9d6ff', pink: '#f9c3d9', purple: '#d6c6ff', orange: '#ffd0a6', red: '#ffb3ad', gray: '#d9dde0' };
   var SIZES = { note: [220, 140], heading: [320, 60], todo: [240, 150], image: [260, 220], link: [240, 90], code: [320, 170], frame: [420, 320] };
   var B = null, id = '', sel = [], selLink = null, past = [], future = [], connect = false, connectFrom = null;
-  var selectMode = false, saveTimer = 0, editing = null, clip = null, found = [], foundAt = -1;
+  var selectMode = false, saveTimer = 0, syncTimer = 0, cloudOn = true, editing = null, clip = null, found = [], foundAt = -1;
   var vp = $('vp'), world = $('world'), n = 0;
   function uid(p) { n += 1; return p + Date.now().toString(36) + n; }
   function call(name, payload) {
@@ -195,6 +196,8 @@
     saveTimer = setTimeout(function () {
       call('save', { id: id, board: B }).then(function (r) { $('saved').textContent = r.ok ? 'saved' : 'not saved'; if (!r.ok) toast(r.error || 'That did not save.'); });
     }, 600);
+    // and to your other devices, quietly, once you stop for a moment
+    clearTimeout(syncTimer); if (cloudOn) syncTimer = setTimeout(function () { sync(true); }, 15000);
   }
   function snapTo(v) { return B.view.snap ? Math.round(v / 20) * 20 : Math.round(v); }
 
@@ -782,6 +785,23 @@
       { label: '✕  Delete this board', danger: true, run: function () { ask('Delete "' + B.name + '"? Type DELETE to confirm.', [{ name: 'yes', hint: 'DELETE' }]).then(function (v) { if (v && v.yes.toUpperCase() === 'DELETE') call('remove', { id: id }).then(function () { open(''); toast('Board deleted.'); }); }); } },
     ]);
   };
+  // Notes on every device, through the account's cloud storage. Quiet when it
+  // runs by itself; a sign-in hint only when the button is pressed.
+  function sync(quiet) {
+    if (!quiet) { $('saved').textContent = 'syncing…'; }
+    return call('sync', { id: id }).then(function (r) {
+      if (!r.ok) {
+        if (r.signed_out) cloudOn = false;
+        if (!quiet) { $('saved').textContent = ''; toast(r.error || 'That did not sync.'); }
+        return;
+      }
+      cloudOn = true;
+      $('saved').textContent = 'synced';
+      if (!quiet) toast(r.pulled ? r.pulled + (r.pulled === 1 ? ' board' : ' boards') + ' came from your other devices.' : 'Up to date on every device.');
+      if (r.pulled && !editing && !(gesture && gesture.moved)) open(id);
+    });
+  }
+  $('bSync').onclick = function () { cloudOn = true; sync(false); };
   $('bExport').onclick = function (e) { var r = e.currentTarget.getBoundingClientRect(); exportMenu(r.left, r.bottom + 4); };
   $('bSnap').onclick = function () { B.view.snap = !B.view.snap; applyView(); changed(); };
   COLORS.forEach(function (c) {
@@ -858,7 +878,7 @@
   }
   window.boardReload = function () { open(id); };
   (function start(tries) {
-    if (window.PyBoard) { open(''); return; }
+    if (window.PyBoard) { open('').then(function () { sync(true); }); return; }
     if (tries > 250) { document.body.innerHTML = '<p style="padding:20px">Notes could not reach PyCmd.</p>'; return; }
     setTimeout(function () { start(tries + 1); }, 40);
   }(0));

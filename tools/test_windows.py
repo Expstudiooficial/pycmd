@@ -500,7 +500,7 @@ DOES_RATHER_THAN_ANSWERS = {
     "console.secret",
     # 5.8: the Notes board's writers
     "board.save", "board.create", "board.remove", "board.export_markdown",
-    "board.export_png", "board.note", "board.import_text",
+    "board.export_png", "board.note", "board.import_text", "board.sync",
 }
 for name in sorted(host_module.HANDLERS):
     if name in DOES_RATHER_THAN_ANSWERS:
@@ -1595,7 +1595,7 @@ _r58 = json.loads(_pb58.api("note", json.dumps({"text": "from the test"}), _ws58
 check("note drops a card on the board", _r58.get("ok") and "from the test" in open(os.path.join(_ws58, ".pycmd", "boards.json"), encoding="utf-8").read(), _r58)
 
 say("\n== 5.9 ==")
-check("the version is 5.9.1", host_module.VERSION == "5.9.1" and host_module.BUILD == 15)
+check("the version is 5.9.1 or later", host_module.BUILD >= 15)
 check("Copies is gone", not any(k.startswith("copies") for k in host_module.HANDLERS)
       and not os.path.exists(os.path.join(ROOT, "windows", "pycmd_win", "copies.py"))
       and "id: 'copies'" not in open(os.path.join(ROOT, "windows", "ui", "app.js"), encoding="utf-8").read())
@@ -1623,6 +1623,19 @@ _m59 = _mlw.build_manifest(os.path.join(_d59, "PyCmd.exe"), "notes", "windows-v5
 check("the manifest names the installer and its checksum",
       _m59["installer"] and _m59["installerUrl"].endswith("/windows-v5.9.0/PyCmd-Setup.exe") and len(_m59["installerSha256"]) == 64, _m59)
 check("--updated is understood", "--updated" in open(os.path.join(ROOT, "windows", "pycmd_win", "app.py"), encoding="utf-8").read())
+
+say("\n== 6.0 ==")
+check("the version is 6.0", host_module.VERSION == "6.0" and host_module.BUILD == 16)
+os.environ["_PYI_APPLICATION_HOME_DIR"] = r"C:\gone\_MEI123"
+_env60 = _runner55.clean_env()
+check("programs PyCmd starts do not inherit its temp folder",
+      not any(k.startswith("_PYI_") for k in _env60) and _env60.get("PYINSTALLER_RESET_ENVIRONMENT") == "1")
+os.environ.pop("_PYI_APPLICATION_HOME_DIR", None)
+_upsrc = open(os.path.join(ROOT, "windows", "pycmd_win", "updates.py"), encoding="utf-8").read()
+check("the installer starts clean", "env=clean_env()" in _upsrc and "forget_dll_directory()" in _upsrc)
+check("CI proves a PyCmd started by a PyCmd still opens", "ci_relaunch_probe.py" in _wf
+      and os.path.isfile(os.path.join(ROOT, "tools", "ci_relaunch_probe.py")))
+check("Notes can sync", "board.sync" in host_module.HANDLERS)
 
 say()
 if FAILURES:

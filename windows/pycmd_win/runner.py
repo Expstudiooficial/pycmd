@@ -110,10 +110,44 @@ def _kill_tree(process) -> None:
             pass
 
 
+def clean_env(base=None) -> dict:
+    """The environment for a process that is not part of this PyCmd.
+
+    A one-file PyCmd.exe runs out of a temporary _MEI folder and tells its own
+    children so through _PYI_* variables. A program that inherits them and is
+    itself a PyInstaller exe - the next PyCmd, started by the installer after
+    an update - goes looking for its Python DLL in *this* PyCmd's folder, which
+    is gone the moment this one closes: "Failed to load Python DLL" (5.9.1).
+    """
+    env = dict(os.environ if base is None else base)
+    for key in list(env):
+        if key.startswith("_PYI_") or key in ("_MEIPASS2", "_MEIPASS"):
+            env.pop(key, None)
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
+
+
+def forget_dll_directory() -> None:
+    """Undoes the bootloader's SetDllDirectory, which child processes inherit."""
+    if WINDOWS:
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.SetDllDirectoryW(None)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _spawn(command, cwd, stdin_text=None, interactive=False):
     # UTF-8 and unbuffered, so print("✓") does not die on cp1252 and an
     # input() prompt shows before the program waits rather than after.
-    env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    import sys
+
+    own = bool(command) and os.path.normcase(str(command[0])) == os.path.normcase(sys.executable)
+    # PyCmd's own Python (`PyCmd.exe --python`) shares this process's files on
+    # purpose; anything else starts clean.
+    env = dict(os.environ if own else clean_env(),
+               PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
     kwargs = {
         "cwd": cwd or None,
         "env": env,
