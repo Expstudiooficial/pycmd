@@ -1,2 +1,1 @@
-# PyCmd for Windows 5.9.1 (build 15) has not been built yet.
-# The checksum appears here when a Windows release tag builds it.
+c6b468999247f5e9caae0397ecef0a542d2225f6efc40442fb5fd3ac8ae915ae  PyCmd.exe
