@@ -87,6 +87,40 @@ def plugin_dir(plugin_id: str) -> str:
     return os.path.join(_plugins_dir, _safe_id(plugin_id))
 
 
+def _fingerprint(folder: str) -> str:
+    """A hash of a plugin's own files: not what it saved, not plugin.json
+    (install writes installed_at into that), not compiled caches."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    for directory, folders, names in os.walk(folder):
+        folders[:] = sorted(f for f in folders if not f.startswith(".") and f != "__pycache__")
+        for name in sorted(names):
+            if name.startswith(".") or name == "plugin.json" or name.endswith(".pyc"):
+                continue
+            path = os.path.join(directory, name)
+            digest.update(os.path.relpath(path, folder).replace(os.sep, "/").encode())
+            try:
+                with open(path, "rb") as handle:
+                    digest.update(handle.read())
+            except OSError:
+                return ""
+    return digest.hexdigest()
+
+
+def same_as_installed(folder: str, plugin_id: str) -> str:
+    """"1" when the installed copy of a bundled plugin is this one, byte for byte.
+
+    The version number alone was not enough: Creator's panel was redrawn and
+    kept 2.6.0, so a device that already had 2.6.0 kept the old look for good.
+    A string, because that is what crosses the bridge without surprises.
+    """
+    installed = plugin_dir(plugin_id)
+    if not os.path.isdir(installed):
+        return "0"
+    return "1" if _fingerprint(folder) == _fingerprint(installed) else "0"
+
+
 # ----------------------------------------------------------------- installing
 
 def install(source: str, source_name: str = "", bundled: str = "") -> str:
@@ -111,6 +145,16 @@ def install(source: str, source_name: str = "", bundled: str = "") -> str:
     try:
         if replaced:
             unload(manifest["id"])
+            # What the plugin saved - Creator's projects, Scheduler's jobs -
+            # is the user's, not the plugin's. An update used to throw it away
+            # with the old folder.
+            for kept in (".state.json",):
+                old_state = os.path.join(target, kept)
+                if os.path.isfile(old_state) and not os.path.exists(os.path.join(staged, kept)):
+                    try:
+                        shutil.copy2(old_state, os.path.join(staged, kept))
+                    except OSError:
+                        pass
             # Moved aside rather than deleted, and then swapped in one
             # rename. Deleting first left a window where the plugin's folder
             # did not exist, or existed half-emptied, and anything reading it

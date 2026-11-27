@@ -1,1270 +1,741 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Creator</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Creator</title>
+<style>
+  :root {
+    --c-bg: var(--bg, #0b0f0c); --c-fg: var(--fg, #e6ede7); --c-surface: var(--surface, #121915);
+    --c-high: var(--surface-high, #1a231e); --c-line: var(--outline, #26332b); --c-muted: var(--muted, #8b9a90);
+    --c-accent: var(--accent, #5fd38d); --c-soft: var(--accent-soft, rgba(95, 211, 141, .14));
+    --c-on: var(--on-accent, #04140a); --c-danger: var(--danger, #e8635f); --c-warn: var(--warning, #e5a945);
+    --mono: "JetBrains Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  /*
+    Two layouts. On a desktop (html.shell) the panel is an app: three panes
+    that fill the window, each scrolling on its own, sized with vh. On the
+    phone it is a plain page that scrolls, because a percentage height - or a
+    body that is its own scroller - is a black screen in the app's WebView.
+    No percentage heights anywhere: tools/test_bundled.py checks.
+  */
+  body { margin: 0; background: var(--c-bg); color: var(--c-fg); font: 13.5px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; }
+  html.shell body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { background: var(--c-high); border: 1px solid var(--c-line); border-radius: 9px; padding: 6px 11px;
+           cursor: pointer; white-space: nowrap; transition: background .12s, border-color .12s; }
+  button:hover { border-color: var(--c-accent); }
+  button:disabled { opacity: .45; cursor: default; border-color: var(--c-line); }
+  button.primary { background: var(--c-accent); color: var(--c-on); border-color: var(--c-accent); font-weight: 600; }
+  button.ghost { background: none; border-color: transparent; }
+  button.ghost:hover { background: var(--c-high); }
+  button.icon { padding: 4px 8px; min-width: 30px; }
+  input, select, textarea { background: var(--c-bg); border: 1px solid var(--c-line); border-radius: 8px; padding: 6px 9px; outline: none; }
+  input:focus, select:focus, textarea:focus { border-color: var(--c-accent); box-shadow: 0 0 0 3px var(--c-soft); }
+  .muted { color: var(--c-muted); }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .top { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--c-line);
+         background: var(--c-surface); flex-wrap: wrap; }
+  .langs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; flex: 1 1 260px; min-width: 0; }
+  .langs::-webkit-scrollbar { display: none; }
+  .chip { border-radius: 999px; padding: 4px 11px; font-size: 12.5px; background: transparent; }
+  .chip.on { background: var(--c-soft); border-color: var(--c-accent); color: var(--c-accent); font-weight: 600; }
+  .name { width: 150px; font-weight: 600; }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .saved { font-size: 11.5px; min-width: 52px; text-align: right; }
+  .main { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr) minmax(280px, 40%); }
+  .pane { display: flex; flex-direction: column; border-right: 1px solid var(--c-line); min-width: 0; }
+  .scroll { overflow: auto; }
+  .palette .scroll, #codeView { max-height: 560px; }
+  html.shell .main { flex: 1 1 auto; min-height: 0; }
+  html.shell .pane { min-height: 0; }
+  html.shell .scroll { flex: 1 1 auto; min-height: 0; max-height: none; overscroll-behavior: contain; }
+  .pane:last-child { border-right: 0; }
+  .pane-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--c-line); }
+  .pane-head b { flex: 1; }
+  .search { width: 100%; }
+  .cats { display: flex; gap: 4px; overflow-x: auto; padding: 8px 10px 6px; scrollbar-width: thin; flex: 0 0 auto; }
+  .cats .chip { flex: 0 0 auto; }
+  .cats .chip { padding: 2px 9px; font-size: 11.5px; }
+  .pal { margin: 4px 10px; padding: 7px 9px 7px 12px; border-radius: 9px; background: var(--c-surface);
+         border: 1px solid var(--c-line); border-left: 4px solid hsl(var(--h) 60% 55%); cursor: pointer; user-select: none; }
+  .pal:hover { border-color: hsl(var(--h) 60% 55%); background: var(--c-high); }
+  .pal code { display: block; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  .pal small { color: var(--c-muted); font-size: 11.5px; }
+  .group { padding: 10px 12px 2px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--c-muted); }
+  .tree { padding: 10px 10px 80px; }
+  .blk { position: relative; margin: 3px 0; border-radius: 9px; background: var(--c-surface); border: 1px solid var(--c-line);
+         border-left: 4px solid hsl(var(--h) 60% 55%); }
+  .blk.sel { border-color: var(--c-accent); box-shadow: 0 0 0 2px var(--c-soft); }
+  .line { display: flex; align-items: center; gap: 4px; padding: 4px 6px; flex-wrap: wrap; min-height: 32px; }
+  .grip { cursor: grab; color: var(--c-muted); padding: 0 3px; user-select: none; font-size: 12px; }
+  .tx { font-family: var(--mono); font-size: 12.5px; white-space: pre; }
+  .slot { font-family: var(--mono); font-size: 12.5px; padding: 2px 6px; border-radius: 6px; min-width: 34px;
+          background: var(--c-bg); border: 1px solid var(--c-line); color: var(--c-accent); }
+  select.slot { padding: 2px 4px; }
+  .tools { margin-left: auto; display: none; gap: 2px; }
+  .blk.sel > .line .tools { display: flex; }
+  .tools button { padding: 1px 6px; font-size: 12px; border-radius: 6px; }
+  .kids { margin: 0 6px 6px 18px; padding-left: 6px; border-left: 2px dashed var(--c-line); min-height: 8px; }
+  .close { font-family: var(--mono); font-size: 12.5px; color: var(--c-muted); padding: 0 8px 5px 26px; }
+  .hole { margin: 4px 0; padding: 6px; border: 1px dashed var(--c-line); border-radius: 8px; color: var(--c-muted); font-size: 12px; text-align: center; }
+  .drop-before { box-shadow: 0 -3px 0 var(--c-accent); }
+  .drop-after { box-shadow: 0 3px 0 var(--c-accent); }
+  .drop-in { outline: 2px dashed var(--c-accent); outline-offset: 2px; }
+  .empty { padding: 34px 18px; text-align: center; color: var(--c-muted); }
+  .empty b { display: block; color: var(--c-fg); font-size: 15px; margin-bottom: 6px; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button { padding: 4px 12px; border-radius: 999px; }
+  .tabs button.on { background: var(--c-soft); color: var(--c-accent); border-color: var(--c-accent); }
+  .code { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; padding: 8px 0; counter-reset: n; }
+  .code div { padding: 0 12px 0 0; white-space: pre; cursor: pointer; }
+  .code div::before { counter-increment: n; content: counter(n); display: inline-block; width: 38px; text-align: right;
+                      padding-right: 10px; color: var(--c-muted); opacity: .6; user-select: none; }
+  .code div:hover { background: var(--c-high); }
+  .code div.hi { background: var(--c-soft); }
+  .code div.bad { background: rgba(232, 99, 95, .14); }
+  .k { color: var(--kw, #c792ea); } .s { color: var(--str, #c3e88d); } .n { color: var(--num, #f78c6c); }
+  .c { color: var(--comment, #6a7a70); font-style: italic; } .f { color: var(--def, #82aaff); }
+  .problems { margin: 8px 10px; padding: 8px 10px; border-radius: 8px; background: rgba(229, 169, 69, .12); color: var(--c-warn); font-size: 12.5px; }
+  .runbox { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  html.shell .runbox { flex: 1 1 auto; min-height: 0; }
+  .runbox[hidden] { display: none; }
+  .runbox textarea { min-height: 54px; resize: vertical; font-family: var(--mono); font-size: 12.5px; }
+  .out { min-height: 120px; max-height: 420px; overflow: auto; margin: 0; padding: 10px 12px; border-radius: 10px;
+         background: var(--c-bg); border: 1px solid var(--c-line); font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-word; }
+  .out .e { color: var(--c-danger); } .out .i { color: var(--c-muted); }
+  .preview { height: 420px; border: 1px solid var(--c-line); border-radius: 10px; background: #fff; width: 100%; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  html.shell .out { flex: 1 1 auto; max-height: none; }
+  html.shell .preview { flex: 1 1 auto; height: auto; min-height: 200px; }
+  .nav { display: none; border-bottom: 1px solid var(--c-line); background: var(--c-surface); }
+  .nav button { flex: 1; border: 0; border-radius: 0; background: none; padding: 10px 4px; font-size: 12.5px; color: var(--c-muted); }
+  .nav button.on { color: var(--c-accent); font-weight: 600; box-shadow: inset 0 -2px 0 var(--c-accent); }
+  @media (max-width: 1050px) {
+    .main { grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); }
+    .main .side { display: none; }
+    .main[data-view="code"] .side, .main[data-view="run"] .side { display: flex; grid-column: 2; }
+    .main[data-view="code"] .script, .main[data-view="run"] .script { display: none; }
+    .nav { display: flex; }
+    .nav [data-v="blocks"] { display: none; }
+  }
+  @media (max-width: 700px) {
+    .main { grid-template-columns: minmax(0, 1fr); }
+    .main .pane { display: none; border-right: 0; }
+    .main[data-view="blocks"] .palette, .main[data-view="script"] .script,
+    .main[data-view="code"] .side, .main[data-view="run"] .side { display: flex; grid-column: 1; }
+    .nav [data-v="blocks"] { display: block; }
+    .name { width: 110px; }
+    .hide-s { display: none; }
+    .tools { display: flex; }
+  }
+  .sheet { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 9; }
+  .sheet[hidden] { display: none; }
+  .card { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 14px; width: min(640px, 100%);
+          max-height: max(320px, 86vh); display: flex; flex-direction: column; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .7); }
+  .card header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--c-line); }
+  .card header b { flex: 1; font-size: 15px; }
+  .card .body { padding: 12px 14px 16px; overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--c-line); border-radius: 10px; background: var(--c-bg); }
+  .item .grow { flex: 1; min-width: 0; }
+  .item .grow div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--c-high); border: 1px solid var(--c-accent);
+           padding: 8px 14px; border-radius: 10px; z-index: 10; max-width: 90%; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
+</style>
 </head>
 <body>
-<!--
-  The panel's own styles come after the app's, so they win where they overlap.
-  Every colour here is one of the app's: this is a tab, and a tab that looked
-  like somebody else's app would be a worse tab.
-
-  Two rules this panel keeps to, both learned the hard way:
-
-  * **Everything on screen is the real code.** The palette shows the line a
-    block writes, filled in; the script shows the line each block wrote, from
-    the compiler itself. Showing templates - `print(@text@)` - made a list of
-    blocks read as a list of placeholders.
-  * **No `alert`, `confirm` or `prompt`.** A WebView with no chrome client
-    answers those by ignoring them, and `confirm` then reads as "no" - which
-    turns a button into a button that does nothing. Every question this panel
-    asks is a sheet of its own.
--->
-<style>
-  /*
-    Nothing here is pinned to the viewport, and that is the point.
-
-    This panel spent three releases being the one that would not scroll. It
-    had a sticky bar at the top and a button row fixed to the bottom, and it
-    was the only panel that did - the others are plain pages and scroll fine.
-    Trying to fix it by making the body its own scroller was worse: percentage
-    heights collapse the whole panel to nothing in this WebView.
-
-    So it is a plain page now, like the panels that work. The bar scrolls away
-    with everything else, and the buttons that used to be fixed at the bottom
-    sit at the top instead - where they are on screen the moment the panel
-    opens, without anybody having to scroll to reach them.
-  */
-  body { margin: 0; padding: 0 0 32px; }
-
-  .bar {
-    background: var(--bg); border-bottom: 1px solid var(--outline);
-    padding: 10px 14px 10px;
-  }
-  .row { display: flex; align-items: center; gap: 8px; }
-  .grow { flex: 1 1 auto; min-width: 0; }
-  .field-input {
-    font: inherit; padding: 9px 11px; border-radius: 10px;
-    border: 1px solid var(--outline); background: var(--bg); color: var(--fg); width: 100%;
-  }
-  select.field-input { font-weight: 600; }
-  .muted { color: var(--muted); font-size: 12px; }
-  .warn { color: var(--warning); font-size: 12px; }
-  .bad { color: var(--danger); font-size: 13px; }
-
-  .chip {
-    display: inline-block; padding: 7px 13px; border-radius: 20px;
-    border: 1px solid var(--outline); background: var(--surface); color: var(--muted);
-    font-size: 13px; white-space: nowrap;
-  }
-  .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
-  .chips { display: flex; gap: 6px; overflow-x: auto; padding: 3px 0; }
-  .chips::-webkit-scrollbar { height: 0; }
-
-  button.small {
-    font: inherit; padding: 9px 13px; font-size: 13px; border-radius: 10px;
-    background: var(--surface); border: 1px solid var(--outline); color: var(--fg);
-  }
-  button.small.primary { background: var(--accent-soft); border-color: var(--accent); }
-  button.small.danger { border-color: var(--danger); color: var(--danger); }
-  button.small:disabled { opacity: .45; }
-
-  .pane { padding: 12px 14px 0; }
-  .head {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    margin: 18px 0 6px; color: var(--fg); font-weight: 600; font-size: 15px;
-  }
-  .head .muted { font-weight: 400; }
-
-  .note {
-    background: var(--surface); border: 1px solid var(--outline); border-radius: 10px;
-    padding: 9px 11px; margin: 6px 0 10px; font-size: 12px; color: var(--muted);
-  }
-  .note b { color: var(--fg); font-weight: 600; }
-
-  /* -- the script ---------------------------------------------------- */
-  .code {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 13px; color: var(--fg); white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .blk {
-    border: 1px solid var(--outline); border-left: 3px solid var(--accent);
-    background: var(--surface); border-radius: 10px;
-    padding: 9px 11px; margin: 6px 0;
-  }
-  .blk.sel { border-color: var(--accent); background: var(--accent-soft); }
-  .blk .why { font-size: 12px; color: var(--muted); margin-top: 3px; }
-  .blk.holds .why::after { content: "  ·  holds blocks"; color: var(--accent); }
-  .blk.cat-Logic, .blk.cat-Loops { border-left-color: var(--warning); }
-  .blk.cat-Functions, .blk.cat-Classes { border-left-color: var(--info); }
-  .blk.cat-Text, .blk.cat-Lists, .blk.cat-Dictionaries { border-left-color: var(--accent); }
-  .blk.cat-Errors { border-left-color: var(--danger); }
-  .rail { border-left: 1px dashed var(--outline); margin-left: 9px; padding-left: 13px; }
-  .closing { font-size: 12px; color: var(--muted); margin: 2px 0 6px 6px; }
-
-  .tools { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
-  .tools button { padding: 8px 11px; font-size: 12px; }
-
-  /* -- the palette, which lives in its own sheet ---------------------- */
-  .addtop {
-    position: sticky; top: 0; z-index: 2;
-    background: var(--bg); padding: 12px 0 10px;
-    border-bottom: 1px solid var(--outline); margin-bottom: 8px;
-  }
-  .pal { padding-bottom: 8px; }
-  .pick {
-    display: block; width: 100%; text-align: left;
-    border: 1px solid var(--outline); background: var(--bg); color: var(--fg);
-    border-radius: 10px; padding: 10px 12px; margin: 6px 0; font: inherit;
-  }
-  .pick .what { font-size: 14px; color: var(--fg); }
-  .pick .code { color: var(--accent); font-size: 12px; margin-top: 3px; display: block; }
-  /* The heading over each group of blocks. Sticky, because a list of two
-     hundred is scrolled a long way and "which group am I in" is the question
-     it raises. */
-  .palgroup {
-    position: sticky; top: 0; z-index: 1;
-    background: var(--bg); color: var(--muted);
-    font-size: 11.5px; font-weight: 700;
-    letter-spacing: .06em; text-transform: uppercase;
-    padding: 10px 2px 4px;
-  }
-  .palgroup:first-child { padding-top: 2px; }
-
-  /* -- overlays ------------------------------------------------------ */
-  /*
-    A sheet covers the whole panel and scrolls inside itself - which is the
-    one arrangement in this panel that has always worked on a phone, and the
-    reason the block picker is a sheet rather than a section of the page.
-    Closed, it is `display: none` and costs the layout nothing.
-  */
-  .sheet {
-    position: fixed; top: 0; right: 0; bottom: 0; left: 0;
-    background: rgba(4, 8, 12, .86);
-    display: none; z-index: 20;
-    overflow-y: auto; -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    padding: 22px 12px 40px;
-  }
-  .sheet.open { display: block; }
-  #addSheet { background: var(--bg); padding-top: 0; }
-  .sheet .card { max-width: 640px; margin: 0 auto; }
-  .field { margin: 12px 0; }
-  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
-
-  /* What used to be the fixed footer, now the first thing under the bar. */
-  .actions {
-    background: var(--bg); border-bottom: 1px solid var(--outline);
-    padding: 10px 14px 12px;
-    display: flex; gap: 8px;
-  }
-  .actions button { flex: 1 1 0; padding: 13px 8px; font-size: 14px; }
-  .empty {
-    color: var(--muted); font-size: 13px; padding: 16px 12px;
-    border: 1px dashed var(--outline); border-radius: 10px; text-align: center;
-  }
-  pre.out { max-height: 50vh; overflow: auto; }
-</style>
-
-<div class="bar">
-  <div class="row">
-    <input id="name" class="field-input grow" value="hello" aria-label="Project name">
-    <button class="small" id="new">New</button>
-    <button class="small" id="drawer">Saved</button>
+<div class="top">
+  <div class="langs" id="langs"></div>
+  <input class="name" id="name" spellcheck="false" title="Project name - also the file name">
+  <span class="saved muted" id="saved"></span>
+  <div class="acts">
+    <button class="icon ghost" id="undo" title="Undo (Ctrl+Z)">↶</button>
+    <button class="icon ghost" id="redo" title="Redo (Ctrl+Y)">↷</button>
+    <button id="bExamples" title="Start from an example">Examples</button>
+    <button id="bImport" title="Turn code into blocks">Import code</button>
+    <button id="bProjects" class="hide-s" title="Your saved projects">Projects</button>
+    <button id="bSave" title="Save as a real file in your workspace (Ctrl+S)">Save file</button>
+    <button id="bRun" class="primary" title="Run it (Ctrl+Enter)">▶ Run</button>
   </div>
-  <div class="row" style="margin-top:8px">
-    <select id="lang" class="field-input grow" aria-label="Language"></select>
-    <button class="small" id="example-load" title="Fill this language's script with a working example">Example</button>
-  </div>
-  <div class="muted" id="about" style="margin-top:7px">&nbsp;</div>
-  <div class="muted" id="count" style="margin-top:4px">&nbsp;</div>
 </div>
-
-<div class="actions">
-  <button class="small primary" id="openAdd" style="flex:2 1 0">+ Add a block</button>
-  <button class="small" id="build">Code</button>
-  <button class="small" id="save">Save</button>
-</div>
-
-<div class="pane">
-  <div id="trouble"></div>
-
-  <div class="head">Your script <span class="muted" id="hint"></span></div>
-  <div class="note" id="example" style="display:none">
-    This is an <b>example</b> to start from. Change it, or press <b>New</b> for an
-    empty one.
-  </div>
-  <div id="script"></div>
-</div>
-
-<!--
-  Adding a block is a screen of its own.
-
-  It used to be a section at the bottom of the same page, under the script -
-  which meant the search box, the categories and the results were all below
-  the fold on a phone, behind the button bar. Searching worked and the count
-  changed; the nine matching blocks were simply somewhere nobody could see.
-  A list you scroll to find is a list that is not there.
--->
-<div class="sheet" id="addSheet">
-  <div class="card">
-    <div class="addtop">
-      <div class="row">
-        <h2 class="grow" style="margin:0">Add a block</h2>
-        <button class="small primary" id="addDone">Done</button>
-      </div>
-      <div class="note" id="where">Blocks land at the end of the script.</div>
-      <input id="search" class="field-input" placeholder="Search - print, loop, colour"
-             aria-label="Search blocks">
-      <div class="chips" id="cats" style="margin-top:8px"></div>
-      <div class="muted" id="palcount" style="margin-top:6px">&nbsp;</div>
-      <div class="muted" id="added" style="margin-top:4px"></div>
+<nav class="nav" id="nav">
+  <button data-v="blocks">Blocks</button><button data-v="script" class="on">Script</button>
+  <button data-v="code">Code</button><button data-v="run">Run</button>
+</nav>
+<div class="main" id="main" data-view="script">
+  <aside class="pane palette">
+    <div class="pane-head"><input class="search" id="search" placeholder="Search blocks…  ( / )" spellcheck="false"></div>
+    <div class="cats" id="cats"></div>
+    <div class="scroll" id="palette"></div>
+  </aside>
+  <section class="pane script">
+    <div class="pane-head">
+      <b id="count">Script</b>
+      <button class="ghost icon" id="bOut" title="Move the selected block out of its parent (Shift+Tab)">⇤</button>
+      <button class="ghost icon" id="bIn" title="Move the selected block into the one above (Tab)">⇥</button>
+      <button class="ghost" id="bClear" title="Remove every block">Clear</button>
     </div>
-    <div class="pal" id="palette"></div>
-  </div>
+    <div class="scroll" id="scriptScroll"><div class="tree" id="tree"></div></div>
+  </section>
+  <section class="pane side">
+    <div class="pane-head">
+      <div class="tabs"><button data-t="code" class="on">Code</button><button data-t="run">Run</button></div>
+      <span style="flex:1"></span>
+      <button class="ghost" id="bCopy" title="Copy the code">Copy</button>
+    </div>
+    <div class="scroll" id="codeView"></div>
+    <div class="runbox" id="runView" hidden></div>
+  </section>
 </div>
-
-<div class="sheet" id="editSheet">
-  <div class="card">
-    <h2 id="editTitle">Fill it in</h2>
-    <div class="code" id="editPreview" style="margin-bottom:8px"></div>
-    <div id="editFields"></div>
-    <div class="row" style="margin-top:16px">
-      <button class="small primary grow" id="editOk">Done</button>
-      <button class="small" id="editCancel">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<div class="sheet" id="codeSheet">
-  <div class="card">
-    <h2 id="codeTitle">The code</h2>
-    <pre class="out"><code class="code" id="codeOut"></code></pre>
-    <div id="codeProblems" class="warn"></div>
-    <div class="row" style="margin-top:16px">
-      <button class="small primary grow" id="codeSave">Save as a file</button>
-      <button class="small" id="codeClose">Close</button>
-    </div>
-  </div>
-</div>
-
-<div class="sheet" id="saveSheet">
-  <div class="card">
-    <h2>Save it into the workspace</h2>
-    <div class="field">
-      <label for="saveName">File name</label>
-      <input id="saveName" class="field-input">
-    </div>
-    <div class="field">
-      <label for="saveFolder">Folder inside the workspace (blank means the top)</label>
-      <input id="saveFolder" class="field-input" placeholder="sites/blog">
-    </div>
-    <div class="row" style="margin-top:16px">
-      <button class="small primary grow" id="saveOk">Save</button>
-      <button class="small" id="saveCancel">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<div class="sheet" id="drawerSheet">
-  <div class="card">
-    <h2>Saved projects</h2>
-    <div id="drawerList"></div>
-    <div class="row" style="margin-top:16px">
-      <button class="small primary grow" id="drawerKeep">Keep this one</button>
-      <button class="small" id="drawerClose">Close</button>
-    </div>
-  </div>
-</div>
-
-<div class="sheet" id="askSheet">
-  <div class="card">
-    <h2 id="askTitle">Are you sure?</h2>
-    <div class="muted" id="askBody"></div>
-    <div class="row" style="margin-top:16px">
-      <button class="small danger grow" id="askOk">Yes</button>
-      <button class="small" id="askNo">No</button>
-    </div>
-  </div>
-</div>
-
+<div class="sheet" id="sheet" hidden><div class="card"><header><b id="sheetTitle"></b>
+  <button class="ghost icon" id="sheetClose" title="Close">✕</button></header><div class="body" id="sheetBody"></div></div></div>
 <script>
 (function () {
   'use strict';
-
-  // ---------------------------------------------------------------- state
-  //
-  // One draft per language, so picking a different language is picking a
-  // different script rather than throwing the current one away. That is what
-  // the language chooser used to do, behind a `confirm()` that a WebView with
-  // no chrome client answers by ignoring - which made switching look broken.
-
-  var state = {
-    language: 'python',
-    drafts: {},        // language -> { name, blocks, file }
-    ids: {},           // language -> id in the saved drawer, '' until saved
-    catalogues: {},    // language -> { categories: [...] }
-    byId: {},          // block id -> definition, for the current language
-    languages: [],
-    category: '',
-    search: '',
-    selected: null,    // a path into the tree, e.g. [0, 2, 1]
-    untouched: true,   // still showing the example it opened with
-    startedIn: '',     // the language that example was in
-    outline: {},       // a node's uid -> the line it wrote
-    closings: {},      // a node's uid -> the line that closes it
-    uid: 0,            // handed out to every node, so a moved block keeps its line
-    building: null,
-    folder: ''
-  };
-
+  // The app's Android WebView says Android; a desktop window gets the shell.
+  if (!/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('shell');
   var $ = function (id) { return document.getElementById(id); };
-
-  function escapeHtml(text) {
-    return String(text === undefined || text === null ? '' : text)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  var S = { langs: [], lang: 'python', cats: {}, byId: {}, project: null, ids: {}, drafts: {}, sel: '', filter: '', cat: '',
+            past: [], future: [], built: null, run: null, side: 'code', input: {}, timer: 0, saveTimer: 0, folder: '' };
+  var uidN = 0;
+  function uid() { uidN += 1; return 'u' + Date.now().toString(36) + uidN; }
+  function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function hue(name) { var h = 0; for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360; return h; }
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  var toastTimer = 0;
+  function toast(text) {
+    var t = document.querySelector('.toast'); if (!t) { t = el('div', 'toast'); document.body.appendChild(t); }
+    t.textContent = text; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
   }
-
-  /** The same, plus the quotes - this goes inside an attribute. */
-  function escapeAttr(text) {
-    return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  function call(name, payload) {
+    return pycmd.call(name, payload || {}).then(function (r) { return r || {}; }, function (e) { return { ok: false, error: String(e && e.message || e) }; });
   }
-
-  /**
-   * A name for a node that survives being moved.
-   *
-   * The compiler answers with one line per block, and the script view has to
-   * know which block each line belongs to. A path is the obvious key and the
-   * wrong one: delete the first block and every path below it changes, so the
-   * lines would sit under the wrong blocks until the next build came back.
-   */
-  function nextUid() {
-    state.uid += 1;
-    return 'n' + state.uid;
-  }
-
-  /**
-   * Names every node in a tree that has just arrived from storage.
-   *
-   * Always a fresh name, never the one that was saved: the counter starts at
-   * zero each time the panel opens, so keeping a stored `n3` would mean the
-   * third block added afterwards was also `n3`, and two blocks sharing a name
-   * share a line.
-   */
-  function stampUids(nodes) {
-    (nodes || []).forEach(function (node) {
-      node.uid = nextUid();
-      stampUids(node.children);
-    });
-  }
-
-  function freshUids(node) {
-    node.uid = nextUid();
-    (node.children || []).forEach(freshUids);
-    return node;
-  }
-
-  function draft() {
-    if (!state.drafts[state.language]) {
-      state.drafts[state.language] = { name: 'untitled', blocks: [], file: '' };
-    }
-    return state.drafts[state.language];
-  }
-
-  function project() {
-    var current = draft();
-    return {
-      name: current.name,
-      language: state.language,
-      blocks: current.blocks,
-      file: current.file || ''
-    };
-  }
-
-  /** Anything that went wrong is said on the page, not only in a toast. */
-  function trouble(message) {
-    var host = $('trouble');
-    host.innerHTML = '';
-    if (!message) return;
-    var card = document.createElement('div');
-    card.className = 'note bad';
-    card.textContent = message;
-    host.appendChild(card);
-  }
-
-  function ask(title, body, yes) {
-    $('askTitle').textContent = title;
-    $('askBody').textContent = body;
-    state.askYes = yes;
-    $('askSheet').classList.add('open');
-  }
-
-  // ------------------------------------------------------------ the tree
-
-  function listAt(path) {
-    var list = draft().blocks;
-    for (var i = 0; i < path.length - 1; i++) {
-      var node = list[path[i]];
-      if (!node) return null;
-      node.children = node.children || [];
-      list = node.children;
-    }
-    return list;
-  }
-
-  function nodeAt(path) {
-    if (!path) return null;
-    var list = listAt(path);
-    return list ? list[path[path.length - 1]] : null;
-  }
-
-  function samePath(a, b) {
-    if (!a || !b || a.length !== b.length) return false;
-    for (var i = 0; i < a.length; i++) { if (a[i] !== b[i]) return false; }
-    return true;
-  }
-
-  function insertAfter(path, node) {
-    if (!path) {
-      draft().blocks.push(node);
-      return [draft().blocks.length - 1];
-    }
-    var list = listAt(path);
-    var at = path[path.length - 1] + 1;
-    list.splice(at, 0, node);
-    var next = path.slice();
-    next[next.length - 1] = at;
-    return next;
-  }
-
-  function removeAt(path) {
-    var list = listAt(path);
-    if (list) list.splice(path[path.length - 1], 1);
-  }
-
-  function move(path, delta) {
-    var list = listAt(path);
-    var from = path[path.length - 1];
-    var to = from + delta;
-    if (to < 0 || to >= list.length) return path;
-    list.splice(to, 0, list.splice(from, 1)[0]);
-    var next = path.slice();
-    next[next.length - 1] = to;
-    return next;
-  }
-
-  function indent(path) {
-    var list = listAt(path);
-    var at = path[path.length - 1];
-    if (at === 0) { pycmd.toast('There is no block above this one to go inside.'); return path; }
-    var above = list[at - 1];
-    var spec = state.byId[above.block];
-    if (!spec || !spec.wrap) {
-      pycmd.toast('"' + (spec ? spec.label : 'That block') + '" cannot hold blocks.');
-      return path;
-    }
-    above.children = above.children || [];
-    var node = list.splice(at, 1)[0];
-    above.children.push(node);
-    return path.slice(0, -1).concat([at - 1, above.children.length - 1]);
-  }
-
-  function outdent(path) {
-    if (path.length < 2) { pycmd.toast('This block is already at the top level.'); return path; }
-    var list = listAt(path);
-    var node = list.splice(path[path.length - 1], 1)[0];
-    var parentPath = path.slice(0, -1);
-    var parentList = listAt(parentPath);
-    var at = parentPath[parentPath.length - 1] + 1;
-    parentList.splice(at, 0, node);
-    var next = parentPath.slice();
-    next[next.length - 1] = at;
-    return next;
-  }
-
-  function countBlocks(nodes) {
-    var total = 0;
-    (nodes || []).forEach(function (node) { total += 1 + countBlocks(node.children); });
-    return total;
-  }
-
-  // -------------------------------------------------------------- drawing
-
-  function defaultsFor(spec) {
-    var values = {};
-    (spec.slots || []).forEach(function (slot) { values[slot.name] = slot.default; });
-    return values;
-  }
-
-  /**
-   * The line a block writes.
-   *
-   * From the compiler when it has answered, and from the block's own filled-in
-   * preview until then - so the first paint says something true rather than
-   * nothing, and the next one says it exactly.
-   */
-  function fill(template, node, spec) {
-    var text = template || '';
-    (spec.slots || []).forEach(function (slot) {
-      var value = node.values && node.values[slot.name] !== undefined
-        ? node.values[slot.name] : slot.default;
-      text = text.split('@' + slot.name + '@').join(String(value === undefined ? '' : value));
-    });
-    return text.split('@@').join('@');
-  }
-
-  function lineFor(path, node, spec) {
-    var known = state.outline[node.uid];
-    if (known !== undefined) return known;
-    if (!spec) return 'unknown block: ' + node.block;
-    return fill(spec.open, node, spec) || '(an empty line)';
-  }
-
-  /** The line that closes a container - `}`, `</div>`, `}, 500);`. */
-  function closingFor(node, spec) {
-    var known = state.closings[node.uid];
-    if (known !== undefined) return known;
-    if (!spec || !spec.close) return '';
-    return fill(spec.close, node, spec);
-  }
-
-  function refresh() {
-    // Anything that edits the script means it is not the example any more.
-    state.untouched = false;
-    drawScript();
-    scheduleBuild();
-  }
-
-  function drawScript() {
-    var host = $('script');
-    host.innerHTML = '';
-    state.selectedEl = null;
-    var blocks = draft().blocks;
-    if (!blocks.length) {
-      var empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = 'Nothing here yet. Press "+ Add a block" and pick one.';
-      host.appendChild(empty);
-    } else {
-      host.appendChild(drawStack(blocks, []));
-    }
-
-    var total = countBlocks(blocks);
-    var meta = languageRow(state.language);
-    $('count').textContent = total + ' block' + (total === 1 ? '' : 's') + '  ·  ' +
-      (meta ? meta.name : state.language) + '  ·  ' + (meta ? meta.extension : '');
-    $('example').style.display =
-      (state.untouched && state.language === state.startedIn && blocks.length) ? '' : 'none';
-    drawWhere();
-  }
-
-  /**
-   * Where the next block will land, said in both places it matters: under the
-   * script's heading, and at the top of the sheet you add from.
-   */
-  function drawWhere() {
-    var target = state.selected ? nodeAt(state.selected) : null;
-    var spec = target ? state.byId[target.block] : null;
-    var name = escapeHtml(spec ? spec.label : 'the selected block');
-    var long;
-    var short;
-    if (!target) {
-      long = 'The next block goes <b>at the end</b> of the script. Tap a block ' +
-        'in the script to put it somewhere else.';
-      short = 'new blocks go at the end';
-    } else if (spec && spec.wrap) {
-      long = 'The next block goes <b>inside</b> "' + name + '".';
-      short = 'new blocks go inside "' + (spec ? spec.label : '') + '"';
-    } else {
-      long = 'The next block goes <b>after</b> "' + name + '".';
-      short = 'new blocks go after "' + (spec ? spec.label : '') + '"';
-    }
-    $('where').innerHTML = long;
-    $('hint').textContent = short;
-  }
-
-  function drawStack(nodes, base) {
-    var wrap = document.createElement('div');
-    nodes.forEach(function (node, index) {
-      var path = base.concat([index]);
-      var spec = state.byId[node.block];
-      var element = document.createElement('div');
-      element.className = 'blk' + (samePath(path, state.selected) ? ' sel' : '') +
-        (spec && spec.wrap ? ' holds' : '');
-      if (spec) element.className += ' cat-' + String(spec.cat).replace(/[^A-Za-z]/g, '');
-
-      var code = document.createElement('div');
-      code.className = 'code';
-      code.textContent = lineFor(path, node, spec);
-      element.appendChild(code);
-
-      var why = document.createElement('div');
-      why.className = 'why';
-      why.textContent = spec ? spec.label : 'this block is not in this language';
-      element.appendChild(why);
-
-      element.addEventListener('click', function (event) {
-        event.stopPropagation();
-        state.selected = samePath(path, state.selected) ? null : path;
-        drawScript();
-      });
-
-      if (samePath(path, state.selected)) {
-        state.selectedEl = element;
-        element.appendChild(drawTools(path, spec));
-      }
-      wrap.appendChild(element);
-
-      if (spec && spec.wrap) {
-        node.children = node.children || [];
-        if (node.children.length) {
-          var rail = document.createElement('div');
-          rail.className = 'rail';
-          rail.appendChild(drawStack(node.children, path));
-          wrap.appendChild(rail);
-        }
-        var closingText = closingFor(node, spec);
-        if (closingText) {
-          var closing = document.createElement('div');
-          closing.className = 'closing code';
-          closing.textContent = closingText;
-          wrap.appendChild(closing);
-        }
-      }
-    });
-    return wrap;
-  }
-
-  function tool(label, action) {
-    var button = document.createElement('button');
-    button.className = 'small';
-    button.textContent = label;
-    button.addEventListener('click', function (event) {
-      event.stopPropagation();
-      action();
-    });
-    return button;
-  }
-
-  function drawTools(path, spec) {
-    var row = document.createElement('div');
-    row.className = 'tools';
-    if (spec && spec.slots.length) {
-      row.appendChild(tool('Fill in', function () { openEditor(path); }));
-    }
-    row.appendChild(tool('Up', function () { state.selected = move(path, -1); refresh(); }));
-    row.appendChild(tool('Down', function () { state.selected = move(path, 1); refresh(); }));
-    row.appendChild(tool('Move inside', function () { state.selected = indent(path); refresh(); }));
-    row.appendChild(tool('Move out', function () { state.selected = outdent(path); refresh(); }));
-    row.appendChild(tool('Duplicate', function () {
-      // A copy is a different block, so it gets its own name - two blocks
-      // sharing one would share a line as well.
-      var copy = freshUids(JSON.parse(JSON.stringify(nodeAt(path))));
-      state.selected = insertAfter(path, copy);
-      refresh();
-    }));
-    var drop = tool('Delete', function () {
-      removeAt(path);
-      state.selected = null;
-      refresh();
-    });
-    drop.className = 'small danger';
-    row.appendChild(drop);
-    return row;
-  }
-
-  // -------------------------------------------------------------- palette
-
-  function drawCategories() {
-    var host = $('cats');
-    host.innerHTML = '';
-    var groups = (state.catalogues[state.language] || { categories: [] }).categories || [];
-    var all = document.createElement('span');
-    all.className = 'chip' + (state.category === '' ? ' on' : '');
-    all.textContent = 'Everything';
-    all.addEventListener('click', function () {
-      state.category = ''; drawCategories(); drawPalette();
-    });
-    host.appendChild(all);
-    groups.forEach(function (group) {
-      var chip = document.createElement('span');
-      chip.className = 'chip' + (state.category === group.name ? ' on' : '');
-      chip.textContent = group.name;
-      chip.addEventListener('click', function () {
-        state.category = group.name; drawCategories(); drawPalette();
-      });
-      host.appendChild(chip);
-    });
-  }
-
-  /**
-   * Redraws the block list for the current language, category and search.
-   *
-   * One string, one write, and one click listener on the container rather
-   * than a listener per block: a hundred and fifty separate `appendChild`
-   * calls each carrying a closure is a visible pause on a phone, and this
-   * runs on every letter typed into the search box.
-   */
-  function drawPalette() {
-    var host = $('palette');
-    var groups = (state.catalogues[state.language] || { categories: [] }).categories || [];
-    var needle = state.search.trim().toLowerCase();
-    var parts = [];
-    var shown = 0;
-
-    groups.forEach(function (group) {
-      if (state.category && group.name !== state.category) return;
-      var here = 0;
-      var mark = parts.length;
-      // A heading per group, written before its blocks and taken back out
-      // again if the search left none of them. Twenty-one groups of Python
-      // blocks in one flat list is a wall; the same list with its headings
-      // in it can be scanned.
-      parts.push('<div class="palgroup">' + escapeHtml(group.name) + '</div>');
-      group.blocks.forEach(function (spec) {
-        if (needle && (spec.hay || '').indexOf(needle) < 0) return;
-        shown += 1;
-        here += 1;
-        parts.push(
-          '<button class="pick" type="button" data-block="' +
-          escapeAttr(spec.id) + '">' +
-          '<span class="what">' + escapeHtml(spec.label) + '</span>' +
-          '<span class="code">' + escapeHtml(spec.preview || '(an empty line)') +
-          (spec.closing ? '  …  ' + escapeHtml(spec.closing) : '') + '</span>' +
-          '</button>'
-        );
-      });
-      if (!here) parts.splice(mark, 1);
-    });
-
-    if (!shown) {
-      parts.push('<div class="empty">' + escapeHtml(needle
-        ? 'No block matches "' + needle + '".'
-        : 'No blocks loaded for this language yet.') + '</div>');
-    }
-    host.innerHTML = parts.join('');
-    var total = (state.catalogues[state.language] || {}).count || 0;
-    $('palcount').textContent = shown + ' of ' + total;
-  }
-
-  /** Opens the block picker, with the list already drawn and nothing typed. */
-  function openAdd() {
-    $('added').textContent = '';
-    // The category is worth keeping between visits; a search is not - coming
-    // back to a list still filtered by what you looked for last time reads as
-    // a list with most of the blocks missing.
-    state.search = '';
-    $('search').value = '';
-    drawWhere();
-    drawCategories();
-    drawPalette();
-    $('addSheet').classList.add('open');
-  }
-
-  function add(spec) {
-    var node = { block: spec.id, uid: nextUid(), values: defaultsFor(spec) };
-    if (spec.wrap) node.children = [];
-
-    var target = state.selected ? nodeAt(state.selected) : null;
-    var targetSpec = target ? state.byId[target.block] : null;
-    if (target && targetSpec && targetSpec.wrap) {
-      target.children = target.children || [];
-      target.children.push(node);
-      state.selected = state.selected.concat([target.children.length - 1]);
-    } else {
-      state.selected = insertAfter(state.selected, node);
-    }
-    refresh();
-
-    // The sheet stays open, so several blocks can go on in a row - but it has
-    // to say that something happened, or tapping feels like nothing at all.
-    $('added').textContent = 'Added "' + spec.label + '"  ·  ' +
-      countBlocks(draft().blocks) + ' blocks now';
-  }
-
-  // --------------------------------------------------------- the editor
-
-  var editing = null;
-
-  function openEditor(path) {
-    var node = nodeAt(path);
-    var spec = node && state.byId[node.block];
-    if (!spec) return;
-    editing = path;
-    $('editTitle').textContent = spec.label;
-    $('editPreview').textContent = lineFor(path, node, spec);
-
-    var host = $('editFields');
-    host.innerHTML = '';
-    spec.slots.forEach(function (slot) {
-      var field = document.createElement('div');
-      field.className = 'field';
-      var label = document.createElement('label');
-      label.textContent = slot.label;
-      label.setAttribute('for', 'slot-' + slot.name);
-      field.appendChild(label);
-
-      var current = node.values && node.values[slot.name] !== undefined
-        ? node.values[slot.name] : slot.default;
-      var input;
-      if (slot.kind === 'choice') {
-        input = document.createElement('select');
-        (slot.options || []).forEach(function (option) {
-          var item = document.createElement('option');
-          item.value = option;
-          item.textContent = option;
-          if (String(current) === option) item.selected = true;
-          input.appendChild(item);
-        });
-      } else {
-        input = document.createElement('input');
-        input.type = slot.kind === 'number' ? 'number' : 'text';
-        input.value = current === undefined ? '' : current;
-        input.autocapitalize = 'none';
-        input.autocomplete = 'off';
-        input.spellcheck = false;
-      }
-      input.className = 'field-input';
-      input.id = 'slot-' + slot.name;
-      input.setAttribute('data-slot', slot.name);
-      field.appendChild(input);
-      host.appendChild(field);
-    });
-
-    $('editSheet').classList.add('open');
-  }
-
-  function closeEditor(keep) {
-    if (keep && editing) {
-      var node = nodeAt(editing);
-      if (node) {
-        node.values = node.values || {};
-        var fields = $('editFields').querySelectorAll('[data-slot]');
-        for (var i = 0; i < fields.length; i++) {
-          node.values[fields[i].getAttribute('data-slot')] = fields[i].value;
-        }
-      }
-    }
-    editing = null;
-    $('editSheet').classList.remove('open');
-    refresh();
-  }
-
-  // ----------------------------------------------------- build and save
-
-  /**
-   * Asks the compiler what the script writes, and keeps the answer.
-   *
-   * Debounced, because it runs after every edit: the answer is what the
-   * script view shows, so it has to be current, and one call per keystroke
-   * would be one bridge round trip per keystroke.
-   */
-  function scheduleBuild() {
-    if (state.building) clearTimeout(state.building);
-    state.building = setTimeout(function () {
-      state.building = null;
-      pycmd.call('build', { project: project() }).then(function (result) {
-        if (!result || !result.ok) return;
-        var lines = {};
-        var closes = {};
-        (result.outline || []).forEach(function (entry) {
-          if (!entry.uid) return;
-          if (entry.role === 'open') lines[entry.uid] = entry.text;
-          if (entry.role === 'close') closes[entry.uid] = entry.text;
-        });
-        state.outline = lines;
-        state.closings = closes;
-        drawScript();
-      }).catch(function (error) {
-        trouble('The compiler did not answer: ' + (error.message || error));
-      });
-    }, 140);
-  }
-
-  function showCode() {
-    pycmd.call('build', { project: project() }).then(function (result) {
-      if (!result || !result.ok) {
-        trouble((result && result.error) || 'That did not build.');
-        return;
-      }
-      $('codeOut').textContent = result.code || '(nothing yet - add some blocks)';
-      $('codeTitle').textContent = result.lines + ' line' +
-        (result.lines === 1 ? '' : 's') + ' of ' + result.language;
-      $('codeProblems').textContent = (result.problems || []).join('  ·  ');
-      $('codeSheet').classList.add('open');
-    }).catch(function (error) {
-      trouble('That did not build: ' + (error.message || error));
-    });
-  }
-
-  function openSave() {
-    var meta = languageRow(state.language);
-    var name = draft().name || 'untitled';
-    $('saveName').value = name.indexOf('.') >= 0
-      ? name
-      : name + ((meta && meta.extension) || '.txt');
-    $('saveFolder').value = state.folder || '';
-    $('saveSheet').classList.add('open');
-  }
-
-  function doSave() {
-    var name = $('saveName').value;
-    var folder = $('saveFolder').value;
-    state.folder = folder;
-    $('saveSheet').classList.remove('open');
-    pycmd.call('save_file', { project: project(), name: name, folder: folder })
-      .then(function (result) {
-        if (!result || !result.ok) {
-          trouble((result && result.error) || 'That did not save.');
-          return;
-        }
-        trouble('');
-        draft().file = result.path;
-        pycmd.toast('Saved ' + result.path);
-        keepProject();
-      }).catch(function (error) {
-        trouble('That did not save: ' + (error.message || error));
-      });
-  }
-
-  function keepProject() {
-    return pycmd.call('save_project', { id: state.ids[state.language] || '', project: project() })
-      .then(function (result) {
-        if (result && result.ok) state.ids[state.language] = result.id;
-        return result;
-      }).catch(function (error) {
-        trouble('That project was not kept: ' + (error.message || error));
-      });
-  }
-
-  // ------------------------------------------------------------- drawer
-
-  function openDrawer() {
-    pycmd.call('projects', {}).then(function (result) {
-      var host = $('drawerList');
-      host.innerHTML = '';
-      var rows = (result && result.projects) || [];
-      if (!rows.length) {
-        var none = document.createElement('div');
-        none.className = 'empty';
-        none.textContent = 'Nothing kept yet. "Keep this one" puts the script you are on in here.';
-        host.appendChild(none);
-      }
-      rows.forEach(function (row) {
-        var line = document.createElement('div');
-        line.className = 'row';
-        line.style.margin = '8px 0';
-
-        var open = document.createElement('button');
-        open.className = 'small grow';
-        open.style.textAlign = 'left';
-        open.innerHTML = '<span class="what">' + escapeHtml(row.name) + '</span>' +
-          '<span class="code">' + escapeHtml(row.language) + '  ·  ' +
-          row.blocks + ' blocks</span>';
-        open.addEventListener('click', function () { loadProject(row.id); });
-
-        var drop = document.createElement('button');
-        drop.className = 'small danger';
-        drop.textContent = 'Delete';
-        drop.addEventListener('click', function () {
-          pycmd.call('delete_project', { id: row.id }).then(function () {
-            Object.keys(state.ids).forEach(function (key) {
-              if (state.ids[key] === row.id) state.ids[key] = '';
-            });
-            openDrawer();
-          });
-        });
-
-        line.appendChild(open);
-        line.appendChild(drop);
-        host.appendChild(line);
-      });
-      $('drawerSheet').classList.add('open');
-    }).catch(function (error) {
-      trouble('The saved projects could not be read: ' + (error.message || error));
-    });
-  }
-
-  function loadProject(id) {
-    pycmd.call('open_project', { id: id }).then(function (result) {
-      if (!result || !result.ok) { trouble('That project is gone.'); return; }
-      var loaded = result.project;
-      state.language = loaded.language;
-      state.drafts[loaded.language] = {
-        name: loaded.name,
-        blocks: loaded.blocks || [],
-        file: loaded.file || ''
-      };
-      stampUids(state.drafts[loaded.language].blocks);
-      state.ids[loaded.language] = result.id;
-      state.selected = null;
-      state.category = '';
-      $('name').value = loaded.name;
-      $('lang').value = loaded.language;
-      $('drawerSheet').classList.remove('open');
-      useLanguage(loaded.language);
-    });
-  }
-
-  // ---------------------------------------------------------- languages
-
-  function languageRow(id) {
-    for (var i = 0; i < state.languages.length; i++) {
-      if (state.languages[i].id === id) return state.languages[i];
+  function meta(id) { return S.langs.filter(function (l) { return l.id === (id || S.lang); })[0] || { name: id || S.lang, extension: '', about: '' }; }
+
+  // ---------------------------------------------------------------- the tree
+  function blocks() { return S.project.blocks; }
+  function ensure(nodes) { (nodes || []).forEach(function (n) { if (!n.uid) n.uid = uid(); n.values = n.values || {}; if (n.children) ensure(n.children); }); return nodes || []; }
+  function find(wanted, nodes, parent) {
+    nodes = nodes || blocks();
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].uid === wanted) return { node: nodes[i], list: nodes, index: i, parent: parent || null };
+      if (nodes[i].children) { var f = find(wanted, nodes[i].children, nodes[i]); if (f) return f; }
     }
     return null;
   }
+  function count(nodes) { return (nodes || []).reduce(function (a, n) { return a + 1 + count(n.children); }, 0); }
+  function spec(n) { return n && S.byId[n.block]; }
+  function fresh(id) {
+    var sp = S.byId[id], values = {};
+    (sp.slots || []).forEach(function (s) { values[s.name] = s.default || ''; });
+    var n = { block: id, values: values, uid: uid() }; if (sp.wrap) n.children = []; return n;
+  }
+  function clone(n) { var c = JSON.parse(JSON.stringify(n)); (function re(x) { x.uid = uid(); (x.children || []).forEach(re); })(c); return c; }
+  function contains(node, wanted) { return (node.children || []).some(function (c) { return c.uid === wanted || contains(c, wanted); }); }
 
-  function drawLanguages() {
-    var host = $('lang');
-    host.innerHTML = '';
-    state.languages.forEach(function (row) {
-      var option = document.createElement('option');
-      option.value = row.id;
-      option.textContent = row.name + '  -  ' + row.blocks + ' blocks' +
-        (row.runs ? '  -  runs here' : '');
-      if (row.id === state.language) option.selected = true;
-      host.appendChild(option);
-    });
+  // ---------------------------------------------------------------- history
+  function snap() { return JSON.stringify({ name: S.project.name, blocks: S.project.blocks }); }
+  function remember() { S.past.push(snap()); if (S.past.length > 150) S.past.shift(); S.future = []; }
+  function restore(text) { var d = JSON.parse(text); S.project.name = d.name; S.project.blocks = ensure(d.blocks); $('name').value = d.name || ''; changed(true); }
+  function undo() { if (!S.past.length) return; S.future.push(snap()); restore(S.past.pop()); }
+  function redo() { if (!S.future.length) return; S.past.push(snap()); restore(S.future.pop()); }
+
+  // ---------------------------------------------------------------- editing
+  function insert(id) {
+    if (!S.byId[id]) return;
+    remember();
+    var n = fresh(id), at = S.sel && find(S.sel);
+    if (at && spec(at.node) && spec(at.node).wrap) { at.node.children = at.node.children || []; at.node.children.push(n); }
+    else if (at) at.list.splice(at.index + 1, 0, n);
+    else blocks().push(n);
+    S.sel = n.uid; changed(true);
+    var b = document.querySelector('.blk[data-uid="' + n.uid + '"]'); if (b) b.scrollIntoView({ block: 'nearest' });
+    if (document.body.clientWidth <= 700) toast('Added "' + S.byId[id].label + '"');
+  }
+  function removeSel() { var at = S.sel && find(S.sel); if (!at) return; remember(); at.list.splice(at.index, 1);
+    var next = at.list[at.index] || at.list[at.index - 1] || at.parent; S.sel = next ? next.uid : ''; changed(true); }
+  function duplicate() { var at = S.sel && find(S.sel); if (!at) return; remember(); var c = clone(at.node); at.list.splice(at.index + 1, 0, c); S.sel = c.uid; changed(true); }
+  function move(step) {
+    var at = S.sel && find(S.sel); if (!at) return; var to = at.index + step; if (to < 0 || to >= at.list.length) return;
+    remember(); at.list.splice(at.index, 1); at.list.splice(to, 0, at.node); changed(true);
+  }
+  function indent() {
+    var at = S.sel && find(S.sel); if (!at || at.index === 0) return toast('There is no block above this one to go inside.');
+    var above = at.list[at.index - 1]; if (!spec(above) || !spec(above).wrap) return toast('"' + (spec(above) ? spec(above).label : 'That block') + '" cannot hold blocks.');
+    remember(); at.list.splice(at.index, 1); above.children = above.children || []; above.children.push(at.node); changed(true);
+  }
+  function outdent() {
+    var at = S.sel && find(S.sel); if (!at || !at.parent) return toast('This block is already at the top level.');
+    var up = find(at.parent.uid); remember(); at.list.splice(at.index, 1); up.list.splice(up.index + 1, 0, at.node); changed(true);
+  }
+  function placeNode(node, target, where) {
+    if (where === 'end' || !target) { blocks().push(node); return; }
+    var t = find(target); if (!t) { blocks().push(node); return; }
+    if (where === 'inside') { t.node.children = t.node.children || []; t.node.children.push(node); return; }
+    t.list.splice(t.index + (where === 'after' ? 1 : 0), 0, node);
   }
 
-  /*
-   * What the chosen language is, in a sentence.
-   *
-   * With five languages a name was enough. With ten - four of which most
-   * people have never written a line of - the difference between "runs on
-   * this phone" and "is a file you serve" is the first thing worth knowing,
-   * so it is on screen rather than in a guide.
-   */
-  function drawAbout() {
-    var row = null;
-    state.languages.forEach(function (each) {
-      if (each.id === state.language) row = each;
-    });
-    if (!row) { $('about').textContent = ''; return; }
-    $('about').textContent = row.about +
-      (row.runs ? '  Press Run on the saved file and it runs on this phone.' : '');
-  }
-
-  /** Switches to a language and makes sure its blocks are loaded. */
-  function useLanguage(id) {
-    state.language = id;
-    state.selected = null;
-    state.category = '';
-    $('name').value = draft().name;
-    state.outline = {};
-    state.closings = {};
-    var wasUntouched = state.untouched;
-    drawAbout();
-    return loadCatalogue(id).then(function () {
-      drawCategories();
-      drawPalette();
-      refresh();
-      state.untouched = wasUntouched;
-      drawScript();
+  // ---------------------------------------------------------------- palette
+  function drawCats() {
+    var box = $('cats'); box.innerHTML = '';
+    [{ name: '' }].concat(S.cats[S.lang] || []).forEach(function (c) {
+      var b = el('button', 'chip' + (S.cat === c.name ? ' on' : ''), esc(c.name || 'All'));
+      b.onclick = function () { S.cat = c.name; drawCats(); drawPalette(); };
+      box.appendChild(b);
     });
   }
-
-  function loadCatalogue(language) {
-    if (state.catalogues[language]) {
-      indexBlocks(language);
-      return Promise.resolve(state.catalogues[language]);
-    }
-    return pycmd.call('catalogue', { language: language }).then(function (result) {
-      if (!result || !result.ok) {
-        trouble('The blocks for ' + language + ' did not load: ' +
-                ((result && result.error) || 'no answer'));
-        return null;
-      }
-      var group = (result.groups || [])[0];
-      if (!group) {
-        trouble('The blocks for ' + language + ' came back empty.');
-        return null;
-      }
-      state.catalogues[language] = group;
-      indexBlocks(language);
-      trouble('');
-      return group;
-    }).catch(function (error) {
-      trouble('The blocks for ' + language + ' did not load: ' +
-              (error.message || error));
-      return null;
-    });
-  }
-
-  function indexBlocks(language) {
-    state.byId = {};
-    var group = state.catalogues[language];
-    if (!group) return;
-    (group.categories || []).forEach(function (category) {
-      category.blocks.forEach(function (spec) {
-        state.byId[spec.id] = spec;
-        // Built once here rather than for every block on every keystroke.
-        // A hundred and fifty blocks joined and lower-cased between one
-        // letter and the next is how a search box comes to feel stuck.
-        if (spec.hay === undefined) {
-          spec.hay = (spec.label + ' ' + spec.preview + ' ' + spec.cat).toLowerCase();
-        }
+  function drawPalette() {
+    var box = $('palette'); box.innerHTML = '';
+    var q = S.filter.trim().toLowerCase(), shown = 0, frag = document.createDocumentFragment();
+    (S.cats[S.lang] || []).forEach(function (c) {
+      if (S.cat && c.name !== S.cat) return;
+      var rows = c.blocks.filter(function (b) { return !q || (b.label + ' ' + b.preview + ' ' + c.name + ' ' + (b.about || '')).toLowerCase().indexOf(q) >= 0; });
+      if (!rows.length) return;
+      frag.appendChild(el('div', 'group', esc(c.name) + ' · ' + rows.length));
+      rows.forEach(function (b) {
+        var d = el('div', 'pal', '<code>' + esc(b.preview || b.label) + (b.closing ? '\n' + esc(b.closing) : '') + '</code><small>' + esc(b.label) + '</small>');
+        d.style.setProperty('--h', hue(c.name)); d.title = b.about || b.label; d.draggable = true;
+        d.onclick = function () { insert(b.id); };
+        d.ondragstart = function (e) { e.dataTransfer.setData('text/plain', 'new:' + b.id); e.dataTransfer.effectAllowed = 'copy'; };
+        frag.appendChild(d); shown++;
       });
     });
+    box.appendChild(frag);
+    if (!shown) box.appendChild(el('div', 'empty', '<b>Nothing matches</b>Try another word, or clear the search.'));
   }
 
-  // --------------------------------------------------------------- wiring
+  // ---------------------------------------------------------------- script
+  var PH = /@@|@([a-z_][a-z0-9_]*)@/g;
+  function slotInput(n, s) {
+    var v = n.values[s.name] != null ? n.values[s.name] : (s.default || ''), f;
+    if (s.kind === 'choice') {
+      f = el('select', 'slot');
+      (s.options || []).forEach(function (o) { var op = el('option', '', esc(o)); op.value = o; if (o === v) op.selected = true; f.appendChild(op); });
+    } else {
+      f = el('input', 'slot'); f.value = v; f.spellcheck = false; f.placeholder = s.label || s.name;
+      if (s.kind === 'number') f.inputMode = 'decimal';
+      var fit = function () { f.style.width = Math.min(420, Math.max(40, (f.value.length || f.placeholder.length) * 7.6 + 18)) + 'px'; };
+      fit(); f.addEventListener('input', fit);
+    }
+    f.title = s.label + (s.kind === 'string' ? ' (text - the quotes are added for you)' : '');
+    var first = true;
+    f.addEventListener('focus', function () { if (S.sel !== n.uid) { S.sel = n.uid; markSel(); } first = true; });
+    f.addEventListener('input', function () { if (first) { remember(); first = false; } n.values[s.name] = f.value; changed(false); });
+    f.addEventListener('change', function () { n.values[s.name] = f.value; changed(false); });
+    f.addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') f.blur(); });
+    return f;
+  }
+  function lineOf(n, template) {
+    var sp = spec(n), frag = document.createDocumentFragment(), last = 0, m, slots = {};
+    (sp.slots || []).forEach(function (s) { slots[s.name] = s; });
+    PH.lastIndex = 0;
+    while ((m = PH.exec(template))) {
+      if (m.index > last) frag.appendChild(el('span', 'tx', esc(template.slice(last, m.index))));
+      if (m[0] === '@@') frag.appendChild(el('span', 'tx', '@'));
+      else frag.appendChild(slots[m[1]] ? slotInput(n, slots[m[1]]) : el('span', 'tx', esc(m[0])));
+      last = PH.lastIndex;
+    }
+    if (last < template.length) frag.appendChild(el('span', 'tx', esc(template.slice(last))));
+    return frag;
+  }
+  function drawNode(n, parentEl) {
+    var sp = spec(n), box = el('div', 'blk'); box.dataset.uid = n.uid;
+    if (!sp) { box.appendChild(el('div', 'line', '<span class="tx muted">unknown block ' + esc(n.block) + '</span>')); parentEl.appendChild(box); return; }
+    box.style.setProperty('--h', hue(sp.cat)); box.title = sp.label;
+    var line = el('div', 'line'), grip = el('span', 'grip', '⋮⋮');
+    line.appendChild(grip);
+    line.appendChild(sp.open ? lineOf(n, sp.open) : el('span', 'tx muted', esc(sp.label)));
+    var tools = el('span', 'tools');
+    [['↑', 'Move up (Alt+↑)', function () { move(-1); }], ['↓', 'Move down (Alt+↓)', function () { move(1); }],
+     ['⧉', 'Duplicate (Ctrl+D)', duplicate], ['✕', 'Delete (Del)', removeSel]].forEach(function (t) {
+      var b = el('button', 'ghost', t[0]); b.title = t[1]; b.onclick = function (e) { e.stopPropagation(); S.sel = n.uid; t[2](); }; tools.appendChild(b);
+    });
+    line.appendChild(tools); box.appendChild(line);
+    if (sp.wrap) {
+      var kids = el('div', 'kids');
+      (n.children || []).forEach(function (c) { drawNode(c, kids); });
+      if (!(n.children || []).length) { var h = el('div', 'hole', 'empty - select this block and pick one, or drop blocks here'); h.dataset.inside = n.uid; kids.appendChild(h); }
+      box.appendChild(kids);
+      if (sp.close) { var cl = el('div', 'close'); cl.appendChild(lineOf(n, sp.close)); box.appendChild(cl); }
+    }
+    box.draggable = true;
+    box.addEventListener('dragstart', function (e) { if (e.target !== box) return; e.stopPropagation(); e.dataTransfer.setData('text/plain', 'move:' + n.uid); e.dataTransfer.effectAllowed = 'move'; });
+    box.addEventListener('mousedown', function (e) { box.draggable = e.target === grip || e.target.classList.contains('line') || e.target.classList.contains('tx'); });
+    box.addEventListener('click', function (e) { e.stopPropagation(); if (S.sel !== n.uid) { S.sel = n.uid; markSel(); } });
+    parentEl.appendChild(box);
+  }
+  function drawTree() {
+    var tree = $('tree'); tree.innerHTML = '';
+    if (!blocks().length) tree.appendChild(el('div', 'empty', '<b>An empty script</b>Pick a block - or press <i>Examples</i> for one that runs, or <i>Import code</i> to turn code you already have into blocks.'));
+    blocks().forEach(function (n) { drawNode(n, tree); });
+    var end = el('div', 'hole', '+ drop here to add at the end'); end.dataset.end = '1'; tree.appendChild(end);
+    var c = count(blocks()); $('count').textContent = c + (c === 1 ? ' block' : ' blocks');
+    markSel();
+  }
+  function markSel() {
+    document.querySelectorAll('.blk.sel').forEach(function (b) { b.classList.remove('sel'); });
+    var b = S.sel && document.querySelector('.blk[data-uid="' + S.sel + '"]'); if (b) b.classList.add('sel');
+    document.querySelectorAll('#codeView .code div').forEach(function (d) { d.classList.toggle('hi', !!S.sel && d.dataset.uid === S.sel); });
+    $('bIn').disabled = $('bOut').disabled = !S.sel;
+  }
 
-  $('name').addEventListener('input', function () { draft().name = $('name').value; });
-  $('search').addEventListener('input', function () {
-    state.search = $('search').value;
-    drawPalette();
-  });
-  // One listener for every block in the list. The rows are rewritten on each
-  // keystroke, so a listener per row would be a hundred and fifty of them
-  // created and thrown away per letter.
-  $('palette').addEventListener('click', function (event) {
-    // The tap usually lands on one of the two spans inside the row, so walk
-    // up until something says which block it is.
-    var node = event.target;
-    var id = null;
-    while (node && node.getAttribute) {
-      id = node.getAttribute('data-block');
-      if (id) break;
-      node = node.parentNode;
-    }
-    var spec = id && state.byId[id];
-    if (spec) add(spec);
-  });
-  $('lang').addEventListener('change', function () { useLanguage($('lang').value); });
-  $('openAdd').addEventListener('click', openAdd);
-  $('addDone').addEventListener('click', function () {
-    $('addSheet').classList.remove('open');
-    // Land on what was just added, rather than wherever the script was
-    // scrolled to before the sheet opened.
-    var chosen = state.selectedEl;
-    if (chosen && typeof chosen.scrollIntoView === 'function') {
-      chosen.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // drag and drop for a mouse; the arrows and ⇥ ⇤ do the same with a finger
+  var treeEl = $('tree'), dropMark = null;
+  function clearMark() { if (dropMark) dropMark.classList.remove('drop-before', 'drop-after', 'drop-in'); dropMark = null; }
+  function dropTarget(e) {
+    var hole = e.target.closest('.hole'); if (hole) return { el: hole, uid: hole.dataset.inside || '', where: hole.dataset.end ? 'end' : 'inside', cls: 'drop-in' };
+    var b = e.target.closest('.blk'); if (!b) return { el: null, where: 'end' };
+    var r = b.getBoundingClientRect(), at = find(b.dataset.uid), sp = at && spec(at.node), y = e.clientY - r.top;
+    var head = b.querySelector('.line').getBoundingClientRect().height;
+    if (sp && sp.wrap && y > head * 0.6 && y < head + 6) return { el: b, uid: b.dataset.uid, where: 'inside', cls: 'drop-in' };
+    return y < Math.min(r.height, head) / 2 ? { el: b, uid: b.dataset.uid, where: 'before', cls: 'drop-before' } : { el: b, uid: b.dataset.uid, where: 'after', cls: 'drop-after' };
+  }
+  treeEl.addEventListener('dragover', function (e) { e.preventDefault(); var t = dropTarget(e); clearMark(); if (t.el) { t.el.classList.add(t.cls); dropMark = t.el; } });
+  treeEl.addEventListener('dragleave', function (e) { if (!treeEl.contains(e.relatedTarget)) clearMark(); });
+  treeEl.addEventListener('drop', function (e) {
+    e.preventDefault(); var t = dropTarget(e); clearMark();
+    var data = e.dataTransfer.getData('text/plain') || '';
+    if (data.indexOf('new:') === 0) { var id = data.slice(4); if (!S.byId[id]) return; remember(); var n = fresh(id); placeNode(n, t.uid, t.where); S.sel = n.uid; changed(true); }
+    else if (data.indexOf('move:') === 0) {
+      var u = data.slice(5); if (u === t.uid) return; var at = find(u); if (!at) return;
+      if (t.uid && contains(at.node, t.uid)) return toast('A block cannot go inside itself.');
+      remember(); at.list.splice(at.index, 1); placeNode(at.node, t.uid, t.where); S.sel = u; changed(true);
     }
   });
-  $('build').addEventListener('click', showCode);
-  $('save').addEventListener('click', openSave);
-  $('drawer').addEventListener('click', openDrawer);
-  $('drawerKeep').addEventListener('click', function () {
-    keepProject().then(function () { pycmd.toast('Kept'); openDrawer(); });
-  });
-  $('new').addEventListener('click', function () {
-    if (!draft().blocks.length) { pycmd.toast('This one is already empty.'); return; }
-    ask('Start again?', 'The blocks in this ' + state.language +
-        ' script go. Anything you saved as a file, or kept in Saved, stays.',
-        function () {
-          state.ids[state.language] = '';
-          state.drafts[state.language] = { name: 'untitled', blocks: [], file: '' };
-          state.selected = null;
-          $('name').value = 'untitled';
-          refresh();
+  $('scriptScroll').addEventListener('click', function (e) { if (e.target === $('scriptScroll') || e.target === treeEl) { S.sel = ''; markSel(); } });
+
+  // ---------------------------------------------------------------- building
+  function changed(structure) {
+    if (structure) drawTree();
+    clearTimeout(S.timer); S.timer = setTimeout(build, structure ? 0 : 220);
+    S.drafts[S.lang] = S.project;
+    $('saved').textContent = '…'; clearTimeout(S.saveTimer); S.saveTimer = setTimeout(keep, 1400);
+    $('undo').disabled = !S.past.length; $('redo').disabled = !S.future.length;
+  }
+  function project() { return { name: S.project.name || 'untitled', language: S.lang, blocks: S.project.blocks, file: S.project.file || '' }; }
+  function build() { return call('build', { project: project() }).then(function (r) { S.built = r; drawCode(); return r; }); }
+  function keep() {
+    clearTimeout(S.saveTimer);
+    if (!S.project || !count(blocks())) { $('saved').textContent = ''; return Promise.resolve(); }
+    return call('save_project', { id: S.ids[S.lang] || '', project: project() }).then(function (r) {
+      if (r.ok) { S.ids[S.lang] = r.id; $('saved').textContent = 'saved'; } else { $('saved').textContent = 'not saved'; toast(r.error || 'That did not save.'); }
+    });
+  }
+
+  var KW = {
+    python: 'False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield',
+    javascript: 'await break case catch class const continue default delete do else export extends false finally for function if import in instanceof let new null return switch this throw true try typeof undefined var void while yield',
+    c: 'auto break case char const continue default do double else enum extern float for if int long return short signed sizeof static struct switch typedef unsigned void while include define',
+    go: 'break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var true false nil',
+    rust: 'as break const continue crate else enum false fn for if impl in let loop match mod move mut pub ref return self Self static struct trait true type use where while',
+    shell: 'if then else elif fi for in do done while until case esac function return echo read export local exit',
+    json: 'true false null'
+  };
+  var COMMENT = { python: '#', shell: '#', javascript: '//', c: '//', go: '//', rust: '//', css: '/*', html: '<!--' };
+  function highlight(line, lang) {
+    var words = KW[lang] ? new RegExp('^(?:' + KW[lang].split(' ').join('|') + ')$') : null, mark = COMMENT[lang], tail = '';
+    var ci = mark ? line.indexOf(mark) : -1;
+    if (ci >= 0) { var before = line.slice(0, ci); if (((before.match(/"/g) || []).length % 2) === 0 && ((before.match(/'/g) || []).length % 2) === 0) { tail = line.slice(ci); line = before; } }
+    var out = '', re = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)(?=\s*\()|([A-Za-z_]\w*)|([\s\S])/g, m;
+    while ((m = re.exec(line))) {
+      if (m[1]) out += '<span class="s">' + esc(m[1]) + '</span>';
+      else if (m[2]) out += '<span class="n">' + m[2] + '</span>';
+      else if (m[3]) out += '<span class="' + (words && words.test(m[3]) ? 'k' : 'f') + '">' + esc(m[3]) + '</span>';
+      else if (m[4]) out += words && words.test(m[4]) ? '<span class="k">' + m[4] + '</span>' : esc(m[4]);
+      else out += esc(m[0]);
+    }
+    return out + (tail ? '<span class="c">' + esc(tail) + '</span>' : '');
+  }
+  function drawCode() {
+    var r = S.built || {}, box = $('codeView'); box.innerHTML = '';
+    if (!r.ok) { box.appendChild(el('div', 'problems', esc(r.error || 'That would not build.'))); return; }
+    if ((r.problems || []).length) box.appendChild(el('div', 'problems', r.problems.map(esc).join('<br>')));
+    var byLine = {}; (r.outline || []).forEach(function (o) { if (byLine[o.line] == null) byLine[o.line] = o.uid; });
+    var code = el('div', 'code'), lines = (r.code || '').replace(/\n$/, '').split('\n'), bad = S.run && S.run.line ? S.run.line - 1 : -1;
+    lines.forEach(function (text, i) {
+      var d = el('div', i === bad ? 'bad' : '', highlight(text, S.lang) || ' ');
+      if (byLine[i]) d.dataset.uid = byLine[i];
+      d.onclick = function () { if (!d.dataset.uid) return; S.sel = d.dataset.uid; markSel(); var b = document.querySelector('.blk[data-uid="' + S.sel + '"]'); if (b) b.scrollIntoView({ block: 'center', behavior: 'smooth' }); };
+      code.appendChild(d);
+    });
+    box.appendChild(code); markSel();
+  }
+
+  // ---------------------------------------------------------------- running
+  var IN_APP = { python: 1, c: 1, go: 1, rust: 1 };
+  function side(which) {
+    S.side = which;
+    document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === which); });
+    $('codeView').hidden = which !== 'code'; $('runView').hidden = which !== 'run';
+    if (which === 'run' && !$('runView').childNodes.length) drawRun();
+  }
+  function view(which) {
+    $('main').dataset.view = which;
+    document.querySelectorAll('.nav button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === which); });
+    if (which === 'code' || which === 'run') side(which);
+  }
+  function drawRun() {
+    var box = $('runView'), lang = S.lang; box.innerHTML = '';
+    var head = el('div', 'row'), go = el('button', 'primary', '▶ Run'); go.onclick = runNow; head.appendChild(go);
+    head.appendChild(el('span', 'muted', esc(lang === 'python' ? 'Runs on PyCmd\'s own Python' : IN_APP[lang] ? 'Runs on the interpreter PyCmd carries'
+      : lang === 'javascript' ? 'Runs right here in the panel' : lang === 'shell' ? 'Shell runs in the console' : lang === 'json' ? 'Checks it is valid JSON' : 'A live preview')));
+    box.appendChild(head);
+    if (IN_APP[lang] || lang === 'javascript') {
+      var t = el('textarea'); t.placeholder = 'Input - one line for each input() or prompt() the program asks for'; t.value = S.input[lang] || '';
+      t.oninput = function () { S.input[lang] = t.value; };
+      t.addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runNow(); });
+      box.appendChild(t);
+    }
+    if (lang === 'html' || lang === 'css' || lang === 'markdown') {
+      var f = el('iframe', 'preview'); f.setAttribute('sandbox', 'allow-scripts'); f.id = 'preview'; box.appendChild(f); setTimeout(runNow, 0);
+    } else {
+      var out = el('pre', 'out'); out.id = 'out'; out.innerHTML = '<span class="i">' + esc(meta().about || 'Press Run.') + '</span>'; box.appendChild(out);
+    }
+  }
+  function show(r) {
+    var out = $('out'); if (!out) return;
+    var html = esc(r.output || '');
+    if (r.error) html += (html && !/\n$/.test(r.output || '') ? '\n' : '') + '<span class="e">' + esc(r.error) + (r.line ? '  (line ' + r.line + ')' : '') + '</span>';
+    if (r.truncated) html += '\n<span class="i">… the rest was cut off</span>';
+    html += '\n<span class="i">' + (r.ok ? '✓ finished' : '✕ stopped') + (r.millis != null ? ' in ' + r.millis + ' ms' : '') + (r.engine ? ' · ' + esc(r.engine) : '') + '</span>';
+    out.innerHTML = html;
+    S.run = r; drawCode();
+    if (r.line && S.built && S.built.outline) {
+      var hit = S.built.outline.filter(function (o) { return o.line === r.line - 1; })[0];
+      if (hit) { S.sel = hit.uid; markSel(); }
+    }
+  }
+  function runJs(code) {
+    var lines = (S.input.javascript || '').split('\n');
+    var src = [
+      'var out=[];function put(k,a){out.push([k,Array.prototype.map.call(a,function(x){try{return typeof x==="string"?x:JSON.stringify(x)}catch(e){return String(x)}}).join(" ")]);if(out.length>5000)throw new Error("too much output")}',
+      'var console={log:function(){put("o",arguments)},info:function(){put("o",arguments)},warn:function(){put("o",arguments)},error:function(){put("e",arguments)}};',
+      'var __in=' + JSON.stringify(lines) + ';function prompt(q){if(q)put("o",[q]);return __in.length?__in.shift():null}function alert(x){put("o",[x])}',
+      'self.onmessage=function(){var t=Date.now();try{(0,eval)(' + JSON.stringify(code) + ');postMessage({ok:true,out:out,ms:Date.now()-t})}catch(e){postMessage({ok:false,out:out,error:String(e&&e.name?e.name+": "+e.message:e),ms:Date.now()-t})}}'
+    ].join('\n');
+    var w;
+    try { w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' }))); }
+    catch (e) { return show({ ok: false, error: 'This screen cannot start a worker: ' + e.message }); }
+    var timer = setTimeout(function () { w.terminate(); show({ ok: false, error: 'stopped after 8 seconds - is there a loop that never ends?' }); }, 8000);
+    w.onmessage = function (e) {
+      clearTimeout(timer); w.terminate(); var d = e.data;
+      var said = d.out.filter(function (x) { return x[0] === 'o'; }).map(function (x) { return x[1]; });
+      var errs = d.out.filter(function (x) { return x[0] === 'e'; }).map(function (x) { return x[1]; });
+      show({ ok: d.ok, output: said.join('\n') + (said.length ? '\n' : ''), error: errs.concat(d.error ? [d.error] : []).join('\n'), millis: d.ms, engine: 'JavaScript' });
+    };
+    w.onerror = function (e) { clearTimeout(timer); w.terminate(); e.preventDefault(); show({ ok: false, error: e.message || 'SyntaxError' }); };
+    w.postMessage(1);
+  }
+  function md(text) {
+    var h = esc(text)
+      .replace(/^###### (.*)$/gm, '<h6>$1</h6>').replace(/^##### (.*)$/gm, '<h5>$1</h5>').replace(/^#### (.*)$/gm, '<h4>$1</h4>')
+      .replace(/^### (.*)$/gm, '<h3>$1</h3>').replace(/^## (.*)$/gm, '<h2>$1</h2>').replace(/^# (.*)$/gm, '<h1>$1</h1>')
+      .replace(/^&gt; (.*)$/gm, '<blockquote>$1</blockquote>').replace(/^(?:-|\*) (.*)$/gm, '<li>$1</li>').replace(/^\d+\. (.*)$/gm, '<li>$1</li>')
+      .replace(/^---$/gm, '<hr>').replace(/```([\s\S]*?)```/g, '<pre>$1</pre>').replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\*([^*]+)\*/g, '<i>$1</i>')
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">').replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    return h.split(/\n{2,}/).map(function (p) { return /^\s*<(h\d|li|pre|blockquote|hr)/.test(p) ? p : '<p>' + p.replace(/\n/g, '<br>') + '</p>'; }).join('\n');
+  }
+  var DEMO = '<h1>Heading</h1><h2>Smaller heading</h2><p>A paragraph with <a href="#">a link</a> and <b>bold</b> text.</p><button>A button</button>' +
+    '<ul><li>One</li><li>Two</li></ul><div class="card box container">A div with the classes card, box and container</div><p><input placeholder="an input"></p>';
+  function runNow() {
+    if (S.side !== 'run') side('run');
+    if (document.body.clientWidth <= 1050 && $('main').dataset.view !== 'run') view('run');
+    var lang = S.lang;
+    return build().then(function (r) {
+      if (!r.ok) { if (!$('out')) drawRun(); return show({ ok: false, error: r.error }); }
+      var code = r.code || '';
+      if (lang === 'html' || lang === 'css' || lang === 'markdown') {
+        var f = $('preview'); if (!f) { drawRun(); f = $('preview'); }
+        f.srcdoc = lang === 'html' ? code : lang === 'css' ? '<!doctype html><style>' + code + '</style>' + DEMO
+          : '<!doctype html><meta charset="utf-8"><style>body{font:15px/1.6 system-ui;margin:18px;color:#1b1f1c}code,pre{background:#f1f3f2;border-radius:5px;padding:1px 5px}pre{padding:10px}blockquote{border-left:3px solid #ccc;margin:0;padding-left:12px;color:#555}</style>' + md(code);
+        return;
+      }
+      if (!$('out')) drawRun();
+      if (lang === 'json') {
+        try { show({ ok: true, output: JSON.stringify(JSON.parse(code || 'null'), null, 2) + '\n', engine: 'valid JSON' }); }
+        catch (e) { show({ ok: false, error: e.message }); }
+        return;
+      }
+      if (lang === 'shell') return show({ ok: true, output: 'Shell scripts run in the console: press "Save file", then\n  run ' + (S.project.name || 'script') + '.sh\n', engine: 'not run here' });
+      $('out').innerHTML = '<span class="i">running…</span>';
+      if (lang === 'javascript') return runJs(code);
+      return call('run', { project: project(), input: S.input[lang] || '' }).then(show);
+    });
+  }
+
+  // ---------------------------------------------------------------- sheets
+  function sheet(title, body) { $('sheetTitle').textContent = title; var b = $('sheetBody'); b.innerHTML = ''; b.appendChild(body); $('sheet').hidden = false; }
+  function closeSheet() { $('sheet').hidden = true; }
+  function item(title, sub, buttons) {
+    var it = el('div', 'item');
+    it.appendChild(el('div', 'grow', '<div><b>' + esc(title) + '</b></div><div class="muted">' + esc(sub) + '</div>'));
+    buttons.forEach(function (b) { var x = el('button', b[2] || '', esc(b[0])); x.onclick = b[1]; it.appendChild(x); });
+    return it;
+  }
+  function body() { var b = el('div'); b.style.cssText = 'display:flex;flex-direction:column;gap:8px'; return b; }
+  function load(proj, id) {
+    S.lang = proj.language || S.lang;
+    S.project = { name: proj.name || 'untitled', language: S.lang, blocks: ensure(JSON.parse(JSON.stringify(proj.blocks || []))), file: proj.file || '' };
+    S.ids[S.lang] = id || ''; S.drafts[S.lang] = S.project; S.past = []; S.future = []; S.sel = ''; S.run = null;
+    $('name').value = S.project.name; drawLangs();
+    return catalogueFor(S.lang).then(function () {
+      S.cat = ''; drawCats(); drawPalette(); drawTree(); $('runView').innerHTML = ''; if (S.side === 'run') drawRun();
+      build(); $('undo').disabled = $('redo').disabled = true; $('saved').textContent = id ? 'saved' : '';
+    });
+  }
+  function examples() {
+    var b = body();
+    b.appendChild(el('div', 'muted', 'Each one runs, and each one is yours to change. What you had stays in Projects.'));
+    S.langs.forEach(function (l) {
+      b.appendChild(item(l.name, l.about + ' · ' + l.blocks + ' blocks', [['Open', function () {
+        keep().then(function () { return call('starter', { language: l.id }); }).then(function (r) {
+          if (!r.ok || !r.project) return toast('There is no example for ' + l.name + ' yet.');
+          load(r.project, ''); closeSheet(); toast('An example ' + l.name + ' script - press Run.');
         });
-  });
-
-  /*
-   * Every language gets an example, and this is the way back to it.
-   *
-   * The starter used to arrive once, at boot, in whichever language the
-   * setting named - so anybody who switched to Rust got an empty script and
-   * a hundred and two blocks with no idea which two go at the top. An empty
-   * page is the worst place to start learning a language, and it is exactly
-   * where switching left you.
-   */
-  $('example-load').addEventListener('click', function () {
-    var language = state.language;
-    var apply = function () {
-      pycmd.call('starter', { language: language }).then(function (result) {
-        if (!result || !result.ok || !result.project) {
-          pycmd.toast('There is no example for ' + language + ' yet.');
-          return;
-        }
-        var start = JSON.parse(JSON.stringify(result.project));
-        if (start.language !== language) {
-          pycmd.toast('There is no example for ' + language + ' yet.');
-          return;
-        }
-        state.ids[language] = '';
-        state.drafts[language] = { name: start.name, blocks: start.blocks, file: '' };
-        stampUids(state.drafts[language].blocks);
-        state.selected = null;
-        $('name').value = start.name;
-        refresh();
-        state.untouched = true;
-        drawScript();
-        pycmd.toast('An example ' + language + ' script, ready to change.');
-      }).catch(function (error) {
-        trouble('The example did not load: ' + (error.message || error));
+      }, 'primary']]));
+    });
+    b.appendChild(item('Empty ' + meta().name + ' script', 'Start from nothing', [['New', function () {
+      keep().then(function () { load({ name: 'untitled', language: S.lang, blocks: [] }, ''); closeSheet(); });
+    }]]));
+    sheet('Examples', b);
+  }
+  function projects() {
+    var b = body(); b.appendChild(el('div', 'muted', 'loading…')); sheet('Projects', b);
+    keep().then(function () { return call('projects'); }).then(function (r) {
+      b.innerHTML = '';
+      var rows = r.projects || [];
+      if (!rows.length) b.appendChild(el('div', 'empty', '<b>Nothing saved yet</b>Projects save themselves as you build.'));
+      rows.forEach(function (p) {
+        b.appendChild(item(p.name, meta(p.language).name + ' · ' + p.blocks + ' blocks · ' + (p.saved ? new Date(p.saved * 1000).toLocaleString() : ''), [
+          ['Open', function () { call('open_project', { id: p.id }).then(function (o) { if (o.ok) { load(o.project, p.id); closeSheet(); } else toast(o.error || 'That would not open.'); }); }, 'primary'],
+          ['Delete', function () {
+            if (!confirm('Delete "' + p.name + '"? This cannot be undone.')) return;
+            call('delete_project', { id: p.id }).then(function () { if (S.ids[p.language] === p.id) S.ids[p.language] = ''; projects(); });
+          }]
+        ]));
+      });
+      if (r.max) b.appendChild(el('div', 'muted', rows.length + ' of ' + r.max));
+    });
+  }
+  function importer() {
+    var b = body(), langSel = el('select'), files = el('select'), text = el('textarea');
+    S.langs.forEach(function (l) { var o = el('option', '', esc(l.name)); o.value = l.id; if (l.id === S.lang) o.selected = true; langSel.appendChild(o); });
+    text.rows = 12; text.className = 'mono'; text.spellcheck = false; text.placeholder = 'Paste code here - every line becomes a block you can change.';
+    text.addEventListener('keydown', function (e) { e.stopPropagation(); });
+    files.innerHTML = '<option value="">…or read a file from your workspace</option>';
+    call('workspace_files').then(function (r) { (r.files || []).forEach(function (f) { var o = el('option', '', esc(f)); o.value = f; files.appendChild(o); }); });
+    var go = function (mode) {
+      var payload = files.value ? { path: files.value } : { code: text.value, language: langSel.value };
+      if (!files.value && !text.value.trim()) return toast('Paste some code first.');
+      call('from_code', payload).then(function (r) {
+        if (!r.ok) return toast(r.error || 'That could not be read.');
+        var p = r.project, nodes = ensure(p.blocks);
+        var done = function () { closeSheet(); toast(r.matched + ' lines became blocks' + (r.raw ? ', ' + r.raw + ' kept as code' : '') + '.'); };
+        if (mode === 'add' && p.language === S.lang) { remember(); nodes.forEach(function (n) { blocks().push(n); }); changed(true); done(); return; }
+        keep().then(function () {
+          load({ name: files.value ? files.value.split('/').pop().replace(/\.[^.]+$/, '') : 'imported', language: p.language, blocks: nodes }, '');
+          changed(false); done();
+        });
       });
     };
-    if (draft().blocks.length) {
-      ask('Replace this script?', 'The blocks in this ' + language +
-          ' script go, and an example takes their place.', apply);
-    } else {
-      apply();
-    }
+    var top = el('div', 'row'); top.appendChild(langSel); top.appendChild(files); b.appendChild(top);
+    b.appendChild(text);
+    b.appendChild(el('div', 'muted', 'A line one of the blocks writes becomes that block, with its values filled in. Anything else becomes an "any line of code" block, so nothing is lost.'));
+    var row = el('div', 'row'), x = el('button', 'primary', 'Open as a new script'), y = el('button', '', 'Add to this script');
+    x.onclick = function () { go('new'); }; y.onclick = function () { go('add'); }; row.appendChild(x); row.appendChild(y); b.appendChild(row);
+    sheet('Import code', b); setTimeout(function () { text.focus(); }, 50);
+  }
+  function saveFile() {
+    var b = body(), name = el('input'), folder = el('input'), ok = el('button', 'primary', 'Save');
+    name.value = S.project.name || 'untitled'; folder.placeholder = 'folder (optional), e.g. creator'; folder.value = S.folder || '';
+    [name, folder].forEach(function (f) { f.addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') ok.click(); }); });
+    ok.onclick = function () {
+      S.project.name = name.value.trim() || 'untitled'; $('name').value = S.project.name; S.folder = folder.value.trim();
+      call('save_file', { project: project(), name: S.project.name, folder: S.folder }).then(function (r) {
+        if (r.ok) { S.project.file = r.path; closeSheet(); toast('Saved ' + r.path); keep(); } else toast(r.error || 'That did not save.');
+      });
+    };
+    b.appendChild(el('div', 'muted', 'A real ' + meta().extension + ' file in your workspace - the editor opens it and the console runs it.'));
+    b.appendChild(name); b.appendChild(folder); var row = el('div', 'row'); row.appendChild(ok); b.appendChild(row);
+    sheet('Save as a file', b); setTimeout(function () { name.select(); }, 50);
+  }
+
+  // ---------------------------------------------------------------- languages
+  function catalogueFor(lang) {
+    if (S.cats[lang]) return Promise.resolve();
+    return call('catalogue', { language: lang }).then(function (r) {
+      var g = (r.groups || [])[0]; S.cats[lang] = g ? g.categories : [];
+      S.cats[lang].forEach(function (c) { c.blocks.forEach(function (b) { S.byId[b.id] = b; }); });
+    });
+  }
+  function drawLangs() {
+    var box = $('langs'); box.innerHTML = '';
+    S.langs.forEach(function (l) {
+      var b = el('button', 'chip' + (l.id === S.lang ? ' on' : ''), esc(l.name)); b.title = l.about;
+      b.onclick = function () { if (l.id !== S.lang) switchTo(l.id); };
+      box.appendChild(b);
+    });
+  }
+  function switchTo(lang) {
+    return keep().then(function () {
+      if (S.drafts[lang]) return load(S.drafts[lang], S.ids[lang]);
+      return call('starter', { language: lang }).then(function (r) { return load(r.project || { name: 'untitled', language: lang, blocks: [] }, ''); });
+    });
+  }
+
+  // ---------------------------------------------------------------- wiring
+  $('search').addEventListener('input', function (e) { S.filter = e.target.value; drawPalette(); });
+  $('search').addEventListener('keydown', function (e) {
+    e.stopPropagation();
+    if (e.key === 'Enter') { var first = document.querySelector('#palette .pal'); if (first) first.click(); }
+    if (e.key === 'Escape') { e.target.value = ''; S.filter = ''; drawPalette(); e.target.blur(); }
+  });
+  $('name').addEventListener('input', function (e) { S.project.name = e.target.value; changed(false); });
+  $('name').addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); });
+  $('undo').onclick = undo; $('redo').onclick = redo;
+  $('bExamples').onclick = examples; $('bImport').onclick = importer; $('bProjects').onclick = projects; $('bSave').onclick = saveFile; $('bRun').onclick = runNow;
+  $('bIn').onclick = indent; $('bOut').onclick = outdent;
+  $('bClear').onclick = function () { if (!blocks().length) return; remember(); S.project.blocks = []; S.sel = ''; changed(true); toast('Cleared - Undo brings it back.'); };
+  $('bCopy').onclick = function () {
+    var code = (S.built && S.built.code) || '';
+    var fallback = function () { var t = el('textarea'); t.value = code; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); toast('Copied'); } catch (e) { toast('Copying is not allowed here.'); } t.remove(); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(function () { toast('Copied'); }, fallback); else fallback();
+  };
+  document.querySelectorAll('.tabs button').forEach(function (b) { b.onclick = function () { side(b.dataset.t); }; });
+  document.querySelectorAll('.nav button').forEach(function (b) { b.onclick = function () { view(b.dataset.v); }; });
+  $('sheetClose').onclick = closeSheet;
+  $('sheet').addEventListener('click', function (e) { if (e.target === $('sheet')) closeSheet(); });
+  document.addEventListener('keydown', function (e) {
+    var mod = e.ctrlKey || e.metaKey, typing = /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || ''), k = (e.key || '').toLowerCase();
+    if (e.key === 'Escape') { if (!$('sheet').hidden) closeSheet(); else { S.sel = ''; markSel(); } return; }
+    if (mod && e.key === 'Enter') { e.preventDefault(); runNow(); return; }
+    if (mod && k === 's') { e.preventDefault(); saveFile(); return; }
+    if (typing || !$('sheet').hidden) return;
+    if (mod && !e.shiftKey && k === 'z') { e.preventDefault(); undo(); }
+    else if (mod && (k === 'y' || (e.shiftKey && k === 'z'))) { e.preventDefault(); redo(); }
+    else if (mod && k === 'd') { e.preventDefault(); duplicate(); }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel) { e.preventDefault(); removeSel(); }
+    else if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+    else if (e.key === 'Tab' && S.sel) { e.preventDefault(); if (e.shiftKey) outdent(); else indent(); }
+    else if (e.key === '/') { e.preventDefault(); $('search').focus(); }
   });
 
-  $('askOk').addEventListener('click', function () {
-    $('askSheet').classList.remove('open');
-    var yes = state.askYes;
-    state.askYes = null;
-    if (yes) yes();
-  });
-  $('askNo').addEventListener('click', function () {
-    $('askSheet').classList.remove('open');
-    state.askYes = null;
-  });
-
-  $('editOk').addEventListener('click', function () { closeEditor(true); });
-  $('editCancel').addEventListener('click', function () { closeEditor(false); });
-  $('codeClose').addEventListener('click', function () {
-    $('codeSheet').classList.remove('open');
-  });
-  $('codeSave').addEventListener('click', function () {
-    $('codeSheet').classList.remove('open');
-    openSave();
-  });
-  $('saveOk').addEventListener('click', doSave);
-  $('saveCancel').addEventListener('click', function () {
-    $('saveSheet').classList.remove('open');
-  });
-  $('drawerClose').addEventListener('click', function () {
-    $('drawerSheet').classList.remove('open');
-  });
-
-  // ----------------------------------------------------------- first draw
-
-  pycmd.call('languages', {}).then(function (result) {
-    state.languages = (result && result.languages) || [];
-    if (!state.languages.length) {
-      trouble('Creator could not read its own languages. Switch the plugin off and on again.');
-    }
-    return pycmd.call('starter', {});
-  }).then(function (result) {
-    if (result && result.ok && result.project) {
-      var start = JSON.parse(JSON.stringify(result.project));
-      state.language = start.language;
-      state.drafts[start.language] = {
-        name: start.name, blocks: start.blocks, file: ''
-      };
-      stampUids(state.drafts[start.language].blocks);
-      state.folder = result.folder || '';
-      state.startedIn = start.language;
-    }
-    drawLanguages();
-    return useLanguage(state.language).then(function () { state.untouched = true; });
-  }).catch(function (error) {
-    trouble('Creator could not start: ' + (error.message || error));
-  });
-
-  // The panel is driven from the test suite as well as by hand; this is the
-  // door it comes through, and nothing else uses it.
-  window.__creator = state;
-})();
+  // ---------------------------------------------------------------- start
+  call('languages').then(function (r) {
+    S.langs = r.languages || [];
+    return call('starter');
+  }).then(function (s) {
+    S.folder = s.folder || '';
+    return call('projects').then(function (r) {
+      var latest = (r.projects || [])[0];
+      if (latest) return call('open_project', { id: latest.id }).then(function (o) { return o.ok ? load(o.project, latest.id) : load(s.project, ''); });
+      return load(s.project || { name: 'hello', language: 'python', blocks: [] }, '');
+    });
+  }).then(function () { if (document.body.clientWidth <= 700) view('script'); });
+}());
 </script>
 </body>
 </html>

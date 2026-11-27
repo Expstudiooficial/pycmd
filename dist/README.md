@@ -1,17 +1,41 @@
 # Prebuilt APK
 
-`PyCmd-3.0.0.apk` — ready to install, nothing else needed.
+`PyCmd-3.5.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 3.0.0 |
-| Size | 25 MB |
+| Version | 3.5.0 |
+| Size | 27 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
 The universal APK, as in 2.7.0: one file for a phone and for an emulator.
+
+## What is new in 3.5.0
+
+**Creator 3.0.** Creator was rebuilt.
+
+- Python, C, Go, Rust and JavaScript run inside the Creator tab, with an Input
+  box for `input()`. HTML, CSS and Markdown get a live preview, and JSON is
+  checked.
+- **Import code** turns pasted code, or a workspace file, back into blocks with
+  their values filled in. Every line is checked to write exactly what it read,
+  and anything no block writes is kept as a line of code.
+- A failing program's line turns red and its block is selected. Endless loops
+  are stopped after 10 seconds, which is a setting.
+- Undo and redo, search, move and indent buttons, and projects that save
+  themselves. On a phone the panes are tabs along the bottom.
+
+**Python 3.13.16**, the newest 3.13 release, on Chaquopy 17.2. It is the real
+CPython and its whole standard library, built for Android.
+
+**Fixed**
+- Updating a built-in plugin no longer throws away what it saved, such as
+  Creator's projects or Scheduler's jobs.
+- Built-in plugins are refreshed whenever their files change, not only when the
+  version number does. Creator had kept its old look for that reason.
 
 ## What is new in 3.0.0
 

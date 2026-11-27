@@ -41,6 +41,33 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 35,
+            versionName = "3.5.0",
+            headline = "Creator 3.0: build code from blocks, run it right there, and turn code back into blocks.",
+            added = listOf(
+                "Creator was rebuilt. Python, C, Go, Rust and JavaScript run inside the " +
+                    "Creator tab, with an Input box for input(). HTML, CSS and Markdown get " +
+                    "a live preview, and JSON is checked.",
+                "Import code: paste code, or pick a file, and it comes back as blocks with " +
+                    "their values filled in. Every line is checked to write exactly what " +
+                    "it read, and anything no block writes is kept as a line of code.",
+                "When a program fails, its line turns red and the block that wrote it is " +
+                    "selected. A loop that never ends is stopped after 10 seconds, which " +
+                    "can be changed in Creator's settings.",
+                "Undo and redo, search, move and indent buttons, and projects that save " +
+                    "themselves. Each language keeps its own script. On a phone, the " +
+                    "panes are tabs along the bottom.",
+                "Python is now 3.13.16, the newest 3.13 release, on Chaquopy 17.2. It is " +
+                    "the real CPython with its whole standard library, built for Android.",
+            ),
+            fixed = listOf(
+                "Updating a built-in plugin no longer throws away what it saved, such as " +
+                    "Creator's projects or Scheduler's jobs.",
+                "A built-in plugin is refreshed whenever its files change, not only when " +
+                    "its version number does. Creator had kept its old look for that reason.",
+            ),
+        ),
+        ReleaseNote(
             versionCode = 30,
             versionName = "3.0.0",
             headline = "AI agents can drive PyCmd, and every account gets 800 KB of cloud storage.",

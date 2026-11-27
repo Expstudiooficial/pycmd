@@ -941,6 +941,36 @@ missing = json.loads(plugins.run_command("blocks", "build nope"))
 check("and says so when there is no such project",
       "No project" in missing.get("result", ""), missing)
 
+say("\n== 3.0: code back into blocks, and running ==")
+example_src = open(os.path.join(CREATOR, "main.py"), encoding="utf-8").read()
+_start = example_src.index("STARTERS = {")
+_scope = {}
+exec(example_src[_start:example_src.index("\n}\n", _start) + 3], _scope)  # noqa: S102 - our own file
+for language, starter in _scope["STARTERS"].items():
+    code = blocks.compile_project(starter)["code"]
+    back = blocks.blocks_from_code(language, code)
+    again = blocks.compile_project(back["project"])["code"]
+    check(f"{language}: code -> blocks -> the same code", again == code, (code, again))
+    check(f"{language}: every line found its block", back["raw"] == 0, back)
+odd = blocks.blocks_from_code("python", "with open('f') as f:\n    data = f.read()\nweird $$ line\n")
+check("a line no block writes is kept as code",
+      blocks.compile_project(odd["project"])["code"] == "with open('f') as f:\n    data = f.read()\nweird $$ line\n", odd)
+check("and counted", odd["raw"] >= 1, odd)
+check("an unknown language is refused", not blocks.blocks_from_code("cobol", "x")["ok"])
+
+import importlib.util as _util  # noqa: E402
+_spec = _util.spec_from_file_location("creator_main_for_test", os.path.join(CREATOR, "main.py"))
+creator_main = _util.module_from_spec(_spec)
+_spec.loader.exec_module(creator_main)
+ran = creator_main.run_python('n = input("n? ")\nprint("hi", n)\n', ["Ann"])
+check("Run feeds input() from the Input box", ran["ok"] and ran["output"] == "n? Ann\nhi Ann\n", ran)
+check("Run stops a loop that never ends", "stopped after" in creator_main.run_python("while True:\n    pass\n", [], 0.5)["error"])
+bad = creator_main.run_python("x = 1\nprint(1 / 0)\n")
+check("Run says which line failed", bad["line"] == 2 and "ZeroDivisionError" in bad["error"], bad)
+check("input() with nothing typed explains itself", "Input box" in creator_main.run_python("input()")["error"])
+check("print does not reach the app's own stdout",
+      creator_main.run_python("import sys\nprint('x')\n")["output"] == "x\n")
+
 say()
 if FAILURES:
     say(f"{len(FAILURES)} creator checks failed")

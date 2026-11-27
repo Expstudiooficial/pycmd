@@ -29,8 +29,8 @@ android {
         applicationId = "com.expstudio.pycmd"
         minSdk = 24
         targetSdk = 35
-        versionCode = 30
-        versionName = "3.0.0"
+        versionCode = 35
+        versionName = "3.5.0"
 
         ndk {
             abiFilters += targetAbis
@@ -163,6 +163,10 @@ android {
 
 chaquopy {
     defaultConfig {
+        // Real CPython, built for Android by Chaquopy - the same interpreter
+        // and standard library as python.org's, not a mobile rewrite. 17.2
+        // brings 3.13.16 and can also do 3.14 and 3.15: changing this line is
+        // the whole switch, once the build machine has that Python too.
         version = "3.13"
         // Chaquopy resolves the pip requirements below with a local CPython of
         // the same minor version. Override with

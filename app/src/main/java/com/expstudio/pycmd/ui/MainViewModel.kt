@@ -690,7 +690,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val version = manifest.optString("version")
             if (id.isEmpty()) continue
 
-            if (installed[id] == version) continue
+            if (installed[id] == version && engine.pluginUpToDate(folder.absolutePath, id)) continue
 
             val reply = engine.installPlugin(folder.absolutePath, folder.name, bundled = true)
             if (reply.optBoolean("ok")) {

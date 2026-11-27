@@ -1400,6 +1400,12 @@ object PythonEngine {
 
     suspend fun listPlugins(): JSONObject = pluginCall("listing")
 
+    /** Whether the installed copy of a bundled plugin matches the shipped files. */
+    suspend fun pluginUpToDate(folder: String, id: String): Boolean = withContext(pluginDispatcher) {
+        runCatching { pluginRuntime.callAttr("same_as_installed", folder, id).toString() == "1" }
+            .getOrDefault(true)
+    }
+
     suspend fun removePlugin(id: String): JSONObject = pluginCall("remove", id)
 
     suspend fun loadPlugins(enabled: Collection<String>): JSONObject =
