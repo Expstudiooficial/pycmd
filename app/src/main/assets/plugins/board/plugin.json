@@ -12,7 +12,19 @@
     "icon": "note"
   },
   "commands": [
-    {"name": "note", "help": "note <text> - drop a note on your board  ·  note list"}
+    {
+      "name": "note",
+      "help": "note <text> - drop a note on your board  \u00b7  note list"
+    }
   ],
-  "permissions": ["files"]
+  "permissions": [
+    "files"
+  ],
+  "guides": [
+    {
+      "file": "GUIDE.md",
+      "title": "Using the board",
+      "summary": "Cards, arrows, images, boards, keys and the note command."
+    }
+  ]
 }
