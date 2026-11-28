@@ -1,0 +1,33 @@
+# store: a little key-value store saved to a JSON file
+# version: 1.0
+use fs
+use json
+
+struct Store {
+    file: str
+    data: map = {}
+    fn load(self) {
+        self.data = fs.exists(self.file) ? json.parse(fs.read(self.file)) : {}
+        return self
+    }
+    fn save(self) { fs.write(self.file, json.pretty(self.data)) }
+    fn get(self, key, default = nil) => self.data.get(key, default)
+    fn set(self, key, value) {
+        self.data[key] = value
+        self.save()
+    }
+    fn remove(self, key) {
+        self.data.remove(key)
+        self.save()
+    }
+    fn keys(self) => self.data.keys()
+}
+
+fn open(file: str = "store.json") => Store(file).load()
+
+test "store keeps values" {
+    let s = open("store-test.json")
+    s.set("score", 10)
+    assert open("store-test.json").get("score") == 10
+    fs.remove("store-test.json")
+}

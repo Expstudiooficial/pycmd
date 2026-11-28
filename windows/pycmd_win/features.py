@@ -347,22 +347,26 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "6.2",
-    "title": "PyCmd for Windows 6.2",
+    "version": "7.0",
+    "title": "PyCmd for Windows 7.0",
     "items": [
-        ["PyCmd, the language",
-         "Our own language, built in (.pcmd): easy to read like Python, with let and var, "
-         "checked types, structs, enums, match, lambdas and pipelines. It is checked before it "
-         "runs, so a typo or a wrong type is caught with its line. Programs cannot reach the "
-         "rest of your PC, and files stay in the program's own folder."],
-        ["Fast for what it is",
-         "It is compiled to Python bytecode, so it runs as fast as Python. Honestly, not as "
-         "fast as C++ or Rust: those make machine code, and this does not."],
-        ["1,804 lessons",
-         "Learn > PyCmd, first in the list: from hello to structs, match and small projects."],
-        ["Creator and the console",
-         "Build PyCmd out of 66 blocks in Creator. In the console: pcmd new, pcmd test, "
-         "pcmd check, pcmd py and pcmd -e."],
+        ["PyCmd 2: a new engine",
+         "PyCmd now runs on its own engine, written in Kotlin and shipped inside the app with "
+         "the small Java it needs - nothing to install. Loops and function calls are about "
+         "twice as fast as before. Honestly: still not C++ or Rust speed."],
+        ["A bigger language",
+         "Traits (trait and impl), enums that carry data, operator methods (plus, times, "
+         "compare, show, [] and more), 19 libraries, and .pycmd files as well as .pcmd. Numbers "
+         "never overflow, and a program still cannot reach the rest of your PC."],
+        ["Packages",
+         "pcmd search, pcmd add vec, then use vec: 34 packages to start with - vectors, "
+         "fractions, graphs, a markdown renderer, quizzes and more. Every download is checked."],
+        ["Learn and Creator",
+         "Learn > PyCmd has new units on traits, enums with data, operators, packages and "
+         "bigger projects. Creator has 73 PyCmd blocks."],
+        ["Cloud in Files, and the Notes board",
+         "Files has a Cloud tab: open, download and delete what you saved, or download it all. "
+         "On the Notes board, to-do items can be deleted and the handles are easier to hit."],
     ],
 }
 

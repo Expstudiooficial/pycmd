@@ -1,0 +1,26 @@
+# strcase: snake_case, camelCase, kebab-case, Title Case and back
+# version: 1.0
+use regex
+
+fn words(s: str) {
+    let spaced = regex.replace("([a-z0-9])([A-Z])", s, "\\1 \\2")
+    return regex.split("[\\s_\\-]+", spaced.trim()).filter(|w| w != "").map(|w| w.lower())
+}
+
+fn snake(s: str) => "_".join(words(s))
+fn kebab(s: str) => "-".join(words(s))
+fn camel(s: str) {
+    let w = words(s)
+    return w.is_empty() ? "" : w[0] + "".join(w.skip(1).map(|x| x.capitalize()))
+}
+fn pascal(s: str) => "".join(words(s).map(|x| x.capitalize()))
+fn title(s: str) => " ".join(words(s).map(|x| x.capitalize()))
+fn constant(s: str) => snake(s).upper()
+
+test "cases" {
+    assert snake("helloWorld again") == "hello_world_again"
+    assert camel("hello_world") == "helloWorld"
+    assert kebab("Hello World") == "hello-world"
+    assert pascal("make it so") == "MakeItSo"
+    assert constant("maxSpeed") == "MAX_SPEED"
+}

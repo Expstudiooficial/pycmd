@@ -1030,18 +1030,44 @@ def _cmd_pcmd(args: list) -> int:
         _out("  pcmd py hello.pcmd      show the Python it turns into")
         _out('  pcmd -e "print(2 ** 64)" run one line')
         _out("  pcmd libs               the libraries (use math, use json, ...)")
+        _out("  pcmd engine             which engine runs PyCmd here")
+        _out("  pcmd packages           packages to add  ·  pcmd add graph  ·  pcmd remove graph")
         return 0
     if sub == "libs":
-        for name, what in pcmd_runtime.LIBRARIES.items():
-            _out(f"  use {name:<7} {what}")
+        try:
+            from pycmd_langs import pcmd_engine
+
+            eng = pcmd_engine.engine()
+        except Exception:  # noqa: BLE001
+            eng = None
+        libs = _PCMD_LIBS if eng is not None else pcmd_runtime.LIBRARIES
+        for name, what in libs.items():
+            _out(f"  use {name:<12} {what}")
+        _out("  packages: pcmd packages · pcmd add <name>")
         return 0
+    if sub == "engine":
+        try:
+            from pycmd_langs import pcmd_engine
+
+            st = pcmd_engine.status()
+        except Exception as exc:  # noqa: BLE001
+            st = {"engine": "first", "kind": "", "problem": str(exc)}
+        if st["engine"] == "fast":
+            _out(f"PyCmd runs on its fast engine (Kotlin, {st['kind']})")
+        else:
+            _out("PyCmd runs on its first engine (Python): PyCmd 1 only - no traits, enums with data or the new libraries")
+            if st.get("problem"):
+                _out(f"  why: {st['problem']}")
+        return 0
+    if sub in ("packages", "search", "add", "remove", "installed"):
+        return _pcmd_packages(sub, args[1:])
     if sub in ("-e", "eval"):
         code = " ".join(args[1:])
         if not code.strip():
             _err('pcmd -e: what should it run?  pcmd -e "print(1 + 1)"')
             return 1
         try:
-            pcmd.run_source(code, stdout=sys.stdout, stdin=sys.stdin)
+            pcmd.run(code, stdout=sys.stdout, stdin=sys.stdin)
             return 0
         except pcmd.PcmdError as exc:
             _err(f"PyCmd error, {exc.message}")
@@ -1084,10 +1110,125 @@ def _cmd_pcmd(args: list) -> int:
         except pcmd.PcmdSyntaxError as exc:
             _err(f"line {exc.line}: {exc.message}")
             return 1
-    if sub.endswith(".pcmd"):
+    if sub.endswith((".pcmd", ".pycmd")):
         return _cmd_run(args)
     _err(f"pcmd: no {sub!r} - try: pcmd help")
     return 1
+
+
+_PCMD_LIBS = {
+    "math": "sqrt, pow, floor, gcd, factorial, is_prime, primes, fib, ...",
+    "random": "int(a, b), float(), choice(xs), shuffle(xs), sample(xs, k), seed(n)",
+    "time": "now(), ms(), clock(), sleep(s), date(), time(), stamp(pattern)",
+    "json": "parse(text), stringify(value), pretty(value)",
+    "fs": "read, write, append, lines, list, exists, mkdir, remove - in the program's folder",
+    "regex": "test, find, find_all, groups, replace, split, escape",
+    "stats": "mean, median, mode, stdev, variance, range",
+    "text": "title, pad_left, center, is_palindrome, caesar, slug, wrap, ...",
+    "http": "get(url), get_json(url), post(url, data)",
+    "color": "red, green, yellow, blue, cyan, gray, bold, underline, plain",
+    "sys": "args, platform, exit(code), version",
+    "collections": "Counter, most_common, Deque, heap_push, heap_pop",
+    "date": "today, add_days, days_between, weekday, is_leap, days_in_month",
+    "csv": "parse, stringify, read, write",
+    "hash": "md5, sha1, sha256, crc32",
+    "base64": "encode, decode, url_encode",
+    "uuid": "new, short",
+    "path": "join, name, ext, dir, stem",
+    "matrix": "zeros, identity, add, mul, transpose, det",
+}
+
+PCMD_PACKAGES = ("https://raw.githubusercontent.com/expstudiooficial/pycmd/"
+                 "claude/python-mobile-cmd-android-dj1ixb/packages/")
+
+
+def _pcmd_index() -> dict:
+    import json
+    import urllib.request
+
+    request = urllib.request.Request(PCMD_PACKAGES + "index.json", headers={"User-Agent": "PyCmd"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _pcmd_packages(sub: str, rest: list) -> int:
+    """pcmd packages / search / add / remove / installed - PyCmd's package manager.
+
+    Packages are .pcmd files in a folder called pcmd_packages next to your
+    programs; `use graph` finds pcmd_packages/graph.pcmd. Each one is checked
+    against the checksum in the index before it is written.
+    """
+    import hashlib
+    import urllib.request
+
+    folder = os.path.join(os.getcwd(), "pcmd_packages")
+    installed = sorted(n[:-5] for n in os.listdir(folder) if n.endswith(".pcmd")) if os.path.isdir(folder) else []
+    if sub == "installed":
+        if not installed:
+            _out("no packages here yet - pcmd packages lists them, pcmd add <name> adds one")
+        for name in installed:
+            _out(f"  {name}")
+        return 0
+    if sub == "remove":
+        if not rest:
+            _err("pcmd remove: which package?")
+            return 1
+        path = os.path.join(folder, rest[0] + ".pcmd")
+        if not os.path.isfile(path):
+            _err(f"pcmd remove: {rest[0]} is not installed here")
+            return 1
+        os.remove(path)
+        _out(f"removed {rest[0]}")
+        return 0
+    try:
+        index = _pcmd_index()
+    except Exception as exc:  # noqa: BLE001
+        _err(f"pcmd: could not reach the package list ({exc}) - are you online?")
+        return 1
+    rows = {row["name"]: row for row in index.get("packages", [])}
+    if sub in ("packages", "search"):
+        word = (rest[0] if rest else "").lower()
+        shown = [r for r in rows.values() if word in r["name"] or word in r["description"].lower()]
+        for row in shown:
+            mark = "*" if row["name"] in installed else " "
+            _out(f" {mark} {row['name']:<12} {row['description']}")
+        _out(f"{len(shown)} package{'s' if len(shown) != 1 else ''}" +
+             (" (* = installed here)" if installed else "") + " - add one with: pcmd add <name>")
+        return 0
+    # add, with whatever each package needs
+    if not rest:
+        _err("pcmd add: which package? (pcmd packages lists them)")
+        return 1
+    todo = list(rest)
+    done = set()
+    while todo:
+        name = todo.pop(0)
+        if name in done:
+            continue
+        row = rows.get(name)
+        if row is None:
+            import difflib
+
+            close = difflib.get_close_matches(name, list(rows), n=1)
+            _err(f"pcmd add: there is no package {name}" + (f" - did you mean {close[0]}?" if close else ""))
+            return 1
+        request = urllib.request.Request(PCMD_PACKAGES + row["file"], headers={"User-Agent": "PyCmd"})
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                data = response.read()
+        except Exception as exc:  # noqa: BLE001
+            _err(f"pcmd add: could not download {name} ({exc})")
+            return 1
+        if hashlib.sha256(data).hexdigest() != row.get("sha256"):
+            _err(f"pcmd add: {name} did not match its checksum, so it was not installed")
+            return 1
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, row["file"]), "wb") as handle:
+            handle.write(data)
+        done.add(name)
+        todo.extend(row.get("needs", []))
+        _out(f"added {name} {row.get('version', '')} - use it with: use {name}")
+    return 0
 
 
 COMMANDS = {

@@ -1,0 +1,26 @@
+# dice: roll dice, including notation like 2d6+3
+# version: 1.0
+use random
+use regex
+
+fn roll(sides: int = 6) => random.int(1, sides)
+
+fn rolls(count: int, sides: int = 6) => [roll(sides) for _ in 0..count]
+
+fn notation(text: str) -> int {
+    let g = regex.groups("^(\\d*)d(\\d+)([+-]\\d+)?$", text.replace(" ", ""))
+    if g == nil { throw Error("write dice like 2d6, d20 or 3d8+2", "Value") }
+    let count = g[0] == "" ? 1 : int(g[0])
+    let bonus = g[2] == nil ? 0 : int(g[2])
+    return rolls(count, int(g[1])).sum() + bonus
+}
+
+fn seed(n) { random.seed(n) }
+
+test "dice stay in range" {
+    for _ in 0..200 {
+        let r = notation("2d6+3")
+        assert r >= 5 and r <= 15
+    }
+    assert rolls(5, 1) == [1, 1, 1, 1, 1]
+}

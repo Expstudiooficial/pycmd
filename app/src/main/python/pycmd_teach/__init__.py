@@ -1122,7 +1122,11 @@ def _run_through_registry(source: str, extension: str) -> tuple:
         old_trace = sys.gettrace()
         sys.settrace(_Deadline())
         try:
-            result = registry.run_file(path, stdout=buffer, stdin=io.StringIO(""))
+            if extension in (".pcmd", ".pycmd"):
+                # PyCmd runs on its own engine, which has its own clock
+                result = registry.run_file(path, stdout=buffer, stdin=io.StringIO(""), timeout=TIME_LIMIT)
+            else:
+                result = registry.run_file(path, stdout=buffer, stdin=io.StringIO(""))
         finally:
             sys.settrace(old_trace)
         if not result.get("ok"):

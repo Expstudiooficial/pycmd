@@ -70,18 +70,28 @@
   .todo .title { font-weight: 700; padding: 9px 12px 2px; flex: 0 0 auto; }
   .items { padding: 2px 10px 6px; overflow: auto; flex: 1 1 auto; }
   .item { display: flex; gap: 7px; align-items: flex-start; padding: 2px 0; }
-  .item input { margin-top: 3px; width: 16px; height: 16px; flex: 0 0 auto; }
+  .item input { margin-top: 2px; width: 18px; height: 18px; flex: 0 0 auto; cursor: pointer; }
   .item span { flex: 1; outline: none; min-height: 1.3em; border-radius: 4px; }
+  .item .del { border: 0; background: none; color: inherit; opacity: 0; padding: 0 6px; font-size: 14px; line-height: 1.3;
+               cursor: pointer; flex: 0 0 auto; border-radius: 6px; }
+  .item:hover .del, .card.sel .item .del { opacity: .55; }
+  .item .del:hover { opacity: 1; background: rgba(0, 0, 0, .12); }
   .item.done span { text-decoration: line-through; opacity: .6; }
   .add-item { margin: 0 10px 8px; padding: 2px 8px; font-size: 12px; background: rgba(0, 0, 0, .08); border-color: rgba(0, 0, 0, .15); color: inherit; align-self: flex-start; }
   .card img { width: 100%; flex: 1 1 auto; min-height: 0; object-fit: cover; pointer-events: none; display: block; }
   .card.image .text { flex: 0 0 auto; padding: 6px 10px; font-size: 12px; }
   .card.link a { color: inherit; font-size: 12px; word-break: break-all; padding: 0 12px 10px; display: block; opacity: .8; }
-  .dot { position: absolute; right: 3px; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%;
-         background: var(--b-accent); border: 2px solid var(--b-bg); display: none; cursor: crosshair; z-index: 3; }
-  .grip { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; display: none;
+  /* Handles stay the same size on screen at any zoom (--h is set from the zoom),
+     and only the selected card has them: on hover they used to sit over the
+     card's edge and turn a drag into an arrow. */
+  #world { --h: 18px; }
+  .dot { position: absolute; right: 2px; top: 50%; width: var(--h); height: var(--h); margin-top: calc(var(--h) / -2); border-radius: 50%;
+         background: var(--b-accent); border: 2px solid var(--b-bg); display: none; cursor: crosshair; z-index: 3; box-sizing: border-box; }
+  .grip { position: absolute; right: 0; bottom: 0; width: var(--h); height: var(--h); cursor: nwse-resize; display: none; z-index: 3;
           background: linear-gradient(135deg, transparent 50%, var(--b-accent) 50%); }
-  .card.sel .dot, .card.sel .grip, .card:hover .dot { display: block; }
+  .card.sel .dot, .card.sel .grip { display: block; }
+  .card.sel.multi .dot, .card.sel.multi .grip { display: none; }
+  @media (pointer: coarse) { #world { --h: 28px; } .item input { width: 22px !important; height: 22px !important; } }
   .card.locked .grip, .card.locked .dot { display: none !important; }
   .yellow { --card: #fbe38e; --ink: #2a2310; } .green { --card: #b7ebc6; --ink: #0f2a18; }
   .blue { --card: #b9d6ff; --ink: #0d1d33; } .pink { --card: #f9c3d9; --ink: #33101f; }
@@ -204,6 +214,8 @@
   // ------------------------------------------------------------ view
   function applyView() {
     var v = B.view; world.style.transform = 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.z + ')';
+    var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+    world.style.setProperty('--h', Math.min(60, Math.max(10, (coarse ? 28 : 18) / v.z)) + 'px');
     vp.style.backgroundSize = (22 * v.z) + 'px ' + (22 * v.z) + 'px';
     vp.style.backgroundPosition = v.x + 'px ' + v.y + 'px';
     $('zLabel').textContent = Math.round(v.z * 100) + '%';
@@ -258,7 +270,8 @@
         box.addEventListener('change', function () { remember(); it.done = box.checked; row.classList.toggle('done', it.done); changed(); });
         var span = el('span'); span.dataset.edit = '1'; span.dataset.single = '1'; span.dataset.item = String(i); span.dataset.hint = 'item';
         span.textContent = it.t || ''; span._raw = it.t || ''; span._set = function (v) { it.t = v; };
-        row.appendChild(box); row.appendChild(span); list.appendChild(row);
+        var del = el('button', 'del', '✕'); del.dataset.act = 'del-item'; del.dataset.item = String(i); del.title = 'Delete this item';
+        row.appendChild(box); row.appendChild(span); row.appendChild(del); list.appendChild(row);
       });
       d.appendChild(list);
       var add = el('button', 'add-item', '+ item'); add.dataset.act = 'add-item'; d.appendChild(add);
@@ -276,6 +289,7 @@
   function mark() {
     Array.prototype.forEach.call(world.querySelectorAll('.card'), function (x) {
       x.classList.toggle('sel', sel.indexOf(x.dataset.id) >= 0);
+      x.classList.toggle('multi', sel.length > 1);
       x.classList.toggle('found', found.length > 0 && found[foundAt] === x.dataset.id);
     });
     var first = selected()[0];
@@ -341,6 +355,11 @@
         }
         stopEdit();
       }
+      if (e.key === 'Backspace' && node.dataset.item != null && c && !node.innerText.replace(/\n/g, '') && c.items.length > 1) {
+        e.preventDefault();
+        var gone = Number(node.dataset.item); stopEdit(); deleteItem(c, gone);
+        var left = nodeOf(c).querySelectorAll('.item span'); startEdit(left[Math.max(0, gone - 1)]); return;
+      }
       if (e.key === 'Tab' && node.closest('.code')) { e.preventDefault(); document.execCommand('insertText', false, '    '); }
     };
     node.onblur = function () { setTimeout(function () { if (editing === node && document.activeElement !== node) stopEdit(); }, 0); };
@@ -360,6 +379,14 @@
     if (node && d.contains(node)) startEdit(node);
   }
   function grow(c) { if (c.type === 'todo') c.h = Math.max(c.h, 96 + (c.items || []).length * 24); }
+  function deleteItem(c, at) {
+    remember();
+    var before = 96 + (c.items || []).length * 24;
+    c.items.splice(at, 1);
+    // a list that had grown to fit its items shrinks with them; one sized by hand stays
+    if (c.h <= before + 4) c.h = Math.max(SIZES.todo[1], 96 + c.items.length * 24);
+    redrawCard(c); changed();
+  }
 
   // ------------------------------------------------------------ adding
   function centre() { var r = vp.getBoundingClientRect(); return toWorld(r.left + r.width / 2, r.top + r.height / 2); }
@@ -519,6 +546,11 @@
       { label: '⬇  Send to back', run: function () { order(-1); } },
       { label: (c.locked ? '🔓  Unlock' : '🔒  Lock') + (many ? ' all' : ''), run: function () { remember(); var to = !c.locked; selected().forEach(function (x) { x.locked = to; }); draw(); changed(); } },
       many ? null : { label: '↗  Connect from here', run: function () { toggleConnect(true); connectFrom = c.id; toast('Now tap the card it leads to.'); } },
+      c.type === 'todo' && !many ? { label: '🧹  Remove ticked items', run: function () {
+        remember(); var keep = (c.items || []).filter(function (it) { return !it.done; });
+        if (!keep.length) keep = [{ t: '', done: false }];
+        var removed = c.items.length - keep.length; c.items = keep; c.h = Math.max(SIZES.todo[1], 96 + keep.length * 24); redrawCard(c); changed();
+        toast(removed ? 'Removed ' + removed + ' ticked item' + (removed === 1 ? '' : 's') + '.' : 'Nothing was ticked.'); } } : null,
       c.type === 'link' ? { label: '🔗  Edit the address', run: function () { ask('Link', [{ name: 'url', value: c.url }, { name: 'text', value: c.text }]).then(function (v) { if (v) { remember(); c.url = v.url; c.text = v.text; redrawCard(c); changed(); } }); } } : null,
       '-',
       { label: '✕  Delete' + (many ? ' ' + sel.length : ''), danger: true, run: removeSel },
@@ -640,6 +672,17 @@
     if (e.target.closest('.zoom')) return;
     if (editing && editing.contains(e.target)) return;              // placing the caret
     if (e.target.closest('input[type=checkbox], a')) return;
+    var delItem = e.target.closest('[data-act="del-item"]');
+    if (delItem) {
+      var dc = card(delItem.closest('.card').dataset.id);
+      if (!dc.locked) deleteItem(dc, Number(delItem.dataset.item));
+      return;
+    }
+    var rowHit = e.target.closest('.item');
+    if (rowHit && e.button !== 2) {   // the space left of an item's text ticks it, like its box
+      var boxRect = rowHit.querySelector('input').getBoundingClientRect();
+      if (e.clientX < boxRect.right + 6) { var tick = rowHit.querySelector('input'); tick.click(); return; }
+    }
     var addItem = e.target.closest('[data-act="add-item"]');
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     var ids = Object.keys(pointers);

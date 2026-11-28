@@ -1,1 +1,2 @@
-229ee1777f62bb1913c2ba8fd01c6e5daf79507dd2ec1c420c076ca0c1383e18  PyCmd.exe
+# PyCmd for Windows 7.0 (build 19) has not been built yet.
+# The checksum appears here when a Windows release tag builds it.

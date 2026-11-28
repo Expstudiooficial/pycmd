@@ -1,0 +1,347 @@
+{
+ "format": 1,
+ "language": "PyCmd",
+ "count": 34,
+ "packages": [
+  {
+   "name": "ascii",
+   "description": "boxes, banners, bars and progress in plain text",
+   "version": "1.0",
+   "file": "ascii.pcmd",
+   "needs": [],
+   "sha256": "480bd405e56f55809829f47ce8d37d7171461baead5fd93b46d7ac5136e3eba8",
+   "bytes": 1266,
+   "tests": 1
+  },
+  {
+   "name": "bst",
+   "description": "a binary search tree - insert, find, sorted order, height",
+   "version": "1.0",
+   "file": "bst.pcmd",
+   "needs": [],
+   "sha256": "2617dcafc39cf803595f491f25b78867604f8698d143b93989b94db60ffb7a69",
+   "bytes": 1487,
+   "tests": 1
+  },
+  {
+   "name": "calendar",
+   "description": "a month drawn as text, and days until a date",
+   "version": "1.0",
+   "file": "calendar.pcmd",
+   "needs": [],
+   "sha256": "32c523bf1c187de412991fdbb28f60a3bc2df32a4e6e8df34bfc3639176cc3d3",
+   "bytes": 755,
+   "tests": 1
+  },
+  {
+   "name": "cards",
+   "description": "a deck of playing cards - shuffle, deal, score",
+   "version": "1.0",
+   "file": "cards.pcmd",
+   "needs": [],
+   "sha256": "c78c677b905ba4587ac88f0106e381115f138d8198af671a89b5c5ca50d703e4",
+   "bytes": 1368,
+   "tests": 1
+  },
+  {
+   "name": "check",
+   "description": "assertions with clear messages for your own tests",
+   "version": "1.0",
+   "file": "check.pcmd",
+   "needs": [],
+   "sha256": "a9a83db7a0bb3762dccbbe6a0923fd6388534b82e564ac7b3173b6153648e527",
+   "bytes": 959,
+   "tests": 1
+  },
+  {
+   "name": "cipher",
+   "description": "Caesar, Vigenere and Atbash ciphers",
+   "version": "1.0",
+   "file": "cipher.pcmd",
+   "needs": [],
+   "sha256": "d09cb7e9c26a4e96a7635d29cf8364c4e1a4862f0d231cf164a3a09e1a06f687",
+   "bytes": 1299,
+   "tests": 1
+  },
+  {
+   "name": "complex",
+   "description": "complex numbers a + bi",
+   "version": "1.0",
+   "file": "complex.pcmd",
+   "needs": [],
+   "sha256": "74fa544818d8096ff6dc3f1e08eb95a0bd8cb882dbb6fdcf846a00fef2ad02d6",
+   "bytes": 697,
+   "tests": 1
+  },
+  {
+   "name": "dice",
+   "description": "roll dice, including notation like 2d6+3",
+   "version": "1.0",
+   "file": "dice.pcmd",
+   "needs": [],
+   "sha256": "5fc4c662b9916dfb6541abb1d2b9d70e58f7c39c642bdc721080e20325ab7472",
+   "bytes": 734,
+   "tests": 1
+  },
+  {
+   "name": "fraction",
+   "description": "exact fractions like 1/3 that never round",
+   "version": "1.0",
+   "file": "fraction.pcmd",
+   "needs": [],
+   "sha256": "8f9c85af2dea2f819840df112eb5b995fbe08259ca85c71983f826fa2a5bd861",
+   "bytes": 1033,
+   "tests": 1
+  },
+  {
+   "name": "geometry",
+   "description": "shapes with area and perimeter, built on a trait",
+   "version": "1.0",
+   "file": "geometry.pcmd",
+   "needs": [],
+   "sha256": "191e1e2391bb1ebac3128b89eccffee2c3b8d1e75773103ab54db19cba95f3b7",
+   "bytes": 1032,
+   "tests": 1
+  },
+  {
+   "name": "graph",
+   "description": "graphs with breadth-first search, depth-first search and shortest paths",
+   "version": "1.0",
+   "file": "graph.pcmd",
+   "needs": [],
+   "sha256": "18a2586ce7be4e13497b63862cbd4fc04cca90c4aa58bcb03a891d99cfeae461",
+   "bytes": 2450,
+   "tests": 1
+  },
+  {
+   "name": "grid",
+   "description": "2D grids for games and puzzles - neighbours, flood fill, printing",
+   "version": "1.0",
+   "file": "grid.pcmd",
+   "needs": [],
+   "sha256": "2b8871440b486497111d48cae05d35e0421e45af523568e682220bbdca53050b",
+   "bytes": 1471,
+   "tests": 1
+  },
+  {
+   "name": "life",
+   "description": "Conway's Game of Life",
+   "version": "1.0",
+   "file": "life.pcmd",
+   "needs": [],
+   "sha256": "cc0e2faecd1637a630140304095fd649fc73abd1ab47e121086be3a2b240d7cf",
+   "bytes": 924,
+   "tests": 1
+  },
+  {
+   "name": "linked_list",
+   "description": "a singly linked list, to learn how lists work inside",
+   "version": "1.0",
+   "file": "linked_list.pcmd",
+   "needs": [],
+   "sha256": "ffbc58bd2ad66c9b22b593f8bd8ab1a01f19d40eb6380832a813c367a8e8b25a",
+   "bytes": 1420,
+   "tests": 1
+  },
+  {
+   "name": "log",
+   "description": "tidy, coloured messages - info, ok, warn, error",
+   "version": "1.0",
+   "file": "log.pcmd",
+   "needs": [],
+   "sha256": "d19823e2ee41850a7003b4120018b0142f34cfac2a1a38f5c4dedfb660351cc5",
+   "bytes": 562,
+   "tests": 1
+  },
+  {
+   "name": "markdown",
+   "description": "write Markdown - headings, lists, tables, code blocks, links",
+   "version": "1.0",
+   "file": "markdown.pcmd",
+   "needs": [],
+   "sha256": "15c10689907f26c6abfdf0aa685a684b270501f44e364f4efbbf308c547d11b1",
+   "bytes": 896,
+   "tests": 1
+  },
+  {
+   "name": "mathx",
+   "description": "handy maths - map ranges, round to steps, digits, averages",
+   "version": "1.0",
+   "file": "mathx.pcmd",
+   "needs": [],
+   "sha256": "b86532deec4746208baf7851ffe224b6e617172c2f5dae19d89790a37bf207bc",
+   "bytes": 1028,
+   "tests": 1
+  },
+  {
+   "name": "money",
+   "description": "format amounts, split bills, interest",
+   "version": "1.0",
+   "file": "money.pcmd",
+   "needs": [],
+   "sha256": "2f2f5c3540aa3c32b8fd7488995c2dc9fc9b7ac515f839360d64afe09c6bb599",
+   "bytes": 797,
+   "tests": 1
+  },
+  {
+   "name": "morse",
+   "description": "Morse code in and out",
+   "version": "1.0",
+   "file": "morse.pcmd",
+   "needs": [],
+   "sha256": "293dc1ec96c0a3ef29fd4a04db547cb968ce2bdc5a67f5373f70fb44414ae547",
+   "bytes": 961,
+   "tests": 1
+  },
+  {
+   "name": "primes",
+   "description": "primes, factors and divisors",
+   "version": "1.0",
+   "file": "primes.pcmd",
+   "needs": [],
+   "sha256": "d5bd84c6d3eaa4229d9bae533473106d22a05766bccdebd7a4a3c8b4a1f14c11",
+   "bytes": 1273,
+   "tests": 1
+  },
+  {
+   "name": "quiz",
+   "description": "ask questions in the console and keep score",
+   "version": "1.0",
+   "file": "quiz.pcmd",
+   "needs": [],
+   "sha256": "ee0de15fd47a0f02c9084183a81c78cb87795c1569a0965b8bab0258f91649e1",
+   "bytes": 1235,
+   "tests": 1
+  },
+  {
+   "name": "roman",
+   "description": "Roman numerals, both ways",
+   "version": "1.0",
+   "file": "roman.pcmd",
+   "needs": [],
+   "sha256": "a6caadd80281d627400b1f5aa1b7f09d0af000986f3da0d94eedd3e76b880e22",
+   "bytes": 1044,
+   "tests": 1
+  },
+  {
+   "name": "search",
+   "description": "linear and binary search",
+   "version": "1.0",
+   "file": "search.pcmd",
+   "needs": [],
+   "sha256": "eb27dcf6e67bbeb84438aaef4f0c77c26ed9dcdf929240d52316d65c757c3211",
+   "bytes": 746,
+   "tests": 1
+  },
+  {
+   "name": "sorting",
+   "description": "classic sorting algorithms, written out so you can read them",
+   "version": "1.0",
+   "file": "sorting.pcmd",
+   "needs": [],
+   "sha256": "d9102c3d83c20911cf1e0e53cc11e2b529ae4e0f520cc4bb2787458a8458b092",
+   "bytes": 1583,
+   "tests": 1
+  },
+  {
+   "name": "stack",
+   "description": "Stack and Queue",
+   "version": "1.0",
+   "file": "stack.pcmd",
+   "needs": [],
+   "sha256": "8b9c777f9a0cf9c95e31540f6fc8366ec4759131bf4868512fb77626eb9157d5",
+   "bytes": 1377,
+   "tests": 1
+  },
+  {
+   "name": "store",
+   "description": "a little key-value store saved to a JSON file",
+   "version": "1.0",
+   "file": "store.pcmd",
+   "needs": [],
+   "sha256": "7477e56ac4a317c1637772cc608a1385398913680231ce5ecb7f18ab4bbb8906",
+   "bytes": 839,
+   "tests": 1
+  },
+  {
+   "name": "strcase",
+   "description": "snake_case, camelCase, kebab-case, Title Case and back",
+   "version": "1.0",
+   "file": "strcase.pcmd",
+   "needs": [],
+   "sha256": "5bee2ad26b8de73d9035a92e8f183d6ce33d2b83392149d133d3c02149f6865e",
+   "bytes": 906,
+   "tests": 1
+  },
+  {
+   "name": "table",
+   "description": "print lists of rows as neat text tables",
+   "version": "1.0",
+   "file": "table.pcmd",
+   "needs": [],
+   "sha256": "d023973fafb4fdfda50191d1d04fb065959278171be24297a20fc2ec1367622d",
+   "bytes": 1136,
+   "tests": 1
+  },
+  {
+   "name": "textstats",
+   "description": "words, sentences, most common words and reading time",
+   "version": "1.0",
+   "file": "textstats.pcmd",
+   "needs": [],
+   "sha256": "96b5ea15b659aedcf91de8dfb9704be9878e927128eef37f2d8bc2bba809965b",
+   "bytes": 907,
+   "tests": 1
+  },
+  {
+   "name": "timer",
+   "description": "a stopwatch, and timing how long code takes",
+   "version": "1.0",
+   "file": "timer.pcmd",
+   "needs": [],
+   "sha256": "0c87acc86cb854a16dff27c9d7fb9da877738a6bb630f9a17947594d94280a25",
+   "bytes": 975,
+   "tests": 1
+  },
+  {
+   "name": "todo",
+   "description": "a to-do list that remembers itself between runs",
+   "version": "1.0",
+   "file": "todo.pcmd",
+   "needs": [],
+   "sha256": "d0ec5b7de771145803b544fd97bbeed8824ec80d285faa5b724e1275fbaf79a3",
+   "bytes": 1210,
+   "tests": 1
+  },
+  {
+   "name": "units",
+   "description": "convert temperature, length, weight and speed",
+   "version": "1.0",
+   "file": "units.pcmd",
+   "needs": [],
+   "sha256": "bada3a9f913823255c5cba85c2e9efd3c571b551df15954f3a2bdfacb5990c98",
+   "bytes": 801,
+   "tests": 1
+  },
+  {
+   "name": "validate",
+   "description": "check emails, numbers, passwords and more",
+   "version": "1.0",
+   "file": "validate.pcmd",
+   "needs": [],
+   "sha256": "791e5416cae7f1b6adad179084a7a4e8a51147baa8ceba60a17124caa34bd4bc",
+   "bytes": 1191,
+   "tests": 1
+  },
+  {
+   "name": "vec",
+   "description": "2D vectors with + - * and length, for games and geometry",
+   "version": "1.0",
+   "file": "vec.pcmd",
+   "needs": [],
+   "sha256": "904aa98d1a55cd446e3e260c8df16fba5ac48e3bc97a209ead112188501c2f21",
+   "bytes": 913,
+   "tests": 1
+  }
+ ]
+}

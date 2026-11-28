@@ -1,0 +1,44 @@
+# cipher: Caesar, Vigenere and Atbash ciphers
+# version: 1.0
+
+fn shift(c: str, n: int) -> str {
+    if c >= "a" and c <= "z" { return chr((ord(c) - 97 + n) % 26 + 97) }
+    if c >= "A" and c <= "Z" { return chr((ord(c) - 65 + n) % 26 + 65) }
+    return c
+}
+
+fn caesar(text: str, n: int) => "".join(text.chars().map(|c| shift(c, n)))
+fn uncaesar(text: str, n: int) => caesar(text, -n)
+
+fn vigenere(text: str, key: str, back: bool = false) -> str {
+    let k = key.lower().chars().filter(|c| c.is_alpha())
+    var i = 0
+    var out = ""
+    for c in text {
+        if c.is_alpha() {
+            let n = ord(k[i % k.len()]) - 97
+            out += shift(c, back ? -n : n)
+            i += 1
+        } else {
+            out += c
+        }
+    }
+    return out
+}
+
+fn atbash(text: str) -> str {
+    fn flip(c) {
+        if c >= "a" and c <= "z" { return chr(219 - ord(c)) }
+        if c >= "A" and c <= "Z" { return chr(155 - ord(c)) }
+        return c
+    }
+    return "".join(text.chars().map(flip))
+}
+
+test "ciphers" {
+    assert caesar("abc xyz", 3) == "def abc"
+    assert uncaesar(caesar("Hello", 5), 5) == "Hello"
+    assert vigenere("attack at dawn", "lemon") == "lxfopv ef rnhr"
+    assert vigenere(vigenere("Secret!", "key"), "key", back: true) == "Secret!"
+    assert atbash("abc") == "zyx"
+}

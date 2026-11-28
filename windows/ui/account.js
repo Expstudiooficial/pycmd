@@ -314,7 +314,7 @@ async function cloudSheet() {
   (reply.files || []).forEach((f) => list.appendChild(el('div', { class: 'row-item' },
     el('span', { class: 'grow mono', text: f.path }),
     el('span', { class: 'muted', text: kb(f.size) }),
-    el('button', { class: 'small', text: 'Save to PC', onclick: async () => {
+    el('button', { class: 'small', text: '\u2193 Download', onclick: async () => {
       const r = await PyCmd.call('cloud.download', { name: f.path });
       PyCmd.toast(r.ok ? `Saved to ${r.path}` : (r.error || 'That did not work.'));
     } }),
@@ -325,7 +325,7 @@ async function cloudSheet() {
   if (!(reply.files || []).length) list.appendChild(el('div', { class: 'empty', text: 'Nothing here yet.' }));
   PyCmd.sheet('Cloud files', el('div', {},
     el('p', { class: 'muted', text: `${kb(reply.used)} of ${kb(reply.quota)} used. Small code, notes and `
-      + 'configs, on every device you sign in on. Downloads go to workspace\\cloud.' }),
+      + 'configs, on every device you sign in on. Downloads go to workspace\\cloud - also in Files > Cloud.' }),
     el('div', { class: 'progress' }, el('div', { class: 'fill', style: `width:${pct}%` })),
     el('div', { class: 'row', style: 'margin:10px 0' },
       el('button', { class: 'small primary', text: 'Upload a file…', onclick: async () => {

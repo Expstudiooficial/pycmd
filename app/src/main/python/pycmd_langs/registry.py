@@ -74,14 +74,14 @@ NO_TOOLCHAIN = (
 
 LANGUAGES = [
     Language(
-        "pycmd", "PyCmd", [".pcmd"], RUN, "pycmd", "#",
+        "pycmd", "PyCmd", [".pcmd", ".pycmd"], RUN, "pycmd", "#",
         template='# A PyCmd program. Press Run.\nlet name = "world"\nprint("Hello, {name}!")\n\n'
                  'fn square(n: int) -> int {\n    n * n\n}\n\nfor i in 1..=5 {\n'
                  '    print("{i} squared is {square(i)}")\n}\n',
         note="PyCmd is this app's own language: as easy to read as Python, with let/var, "
-             "checked types, structs, enums, match, lambdas and 11 libraries (use math, json, "
-             "fs, http...). It is checked before it runs and compiled to Python bytecode, so "
-             "it runs at Python speed. Learn it in Learn > PyCmd.",
+             "checked types, structs, traits, enums with data, match, lambdas and 19 libraries "
+             "(use math, json, fs, http, collections...). It is checked before it runs, then "
+             "run by its own engine written in Kotlin. Learn it in Learn > PyCmd.",
     ),
     Language(
         "python", "Python", [".py", ".pyw"], RUN, "python", "#",
@@ -302,7 +302,7 @@ def can_run(path: str) -> bool:
     return for_path(path)["mode"] == RUN
 
 
-def run_file(path: str, stdout=None, stdin=None) -> dict:
+def run_file(path: str, stdout=None, stdin=None, timeout: float = 0.0) -> dict:
     """Runs a file with whichever engine its extension calls for.
 
     JavaScript is deliberately absent: the device already has a complete
@@ -332,7 +332,7 @@ def run_file(path: str, stdout=None, stdin=None) -> dict:
     if language["id"] == "pycmd":
         from . import pcmd
 
-        return pcmd.run_file(path, stdout=stdout, stdin=stdin)
+        return pcmd.run_file(path, stdout=stdout, stdin=stdin, timeout=timeout)
 
     if language["id"] == "go":
         from . import go_interp

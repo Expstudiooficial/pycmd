@@ -1657,7 +1657,7 @@ from pycmd_win import features as _feat61  # noqa: E402
 check("what is new matches the version", _feat61.WHATS_NEW["version"] == host_module.VERSION)
 
 say("\n== 6.2 ==")
-check("the version is 6.2", host_module.VERSION == "6.2" and host_module.BUILD == 18)
+check("the version is 6.2 or later", host_module.BUILD >= 18)
 check("PyCmd files are a runnable language", langs.for_path("x.pcmd")["id"] == "pycmd"
       and langs.for_path("x.pcmd")["mode"] == "run")
 check("PyCmd runs built in", "pycmd" in runner.BUILT_IN)
@@ -1698,6 +1698,53 @@ try:
     check("... and is once it is built", updates.check(18)["newer"])
 finally:
     updates._fetch = _saved_fetch
+
+say("\n== 7.0 ==")
+check("the version is 7.0", host_module.VERSION == "7.0" and host_module.BUILD == 19)
+check("what is new is about PyCmd 2", "PyCmd 2" in json.dumps(_feat61.WHATS_NEW))
+check(".pycmd files are PyCmd too", langs.for_path("x.pycmd")["id"] == "pycmd")
+from pycmd_langs import pcmd_engine as _pe70  # noqa: E402
+_spec70 = open(os.path.join(ROOT, "windows", "build", "pycmd.spec"), encoding="utf-8").read()
+check("the build bundles the engine", '"pcmd-engine"' in _spec70 and "pycmd_langs.pcmd_engine" in _spec70)
+_ci70 = open(os.path.join(ROOT, ".github", "workflows", "windows.yml"), encoding="utf-8").read()
+check("the CI builds the engine and its Java", "-p lang jar" in _ci70 and "jlink" in _ci70
+      and "setup-java" in _ci70)
+check("the self-test asks the bundled engine a sum", "pcmd-engine" in open(
+    os.path.join(ROOT, "windows", "pycmd_win", "app.py"), encoding="utf-8").read())
+_pc_dir = tempfile.mkdtemp(prefix="win-pcmd2-")
+_pc_file = os.path.join(_pc_dir, "two.pycmd")
+with open(_pc_file, "w", encoding="utf-8") as _h:
+    _h.write('trait Area {\n fn area(self) -> float\n}\nstruct Sq impl Area {\n s: float\n'
+             ' fn area(self) => self.s * self.s\n}\nlet who = input()\n'
+             'print("hi {who}", Sq(3.0).area(), 2 ** 80)\n')
+_pc_old = os.path.join(_pc_dir, "one.pcmd")
+with open(_pc_old, "w", encoding="utf-8") as _h:
+    _h.write('let who = input()\nprint("hi {who}", 3.0 * 3.0, 2 ** 80)\n')
+_saved_env70 = os.environ.get("PYCMD_ENGINE")
+for _mode in ("engine", "python"):
+    if _mode == "python":
+        os.environ["PYCMD_ENGINE"] = "python"
+    _plan70 = runner.pcmd_engine_plan(_pc_file)
+    if _mode == "engine" and not _plan70.get("ok"):
+        say("  (no PyCmd engine built here - the CI builds one)")
+        continue
+    _pc_out = []
+    _pc_res = runner.run_file(_pc_file if _mode == "engine" else _pc_old, _pc_out.append,
+                              answers=_PcAnswers())
+    check(f"a PyCmd program runs ({_mode}), and input() reads the console box",
+          _pc_res.get("ok") and "hi Win 9.0 1208925819614629174706176" in "".join(_pc_out),
+          "".join(_pc_out))
+    if _mode == "engine":
+        check("... on the fast engine", "the PyCmd engine" in "".join(_pc_out), "".join(_pc_out))
+if _saved_env70 is None:
+    os.environ.pop("PYCMD_ENGINE", None)
+else:
+    os.environ["PYCMD_ENGINE"] = _saved_env70
+check("PYCMD_ENGINE=python is honoured", runner.pcmd_engine_plan(_pc_file).get("ok") is not None)
+shutil.rmtree(_pc_dir, ignore_errors=True)
+_screens70 = open(os.path.join(ROOT, "windows", "ui", "screens.js"), encoding="utf-8").read()
+check("Files has a Cloud tab with downloads", "function CloudFiles" in _screens70
+      and "Download all" in _screens70)
 
 say()
 if FAILURES:

@@ -1,7 +1,7 @@
 {
   "id": "pycmd.cloud",
   "name": "Cloud",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "author": "PyCmd",
   "description": "Supabase and Firebase, over their REST APIs, with nothing to install. Connect a project once and reach it from a script, a server, the console or the panel: rows and documents, sign-up and sign-in, storage up and down, the Realtime Database and Postgres functions. The client is pycmd_cloud, importable from anything you write.",
   "entry": "main.py",

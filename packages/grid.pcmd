@@ -1,0 +1,45 @@
+# grid: 2D grids for games and puzzles - neighbours, flood fill, printing
+# version: 1.0
+
+struct Grid {
+    w: int
+    h: int
+    cells: list = []
+    fn fill(self, value) {
+        self.cells = [[value] * self.w for _ in 0..self.h]
+        return self
+    }
+    fn get(self, pos) => self.inside(pos) ? self.cells[pos[1]][pos[0]] : nil
+    fn set(self, pos, value) { self.cells[pos[1]][pos[0]] = value }
+    fn inside(self, pos) => 0 <= pos[0] < self.w and 0 <= pos[1] < self.h
+    fn neighbours(self, pos, diagonal = false) {
+        let steps = diagonal ? [(dx, dy) for dx in -1..=1 for dy in -1..=1 if dx != 0 or dy != 0]
+            : [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        return steps.map(|d| (pos[0] + d[0], pos[1] + d[1])).filter(|p| self.inside(p))
+    }
+    fn flood(self, start, value) {
+        let old = self[start]
+        if old == value { return 0 }
+        var count = 0
+        let todo = [start]
+        while todo.len() > 0 {
+            let p = todo.pop()
+            if self[p] != old { continue }
+            self[p] = value
+            count += 1
+            todo.push(...self.neighbours(p))
+        }
+        return count
+    }
+    fn show(self) => "\n".join(self.cells.map(|row| "".join(row)))
+}
+
+fn make(w: int, h: int, value = ".") => Grid(w, h).fill(value)
+
+test "grid" {
+    let g = make(4, 3)
+    g[(1, 1)] = "#"
+    assert g.neighbours((0, 0)).len() == 2
+    assert g.flood((0, 0), "~") == 11
+    assert str(g) == "~~~~\n~#~~\n~~~~"
+}

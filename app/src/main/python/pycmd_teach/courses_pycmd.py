@@ -562,6 +562,161 @@ PYCMD = Course(
         T("Running totals", "A var that grows each step.",
           'var run = 0\nlet out = []\nfor x in [3, 1, 4] {\n    run += x\n    out.push(run)\n}'
           '\nprint(out)', "[3, 4, 8]"),
+
+
+        # ---------------------------------------------------------- PyCmd 2
+        U("Traits", "PyCmd 2: promises a struct keeps."),
+        T("A trait", "A trait lists the methods a type must have. `impl` says a struct has them.",
+          'trait Speaker {\n    fn speak(self) -> str\n}\nstruct Dog impl Speaker {\n'
+          '    name: str\n    fn speak(self) => "woof"\n}\nprint(Dog("Rex").speak())', "woof"),
+        T("Default methods", "A trait can give a method a body: every struct gets it free.",
+          'trait Greeter {\n    fn name(self) -> str\n    fn hello(self) => "hi, {self.name()}"\n}\n'
+          'struct Person impl Greeter {\n    n: str\n    fn name(self) => self.n\n}\n'
+          'print(Person("Ada").hello())', "hi, Ada"),
+        T("is a trait", "`x is Trait` asks whether x's struct promised it.",
+          'trait Shape {\n    fn area(self) -> float\n}\nstruct Sq impl Shape {\n    s: float\n'
+          '    fn area(self) => self.s * self.s\n}\nprint(Sq(2.0) is Shape, 5 is Shape)', "true false"),
+        T("Many shapes, one loop", "Different structs, one trait, one loop over all of them.",
+          'trait Shape {\n    fn area(self) -> float\n}\nstruct Sq impl Shape {\n    s: float\n'
+          '    fn area(self) => self.s * self.s\n}\nstruct Rect impl Shape {\n    w: float\n'
+          '    h: float\n    fn area(self) => self.w * self.h\n}\n'
+          'let all = [Sq(2.0), Rect(1.0, 3.0)]\nprint(all.map(|s| s.area()).sum())', "7.0"),
+        T("Several traits", "A struct can keep several promises: impl A, B.",
+          'trait A {\n    fn a(self) => "a"\n}\ntrait B {\n    fn b(self) => "b"\n}\n'
+          'struct Both impl A, B {\n    n: int = 0\n}\nlet x = Both()\nprint(x.a() + x.b())', "ab"),
+
+        U("Enums with data", "PyCmd 2: options that carry values."),
+        T("A variant with data", "`Circle(r: float)` is an option that holds a value.",
+          'enum Shape {\n    Circle(r: float)\n    Square(side: float)\n}\n'
+          'let s = Shape.Circle(2.0)\nprint(s, s.r)', "Shape.Circle(r: 2.0) 2.0"),
+        T("Matching data out", "`Shape.Circle(r)` in a pattern takes the value out.",
+          'enum Shape {\n    Circle(r: float)\n    Square(side: float)\n}\n'
+          'fn area(s) => match s {\n    Shape.Circle(r) => 3.0 * r * r\n'
+          '    Shape.Square(a) => a * a\n}\nprint(area(Shape.Square(3.0)))', "9.0"),
+        T("Results", "Ok or Err: a value, or a reason it is missing.",
+          'enum Result {\n    Ok(value)\n    Err(why: str)\n}\nfn half(n) => n % 2 == 0 ?\n'
+          '    Result.Ok(n // 2) : Result.Err("{n} is odd")\nmatch half(7) {\n'
+          '    Result.Ok(v) => print("got", v)\n    Result.Err(w) => print("no:", w)\n}', "no: 7 is odd"),
+        T("Methods on enums", "An enum can have fns too; `self` is the option.",
+          'enum Light {\n    Red\n    Green\n    fn next(self) {\n'
+          '        return self == Light.Red ? Light.Green : Light.Red\n    }\n}\n'
+          'print(Light.Red.next())', "Light.Green"),
+        T("Options without data", "Mixing plain options and data ones is fine.",
+          'enum Msg {\n    Quit\n    Say(text: str)\n}\nfor m in [Msg.Say("hi"), Msg.Quit] {\n'
+          '    match m {\n        Msg.Say(t) => print("says", t)\n        Msg.Quit => print("bye")\n    }\n}',
+          "says hi\nbye"),
+
+        U("Operators for your types", "PyCmd 2: + - * and < on structs."),
+        T("plus", "A struct with `fn plus(self, other)` can be added with +.",
+          'struct Money {\n    cents: int\n    fn plus(self, o) => Money(self.cents + o.cents)\n}\n'
+          'print((Money(150) + Money(75)).cents)', "225"),
+        T("show", "`fn show(self)` decides how print shows it.",
+          'struct Temp {\n    c: float\n    fn show(self) => "{self.c} C"\n}\nprint(Temp(21.5))', "21.5 C"),
+        T("times and minus", "`times` is *, `minus` is -, `div` is /.",
+          'struct V {\n    x: int\n    fn times(self, k) => V(self.x * k)\n'
+          '    fn minus(self, o) => V(self.x - o.x)\n}\nprint((V(5) * 3 - V(1)).x)', "14"),
+        T("compare", "`fn compare(self, o)` - below 0 means smaller. Then < and sorted work.",
+          'struct Size {\n    n: int\n    fn compare(self, o) => self.n - o.n\n'
+          '    fn show(self) => "S{self.n}"\n}\nlet xs = [Size(3), Size(1), Size(2)]\n'
+          'print(xs.sorted(), Size(1) < Size(2))', "[S1, S2, S3] true"),
+        T("len and []", "`len`, `get` and `set` make len(x), x[i] and x[i] = v work.",
+          'struct Bag {\n    items: list = []\n    fn len(self) => self.items.len()\n'
+          '    fn get(self, i) => self.items[i]\n    fn set(self, i, v) { self.items[i] = v }\n}\n'
+          'let b = Bag([1, 2])\nb[0] = 9\nprint(len(b), b[0])', "2 9"),
+        T("Looping over a struct", "`fn iter(self)` gives what a for loop walks.",
+          'struct Countdown {\n    n: int\n    fn iter(self) => range(self.n, 0, -1)\n}\n'
+          'for i in Countdown(3) {\n    print(i)\n}', "3\n2\n1"),
+        T("equals", "`fn equals(self, o)` decides what == means.",
+          'struct Word {\n    w: str\n    fn equals(self, o) => self.w.lower() == o.w.lower()\n}\n'
+          'print(Word("Hi") == Word("HI"))', "true"),
+
+        U("More list tools", "PyCmd 2: the extra methods."),
+        T("window", "Every run of n neighbours.", 'print([1, 2, 3, 4].window(2))', "[[1, 2], [2, 3], [3, 4]]"),
+        T("count_by", "Count items by a key.", 'print(["a", "bb", "cc"].count_by(|w| w.len()))', "{1: 1, 2: 2}"),
+        T("min_by and max_by", "The item with the smallest or biggest key.",
+          'let ws = ["pear", "fig", "banana"]\nprint(ws.min_by(|w| w.len()), ws.max_by(|w| w.len()))', "fig banana"),
+        T("take and skip", "The first n, or all but the first n.",
+          'let xs = [1, 2, 3, 4, 5]\nprint(xs.take(2), xs.skip(3))', "[1, 2] [4, 5]"),
+        T("retain", "Keep only some items, in place.",
+          'let xs = [1, 2, 3, 4]\nxs.retain(|x| x % 2 == 0)\nprint(xs)', "[2, 4]"),
+        T("Numbers have methods", "`is_even`, `upto`, `abs` and friends.",
+          'print(6.is_even(), (-3).abs(), 2.upto(4))', "true 3 2..5"),
+        T("times", "`n.times(f)` runs f with 0 to n-1.",
+          'var total = 0\n3.times(fn(i) {\n    total += i\n})\nprint(total)', "3"),
+        T("invert", "Swap a map's keys and values.", 'print({"a": 1, "b": 2}.invert())', '{1: "a", 2: "b"}'),
+
+        U("New libraries", "PyCmd 2: collections, date, csv, hash and more."),
+        T("Counter", "Count anything in one call.",
+          'use collections\nlet c = collections.Counter("banana".chars())\nprint(c)',
+          '{"b": 1, "a": 3, "n": 2}'),
+        T("most_common", "The biggest counts first.",
+          'use collections\nlet c = collections.Counter([3, 1, 3, 2, 3, 1])\n'
+          'print(collections.most_common(c, 2))', "[(3, 3), (1, 2)]"),
+        T("A heap", "heap_push and heap_pop always give the smallest first.",
+          'use collections\nlet h = []\nfor n in [5, 1, 8, 3] {\n    collections.heap_push(h, n)\n}\n'
+          'print(collections.heap_pop(h), collections.heap_pop(h))', "1 3"),
+        T("Dates", "Dates are text like 2026-12-24.",
+          'use date\nprint(date.add_days("2026-12-30", 5))\nprint(date.weekday("2026-12-25"))',
+          "2027-01-04\nFriday"),
+        T("Days between", "How far apart two dates are.",
+          'use date\nprint(date.days_between("2026-01-01", "2026-12-25"))', "358"),
+        T("Leap years", "`date.is_leap` and `days_in_month`.",
+          'use date\nprint(date.is_leap(2028), date.days_in_month(2026, 2))', "true 28"),
+        T("CSV", "Text tables in, lists out - quotes and all.",
+          'use csv\nlet rows = csv.parse("name,age\\nAnn,31\\n")\nprint(rows[1][0], rows.len())', "Ann 2"),
+        T("Writing CSV", "`csv.stringify` quotes what needs quoting.",
+          'use csv\nprint(csv.stringify([["a", "b,c"]]).trim())', 'a,"b,c"'),
+        T("Hashes", "A fingerprint of some text.",
+          'use hash\nprint(hash.md5("hello"))', "5d41402abc4b2a76b9719d911017c592"),
+        T("Base64", "Text into safe letters and back.",
+          'use base64\nlet code = base64.encode("PyCmd")\nprint(code, base64.decode(code))', "UHlDbWQ= PyCmd"),
+        T("Paths", "Pieces of a file path.",
+          'use path\nlet p = "games/snake.pcmd"\nprint(path.name(p), path.ext(p), path.stem(p))',
+          "snake.pcmd .pcmd snake"),
+        T("Matrices", "Lists of lists, multiplied.",
+          'use matrix\nprint(matrix.mul([[1, 2], [3, 4]], matrix.identity(2)))', "[[1, 2], [3, 4]]"),
+        T("uuid", "A random id, different every time.",
+          'use uuid\nprint(uuid.new().len())', "36"),
+
+        U("Packages", "PyCmd 2: other people's code, one line away."),
+        T("What a package is", "A package is a .pcmd file in a folder called pcmd_packages. "
+          "`pcmd packages` lists them and `pcmd add graph` installs one; then `use graph`.",
+          '# after: pcmd add primes\n# use primes\n# print(primes.below(20))\nprint("packages")',
+          "packages"),
+        T("Your own library", "Any .pcmd file can be used by another: `use \"tools\" as t`. "
+          "Its top-level names become t.name.",
+          '# tools.pcmd has: fn double(n) => n * 2\n# use "tools" as t\nprint("t.double(4) is 8")',
+          "t.double(4) is 8"),
+        T("Testing a package", "Packages carry `test` blocks; `pcmd test file.pcmd` runs them.",
+          'fn add(a, b) => a + b\ntest "adds" {\n    assert add(2, 3) == 5\n}\nprint("tested")', "tested"),
+
+        U("Bigger projects", "PyCmd 2 put to work."),
+        T("Shapes and traits", "A trait, three structs, one report.",
+          'trait Shape {\n    fn area(self) -> float\n}\nstruct Sq impl Shape {\n    s: float\n'
+          '    fn area(self) => self.s * self.s\n}\nstruct Circ impl Shape {\n    r: float\n'
+          '    fn area(self) => 3.0 * self.r * self.r\n}\n'
+          'for s in [Sq(2.0), Circ(1.0)] {\n    print("{type(s)}: {s.area()}")\n}',
+          "Sq: 4.0\nCirc: 3.0"),
+        T("A tiny calculator", "Tokens, an enum with data, and a match.",
+          'enum Tok {\n    Num(v: int)\n    Op(c: str)\n}\nfn tok(t) {\n'
+          '    return t.is_digit() ? Tok.Num(int(t)) : Tok.Op(t)\n}\nvar total = 0\nvar op = "+"\n'
+          'for t in "3 + 4 * 2".split().map(tok) {\n    match t {\n        Tok.Op(c) => op = c\n'
+          '        Tok.Num(v) => total = op == "+" ?\n            total + v : total * v\n    }\n}\n'
+          'print(total)', "14"),
+        T("Word frequencies", "Counter and most_common on real text.",
+          'use collections\nlet text = "the cat and the hat and the bat"\n'
+          'let c = collections.Counter(text.words())\nprint(collections.most_common(c, 1))', '[("the", 3)]'),
+        T("A money type", "Operators make your own numbers feel built in.",
+          'struct Money {\n    cents: int\n    fn plus(self, o) => Money(self.cents + o.cents)\n'
+          '    fn times(self, n) => Money(self.cents * n)\n    fn show(self) => "${self.cents / 100:.2f}"\n}\n'
+          'print(Money(250) * 3 + Money(5))', "$7.55"),
+        T("Inventory", "Structs, a map and a report.",
+          'struct Item {\n    name: str\n    qty: int\n}\nlet stock = [Item("pens", 4), Item("ink", 0),\n'
+          '    Item("pads", 2)]\n'
+          'let out = stock.filter(|i| i.qty == 0).map(|i| i.name)\nprint("restock:", out)', 'restock: ["ink"]'),
+        T("Days to go", "Dates and a little formatting.",
+          'use date\nlet days = date.days_between("2026-12-01", "2026-12-25")\nprint("{days} days to go")',
+          "24 days to go"),
     ],
 )
 

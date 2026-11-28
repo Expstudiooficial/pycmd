@@ -1,0 +1,22 @@
+# calendar: a month drawn as text, and days until a date
+# version: 1.0
+use date
+
+fn month(year: int, m: int) -> str {
+    let first = "{year}-{m:02}-01"
+    let names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    let offset = names.index_of(date.weekday(first))
+    let days = date.days_in_month(year, m)
+    let cells = [""] * offset + [str(d) for d in 1..=days]
+    let lines = ["Mo Tu We Th Fr Sa Su"]
+    for week in cells.chunk(7) { lines.push(" ".join(week.map(|c| c.pad_left(2)))) }
+    return "\n".join(lines)
+}
+
+fn days_until(day: str) => date.days_between(date.today(), day)
+
+test "calendar" {
+    let c = month(2026, 2)
+    assert c.lines()[1] == "                   1"
+    assert c.lines().len() == 6
+}

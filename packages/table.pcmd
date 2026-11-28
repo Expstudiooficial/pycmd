@@ -1,0 +1,36 @@
+# table: print lists of rows as neat text tables
+# version: 1.0
+
+fn render(rows, header = nil) -> str {
+    let all = header == nil ? rows : [header] + rows
+    if all.is_empty() { return "" }
+    let cols = all.map(|r| r.len()).max()
+    let widths = [all.map(|r| str(r.get(c, "")).len()).max() for c in 0..cols]
+    fn line(r) => "| " + " | ".join([str(r.get(c, "")).pad_right(widths[c]) for c in 0..cols]) + " |"
+    let rule = "+" + "+".join(widths.map(|w| "-" * (w + 2))) + "+"
+    let out = [rule]
+    if header != nil {
+        out.push(line(header))
+        out.push(rule)
+        out.push(...rows.map(line))
+    } else {
+        out.push(...all.map(line))
+    }
+    out.push(rule)
+    return "\n".join(out)
+}
+
+fn show(rows, header = nil) { print(render(rows, header)) }
+
+fn from_maps(maps) {
+    if maps.is_empty() { return "" }
+    let keys = maps[0].keys()
+    return render(maps.map(|m| keys.map(|k| m.get(k, ""))), keys)
+}
+
+test "table" {
+    let t = render([["Ann", 31], ["Bo", 7]], ["name", "age"])
+    assert t.lines()[1] == "| name | age |"
+    assert t.lines()[3] == "| Ann  | 31  |"
+    assert t.lines().len() == 6
+}

@@ -124,6 +124,77 @@ def download(url: str, progress=None) -> dict:
     return {"ok": True, "path": target, "name": os.path.basename(target), "bytes": written}
 
 
+SOURCE_NAME = "pycmdcode"
+
+
+def download_source(url: str, progress=None) -> dict:
+    """PyCmd's own source, as Downloads/pycmdcode.zip with a pycmdcode/ folder inside.
+
+    GitHub names the archive after the branch (pycmd-claude-python-...); this
+    repacks it under one plain name, and replaces the copy from last time, so
+    the zip in Downloads is always the current source.
+    """
+    if _downloads_dir is None:
+        return {"ok": False, "error": "downloads are not configured"}
+    import tempfile
+    import zipfile
+
+    def report(message):
+        if progress is not None:
+            progress.onProgress(message)
+
+    report("Fetching the source...")
+    raw = tempfile.NamedTemporaryFile(prefix="pycmd-source-", suffix=".zip", delete=False,
+                                      dir=_downloads_dir)
+    raw.close()
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        written = 0
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response, open(raw.name, "wb") as handle:
+            while True:
+                chunk = response.read(256 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > 300 * 1024 * 1024:
+                    return {"ok": False, "error": "The source is larger than 300 MB - something is wrong."}
+                handle.write(chunk)
+                report(f"{written // 1024} KB")
+        report("Naming it pycmdcode...")
+        target = os.path.join(_downloads_dir, SOURCE_NAME + ".zip")
+        partial = target + ".part"
+        files = 0
+        with zipfile.ZipFile(raw.name) as source, zipfile.ZipFile(partial, "w", zipfile.ZIP_DEFLATED) as out:
+            for info in source.infolist():
+                parts = info.filename.split("/", 1)
+                rest = parts[1] if len(parts) > 1 else ""
+                if not rest:
+                    continue
+                name = f"{SOURCE_NAME}/{rest}"
+                if info.is_dir():
+                    out.writestr(zipfile.ZipInfo(name, info.date_time), b"")
+                    continue
+                entry = zipfile.ZipInfo(name, info.date_time)
+                entry.external_attr = info.external_attr
+                entry.compress_type = zipfile.ZIP_DEFLATED
+                out.writestr(entry, source.read(info.filename))
+                files += 1
+        os.replace(partial, target)
+    except urllib.error.HTTPError as exc:
+        return {"ok": False, "error": f"The server returned HTTP {exc.code}."}
+    except urllib.error.URLError as exc:
+        return {"ok": False, "error": f"Could not reach it: {getattr(exc, 'reason', exc)}"}
+    except (OSError, zipfile.BadZipFile) as exc:
+        return {"ok": False, "error": f"Could not save it: {exc}"}
+    finally:
+        try:
+            os.remove(raw.name)
+        except OSError:
+            pass
+    return {"ok": True, "path": target, "name": os.path.basename(target), "bytes": os.path.getsize(target),
+            "files": files}
+
+
 def adopt(path: str, name: str = "", replace: str = "") -> dict:
     """Takes a file the app has already copied out of the phone.
 

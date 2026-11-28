@@ -58,6 +58,28 @@ const cardWith = (text) => `.card:has(.text)`;
   await page.mouse.click(40, 760);
   check('to-do items edit, and Enter makes the next one', await q(() => [...document.querySelectorAll('.card.todo .item span')].map((s) => s.innerText).slice(0, 2).join('|')) === 'First|Second');
 
+  // 4.0: items can be deleted - with their ✕, and with Backspace on an empty one
+  await page.mouse.dblclick(...Object.values(await box(page, '.card.todo .item:nth-child(2) span')).slice(0, 2));
+  await page.keyboard.press('End'); await page.keyboard.press('Enter'); await page.waitForTimeout(80);
+  const countNow = () => q(() => document.querySelectorAll('.card.todo .item').length);
+  const withBlank = await countNow();
+  await page.keyboard.press('Backspace'); await page.waitForTimeout(80);
+  check('Backspace on an empty item deletes it', (await countNow()) === withBlank - 1, [withBlank, await countNow()]);
+  await page.mouse.click(40, 760);
+  await page.mouse.click(...Object.values(await box(page, '.card.todo .title')).slice(0, 2));
+  const del = await box(page, '.card.todo .item:nth-child(1) .del');
+  const items = await countNow();
+  await page.mouse.click(del.x, del.y);
+  check('the ✕ deletes an item', (await countNow()) === items - 1 &&
+        (await q(() => document.querySelector('.card.todo .item span').innerText)) === 'Second');
+  const tickRow = await box(page, '.card.todo .item');
+  await page.mouse.click(tickRow.l + 4, tickRow.y);
+  check('tapping just left of an item ticks it', await q(() => document.querySelector('.card.todo .item input').checked));
+  await page.mouse.click(40, 760);
+  check('a card that is not selected shows no arrow dot to grab by mistake', await q(() => {
+    const n = document.querySelector('.card.note'); return getComputedStyle(n.querySelector('.dot')).display === 'none';
+  }));
+
   const before = await q(() => document.querySelector('.card.note').offsetLeft);
   const n2 = await box(page, '.card.note');
   await page.mouse.move(n2.x, n2.y + 30); await page.mouse.down(); await page.mouse.move(n2.x + 150, n2.y + 60, { steps: 8 }); await page.mouse.up();

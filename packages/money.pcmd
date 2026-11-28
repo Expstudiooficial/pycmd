@@ -1,0 +1,27 @@
+# money: format amounts, split bills, interest
+# version: 1.0
+
+fn fmt(amount, symbol = "$") {
+    let sign = amount < 0 ? "-" : ""
+    return "{sign}{symbol}{abs(amount):,.2f}"
+}
+
+fn split(total, people: int) {
+    let cents = round(total * 100)
+    let each = cents // people
+    let extra = cents - each * people
+    return [(each + (i < extra ? 1 : 0)) / 100 for i in 0..people]
+}
+
+fn compound(principal, rate, years: int, times_a_year: int = 12) {
+    return principal * (1 + rate / times_a_year) ** (times_a_year * years)
+}
+
+fn percent(part, whole) => whole == 0 ? 0.0 : part * 100 / whole
+
+test "money" {
+    assert fmt(1234.5) == "$1,234.50"
+    assert fmt(-3, "EUR ") == "-EUR 3.00"
+    assert split(10, 3) == [3.34, 3.33, 3.33]
+    assert round(compound(1000, 0.05, 1, 1), 2) == 1050.0
+}

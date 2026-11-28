@@ -1,0 +1,24 @@
+# textstats: words, sentences, most common words and reading time
+# version: 1.0
+
+fn words(text: str) => text.lower().split().map(|w| w.trim(".,!?;:\"'()")).filter(|w| w != "")
+fn word_count(text: str) => words(text).len()
+fn sentences(text: str) => text.split(".").map(|s| s.trim()).filter(|s| s != "").len()
+fn frequencies(text: str) {
+    let counts = {}
+    for w in words(text) { counts[w] = counts.get(w, 0) + 1 }
+    return counts
+}
+fn top(text: str, n: int = 3) {
+    let f = frequencies(text)
+    return f.keys().sorted(key: |w| (-f[w], w)).take(n)
+}
+fn reading_minutes(text: str, per_minute: int = 200) => max(1, round(word_count(text) / per_minute))
+fn longest_word(text: str) => words(text).max(by: |w| w.len())
+
+test "stats" {
+    let t = "The cat sat. The cat ran! A dog sat."
+    assert word_count(t) == 9
+    assert top(t, 2) == ["cat", "sat"]
+    assert longest_word("a bb ccc") == "ccc"
+}

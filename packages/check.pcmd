@@ -1,0 +1,30 @@
+# check: assertions with clear messages for your own tests
+# version: 1.0
+
+fn equal(got, want, what = "value") {
+    if got != want { throw Error("{what}: expected {repr(want)}, got {repr(got)}", "Check") }
+}
+fn true_(cond, what = "condition") {
+    if not cond { throw Error("{what} should be true", "Check") }
+}
+fn near(got, want, tolerance = 1e-9) {
+    if abs(got - want) > tolerance { throw Error("expected about {want}, got {got}", "Check") }
+}
+fn throws(f, kind = nil) {
+    try {
+        f()
+    } catch e {
+        if kind != nil and e.kind != kind { throw Error("expected a {kind} error, got {e.kind}", "Check") }
+        return e
+    }
+    throw Error("expected an error, but it ran fine", "Check")
+}
+
+test "check" {
+    equal(1 + 1, 2)
+    near(0.1 + 0.2, 0.3)
+    let e = throws(|| 1 / 0, "DivideByZero")
+    assert e.message == "division by zero"
+    let caught = throws(|| equal(1, 2))
+    assert caught.message == "value: expected 2, got 1"
+}

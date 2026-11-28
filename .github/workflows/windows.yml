@@ -20,6 +20,7 @@ on:
       - "app/src/main/python/**"
       - "app/src/main/assets/**"
       - "tools/test_windows.py"
+      - "lang/**"
       - ".github/workflows/windows.yml"
   release:
     types: [published]
@@ -65,6 +66,29 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r windows/build/requirements.txt
+
+      # PyCmd 2's fast engine: the Kotlin sources in lang/ as one jar, and the
+      # smallest Java that runs it (java.base, and the
+      # elliptic-curve TLS that `use http` needs for https), shipped inside the app
+      # as pcmd-engine/. Nobody has to install Java for PyCmd to be fast.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build the PyCmd engine
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          ./gradlew.bat -p lang jar --no-daemon
+          if ($LASTEXITCODE -ne 0) { throw "the PyCmd engine did not build" }
+          New-Item -ItemType Directory -Force pcmd-engine | Out-Null
+          Copy-Item lang/build/libs/pcmd.jar pcmd-engine/pcmd.jar
+          jlink --add-modules java.base,jdk.crypto.ec --strip-debug --no-man-pages --no-header-files --compress=zip-9 --output pcmd-engine/runtime
+          if ($LASTEXITCODE -ne 0) { throw "jlink could not make the engine's Java runtime" }
+          $out = & pcmd-engine/runtime/bin/java.exe -jar pcmd-engine/pcmd.jar -e "print(6 * 7)"
+          if ("$out".Trim() -ne "42") { throw "the PyCmd engine did not run: $out" }
+          Write-Host "the PyCmd engine runs"
 
       - name: A tag must agree with the version in the source
         if: env.RELEASE_TAG != ''

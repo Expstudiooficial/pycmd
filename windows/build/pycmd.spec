@@ -37,6 +37,9 @@ datas = [
     (os.path.join(ASSETS, "examples"), "assets/examples"),
     (os.path.join(WINDOWS, "ui"), "ui"),
     (os.path.join(WINDOWS, "docs"), "windows/docs"),
+    # 7.0: PyCmd 2's fast engine - pcmd.jar and the small Java runtime that
+    # runs it, made by the CI from lang/ (see windows.yml).
+    (os.path.join(ROOT, "pcmd-engine"), "pcmd-engine"),
 ]
 datas = [(source, target) for source, target in datas if os.path.exists(source)]
 
@@ -55,6 +58,7 @@ hiddenimports = [
     "pycmd_langs.go_values",
     "pycmd_langs.rust_interp", "pycmd_langs.rust_parser",
     "pycmd_langs.rust_stdlib", "pycmd_langs.rust_values",
+    "pycmd_langs.pcmd", "pycmd_langs.pcmd_engine",
     # PyCmd Learn: the engine loads its course modules by name, and the
     # Windows-only courses are loaded the same way from pycmd_win.courses.
     "pycmd_teach",

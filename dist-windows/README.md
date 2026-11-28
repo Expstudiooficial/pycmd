@@ -37,6 +37,23 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 7.0
+
+### PyCmd 2
+
+- **A new engine:** PyCmd now runs on its own engine, written in Kotlin and shipped inside the app with the small Java runtime it needs, so there is nothing to install. Loops and function calls are about **twice as fast** as 6.2 (fib(30): 0.09 s, was 0.16 s). Honestly: still not C++ or Rust speed.
+- **A bigger language:** traits (`trait` / `impl`, with default methods), enums that carry data, operator methods (`plus`, `times`, `compare`, `show`, `[]`, `in`, `for`...), tuple assignment (`a, b = b, a`), and `.pycmd` files as well as `.pcmd`. Numbers still never overflow.
+- **19 libraries:** the 11 from 6.2 plus collections, date, csv, hash, base64, uuid, path and matrix.
+- **Packages:** `pcmd search`, `pcmd add vec`, then `use vec`. 34 packages to start with - vectors, fractions, complex numbers, units, graphs, sorting, ciphers, a markdown renderer, quizzes, a to-do list and more. Every download is checked against its SHA-256.
+- **Learn > PyCmd:** new units on traits, enums with data, operators, the new libraries, packages and bigger projects. **Creator:** 73 PyCmd blocks.
+- **Safe as before:** a program cannot reach Python or the rest of your PC, and files stay in its own folder. If the engine cannot start, PyCmd quietly uses the built-in one.
+
+### Also
+
+- **Files > Cloud:** open, download and delete what you saved to the cloud, upload, or **Download all**.
+- **Cloud plugin:** every stored file has a Download button.
+- **Notes board:** to-do items can be deleted (the ✕, or Backspace on an empty line), "Remove ticked items" in the card menu, and handles that are easier to hit and only show on the selected card.
+
 ## What is new in 6.2
 
 ### PyCmd, the language

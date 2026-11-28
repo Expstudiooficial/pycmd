@@ -48,6 +48,27 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# -- the PyCmd engine (optional) ---------------------------------------------
+# PyCmd 2's fast engine: lang/ as one jar plus a small Java runtime, bundled as
+# pcmd-engine/. Needs a JDK 17+ on the PATH; without one the exe still works and
+# runs PyCmd on its built-in engine.
+
+if ((Get-Command java -ErrorAction SilentlyContinue) -and (Get-Command jlink -ErrorAction SilentlyContinue)) {
+    Write-Host ""
+    Write-Host "building the PyCmd engine..." -ForegroundColor Cyan
+    & "$root\gradlew.bat" -p lang jar --no-daemon
+    if ($LASTEXITCODE -eq 0) {
+        if (Test-Path "$root\pcmd-engine") { Remove-Item -Recurse -Force "$root\pcmd-engine" }
+        New-Item -ItemType Directory -Force "$root\pcmd-engine" | Out-Null
+        Copy-Item "$root\lang\build\libs\pcmd.jar" "$root\pcmd-engine\pcmd.jar"
+        jlink --add-modules java.base,jdk.crypto.ec --strip-debug --no-man-pages --no-header-files --output "$root\pcmd-engine\runtime"
+    } else {
+        Write-Warning "the PyCmd engine did not build - PyCmd will use its built-in engine"
+    }
+} else {
+    Write-Warning "no JDK on the PATH - building without the fast PyCmd engine"
+}
+
 # -- build -------------------------------------------------------------------
 
 Write-Host ""

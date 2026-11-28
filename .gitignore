@@ -47,3 +47,7 @@ __pycache__/
 
 # Personal permission rules, not part of the project
 .claude/settings.local.json
+
+# PyCmd 2 engine build output (lang/) and the Windows bundle the CI makes from it
+lang/build/
+/pcmd-engine/

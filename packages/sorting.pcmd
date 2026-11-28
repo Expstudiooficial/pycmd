@@ -1,0 +1,70 @@
+# sorting: classic sorting algorithms, written out so you can read them
+# version: 1.0
+
+fn bubble(xs) {
+    let a = copy(xs)
+    for i in 0..a.len() {
+        for j in 0..a.len() - 1 - i {
+            if a[j] > a[j + 1] { a[j], a[j + 1] = a[j + 1], a[j] }
+        }
+    }
+    return a
+}
+
+fn insertion(xs) {
+    let a = copy(xs)
+    for i in 1..a.len() {
+        let key = a[i]
+        var j = i - 1
+        while j >= 0 and a[j] > key {
+            a[j + 1] = a[j]
+            j -= 1
+        }
+        a[j + 1] = key
+    }
+    return a
+}
+
+fn merge_sort(xs) {
+    if xs.len() <= 1 { return copy(xs) }
+    let mid = xs.len() // 2
+    let left = merge_sort(xs[:mid])
+    let right = merge_sort(xs[mid:])
+    let out = []
+    var i = 0
+    var j = 0
+    while i < left.len() and j < right.len() {
+        if left[i] <= right[j] {
+            out.push(left[i])
+            i += 1
+        } else {
+            out.push(right[j])
+            j += 1
+        }
+    }
+    return out + left[i:] + right[j:]
+}
+
+fn quick(xs) {
+    if xs.len() <= 1 { return copy(xs) }
+    let p = xs[xs.len() // 2]
+    return quick(xs.filter(|x| x < p)) + xs.filter(|x| x == p) + quick(xs.filter(|x| x > p))
+}
+
+fn selection(xs) {
+    let a = copy(xs)
+    for i in 0..a.len() {
+        var m = i
+        for j in i + 1..a.len() {
+            if a[j] < a[m] { m = j }
+        }
+        a[i], a[m] = a[m], a[i]
+    }
+    return a
+}
+
+test "all sorts agree" {
+    let data = [5, 2, 9, 1, 5, 6, 0]
+    let want = data.sorted()
+    for f in [bubble, insertion, merge_sort, quick, selection] { assert f(data) == want }
+}

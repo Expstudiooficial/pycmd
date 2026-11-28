@@ -22,7 +22,7 @@ from . import pcmd_runtime as rt
 from .pcmd_compiler import compile_source
 
 LANGUAGE = "PyCmd"
-VERSION = rt.VERSION
+VERSION = "2.0"  # the language; this file is its first engine (1.0)
 
 
 class PcmdError(Exception):
@@ -111,6 +111,11 @@ def run_source(source: str, stdout=None, stdin=None, argv=None, path=None,
 def run_tests(source: str, stdout=None, path=None) -> dict:
     """Runs the program's `test "name" { }` blocks. Output goes to stdout."""
     out = stdout or sys.stdout
+    eng = _engine()
+    if eng is not None:
+        reply = eng.test(source, path=path, stdout=out)
+        return {"ok": bool(reply.get("ok")), "passed": int(reply.get("passed") or 0),
+                "failed": int(reply.get("failed") or 0)}
     root = os.path.dirname(os.path.abspath(path)) if path else os.getcwd()
 
     class Quiet:
@@ -149,6 +154,12 @@ def run_tests(source: str, stdout=None, path=None) -> dict:
 
 def check(source: str) -> dict:
     """Compiles without running: the first problem, or ok."""
+    eng = _engine()
+    if eng is not None:
+        reply = eng.check(source)
+        if reply.get("ok"):
+            return {"ok": True}
+        return {"ok": False, "line": int(reply.get("line") or 0), "col": 0, "error": reply.get("error", "")}
     try:
         compile_source(source)
         return {"ok": True}
@@ -162,12 +173,66 @@ def to_python(source: str) -> str:
     return py
 
 
-def run_file(path: str, stdout=None, stdin=None, argv=None, platform="pycmd") -> dict:
+_ENGINE_TROUBLE: list = []
+
+
+def _engine():
+    """The fast engine, unless PYCMD_ENGINE=python asks for this one."""
+    if os.environ.get("PYCMD_ENGINE", "").strip().lower() == "python":
+        return None
+    try:
+        from . import pcmd_engine
+
+        return pcmd_engine.engine()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _stop_requested() -> bool:
+    runtime = sys.modules.get("pycmd_runtime")
+    return bool(runtime and (getattr(runtime, "_stop_requested", False) or
+                             getattr(runtime, "_stop_flag", None) and runtime._stop_flag.is_set()))
+
+
+def run(source: str, stdout=None, stdin=None, path=None, argv=None, timeout=0.0) -> int:
+    """Runs a program on the best engine there is. Returns the exit code;
+    raises PcmdError if it fails - the same contract as run_source."""
+    eng = _engine()
+    if eng is None:
+        return run_source(source, stdout=stdout, stdin=stdin, argv=argv, path=path)
+    try:
+        reply = eng.run(source, path=os.path.abspath(path) if path else None, stdout=stdout or sys.stdout,
+                        stdin=stdin, argv=argv or [], timeout=timeout, tick=_stop_requested)
+    except KeyboardInterrupt:
+        raise
+    except Exception as exc:  # noqa: BLE001 - the bridge itself failed: keep PyCmd working
+        _ENGINE_TROUBLE.append(f"{type(exc).__name__}: {exc}")
+        from . import pcmd_engine
+
+        pcmd_engine.disable(_ENGINE_TROUBLE[-1])
+        return run_source(source, stdout=stdout, stdin=stdin, argv=argv, path=path)
+    if not reply.get("ok"):
+        if reply.get("kind") == "Stopped" and reply.get("error") == "stopped":
+            raise KeyboardInterrupt("execution stopped")
+        raise PcmdError(reply.get("error", "it did not run"), int(reply.get("line") or 0),
+                        reply.get("kind") or "Error")
+    return int(reply.get("exit") or 0)
+
+
+def run_file(path: str, stdout=None, stdin=None, argv=None, platform="pycmd", timeout=0.0) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as handle:
             source = handle.read()
     except OSError as exc:
         return {"ok": False, "error": f"cannot open {path}: {exc}", "language": LANGUAGE}
+    if _engine() is not None:
+        try:
+            code = run(source, stdout=stdout, stdin=stdin, path=path,
+                       argv=argv or [os.path.basename(path)], timeout=timeout)
+            return {"ok": True, "exit": code, "language": LANGUAGE}
+        except PcmdError as exc:
+            return {"ok": False, "error": f"PyCmd error, {exc.message}", "line": exc.line,
+                    "language": LANGUAGE}
     try:
         code = run_source(source, stdout=stdout, stdin=stdin,
                           argv=argv or [os.path.basename(path)], path=path, platform=platform)

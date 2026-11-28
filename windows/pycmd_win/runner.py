@@ -310,6 +310,24 @@ def own_python_plan(path: str) -> dict:
             "cwd": os.path.dirname(path), "output": ""}
 
 
+def pcmd_engine_plan(path: str) -> dict:
+    """PyCmd 2's fast engine (pcmd.jar on its own small Java runtime, shipped
+    with the app) as an ordinary program: output streams, input() asks the
+    console, Stop ends it. Not there (or PYCMD_ENGINE=python): not ok, and the
+    built-in engine runs the file instead."""
+    if os.environ.get("PYCMD_ENGINE", "").strip().lower() == "python":
+        return {"ok": False}
+    try:
+        from pycmd_langs import pcmd_engine
+    except ImportError:
+        return {"ok": False}
+    for command in pcmd_engine._candidates():
+        return {"ok": True, "toolchain": "pycmd", "name": "the PyCmd engine", "version": "2.0",
+                "commands": [list(command) + ["run", path]], "builds": False,
+                "cwd": os.path.dirname(path), "output": ""}
+    return {"ok": False}
+
+
 def _run_built_in(path: str, language_id: str, write, answers=None) -> dict:
     """Falls back to the interpreter in the box - and is the only way to run
     PyCmd, which is the box's own language."""
@@ -476,6 +494,8 @@ def run_file(path: str, write, prefer: str = "", run_id: str = "", args=None,
             return run_page(path, write, run)
         plan = toolchains.plan_for(path, language_id, prefer=prefer)
 
+        if not plan.get("ok") and language_id == "pycmd":
+            plan = pcmd_engine_plan(path)
         if not plan.get("ok") and language_id == "python":
             # No Python on the PATH: use the one PyCmd is made of. A real
             # CPython, run as a process of its own so input() and Stop work.

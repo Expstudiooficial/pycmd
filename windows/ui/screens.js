@@ -47,9 +47,78 @@ function filesSwitch() {
   return el('div', { class: 'row wrap', style: 'margin-bottom:10px' },
     pick('workspace', 'Workspace', 'Where PyCmd keeps projects'),
     pick('pc', 'This PC', 'Every drive and folder you can reach'),
+    pick('cloud', '\u2601 Cloud', 'Your account\u2019s cloud storage, the same on your phone'),
     el('span', { class: 'muted', text: filesSource === 'workspace'
       ? 'What the console\u2019s cd and run mean.'
-      : 'Real files, in place. Editing one edits the file itself.' }));
+      : filesSource === 'cloud' ? '800 KB with a free account, on every device you sign in on.'
+        : 'Real files, in place. Editing one edits the file itself.' }));
+}
+
+// The Cloud folder: the account's cloud storage, inside Files. Download puts
+// a file in workspace\cloud; Open downloads it and opens it in the editor.
+async function CloudFiles(screen) {
+  const reply = await PyCmd.call('cloud.files', {});
+  if (!reply.ok) {
+    const signedOut = /sign in/i.test(reply.error || '') || reply.signed_out;
+    screen.appendChild(card(
+      el('h2', { text: signedOut ? 'Sign in to use the cloud' : 'The cloud is not reachable' }),
+      el('p', { class: 'muted', text: signedOut
+        ? 'A free PyCmd account gives you 800 KB of cloud storage - the same files on this PC and your phone.'
+        : (reply.error || 'Check the internet connection and try again.') }),
+      el('div', { class: 'row' },
+        signedOut ? el('button', { class: 'small primary', text: 'Sign in or make an account', onclick: () => go('settings') })
+          : el('button', { class: 'small', text: 'Try again', onclick: () => go('files') }))));
+    return;
+  }
+  const files = reply.files || [];
+  const kb = (n) => (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
+  const pct = Math.min(100, Math.round((reply.used / reply.quota) * 100));
+  screen.appendChild(el('div', { class: 'row wrap', style: 'margin-bottom:10px' },
+    el('button', { class: 'small primary', text: 'Upload a file…', onclick: async () => {
+      const r = await PyCmd.call('cloud.upload', {});
+      if (r.cancelled) return;
+      PyCmd.toast(r.ok ? 'Uploaded.' : (r.error || 'That did not upload.'));
+      go('files');
+    } }),
+    files.length ? el('button', { class: 'small', text: '\u2193 Download all', onclick: async () => {
+      let done = 0, failed = '';
+      for (const f of files) {
+        const r = await PyCmd.call('cloud.download', { name: f.path });
+        if (r.ok) done += 1; else failed = r.error || 'failed';
+      }
+      PyCmd.toast(failed ? `Downloaded ${done}; one failed: ${failed}` : `Downloaded ${done} to workspace\\cloud.`);
+    } }) : null,
+    el('button', { class: 'small', text: 'Refresh', onclick: () => go('files') }),
+    el('span', { class: 'muted', text: `${kb(reply.used)} of ${kb(reply.quota)} used` })));
+  screen.appendChild(el('div', { class: 'progress', style: 'margin-bottom:10px' }, el('div', { class: 'fill', style: `width:${pct}%` })));
+  if (!files.length) {
+    screen.appendChild(el('div', { class: 'empty', text: 'Nothing in the cloud yet. Upload a file, or use `cloud upload` in the console.' }));
+    return;
+  }
+  const list = el('div', { class: 'card', style: 'padding:4px 6px' });
+  files.forEach((f) => list.appendChild(el('div', { class: 'row', style: 'padding:7px 9px;border-bottom:1px solid #182231' },
+    el('span', { style: 'width:20px;text-align:center', text: '\u2601' }),
+    el('button', { class: 'small', style: 'flex:1 1 auto;text-align:left;border-color:transparent;background:none',
+      text: f.path, title: 'Download it and open it in the editor', onclick: async () => {
+        const r = await PyCmd.call('cloud.download', { name: f.path });
+        if (r.ok) openInEditor(r.path, true); else PyCmd.toast(r.error || 'That did not download.');
+      } }),
+    el('span', { class: 'muted', text: kb(f.size) }),
+    el('button', { class: 'small primary', text: '\u2193 Download', onclick: async () => {
+      const r = await PyCmd.call('cloud.download', { name: f.path });
+      PyCmd.toast(r.ok ? `Downloaded to ${r.path}` : (r.error || 'That did not work.'));
+    } }),
+    el('button', { class: 'small danger', text: 'Delete', onclick: () => PyCmd.sheet('Delete ' + f.path + ' from the cloud?',
+      el('div', {},
+        el('p', { class: 'muted', text: 'It goes from your cloud storage on every device. A copy you downloaded stays.' }),
+        el('div', { class: 'row', style: 'margin-top:12px' },
+          el('button', { class: 'small danger', text: 'Delete it', onclick: async () => {
+            const r = await PyCmd.call('cloud.delete', { name: f.path });
+            PyCmd.closeSheet();
+            if (!r.ok) PyCmd.toast(r.error || 'That did not work.');
+            go('files');
+          } })))) }))));
+  screen.appendChild(list);
 }
 
 async function Files(screen) {
@@ -59,6 +128,7 @@ async function Files(screen) {
   screen.appendChild(filesSwitch());
 
   if (filesSource === 'pc') return DiskFiles(screen);
+  if (filesSource === 'cloud') return CloudFiles(screen);
 
   const reply = await PyCmd.call('files', { path: filesAt });
   if (!reply.ok) {

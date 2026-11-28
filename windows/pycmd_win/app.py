@@ -490,6 +490,22 @@ def selftest() -> int:
             if not reply.get("ok"):
                 problems.append(f"{name} answered {reply.get('error')}")
 
+        # 7.0: PyCmd 2's fast engine ships as pcmd-engine/ (pcmd.jar and a
+        # small Java runtime). Ask it a sum, the way Run and the console do.
+        if getattr(sys, "frozen", False):
+            from pycmd_langs import pcmd_engine
+
+            fast = pcmd_engine.engine()
+            if fast is None:
+                problems.append("the PyCmd engine (pcmd-engine/) is not in the bundle")
+            else:
+                import io
+
+                out = io.StringIO()
+                reply = fast.run("print(6 * 7)", stdout=out)
+                if not reply.get("ok") or out.getvalue().strip() != "42":
+                    problems.append(f"the PyCmd engine did not run: {reply} {out.getvalue()!r}")
+
         roots = build_roots()
         for key in ("_ui", "web", "docs"):
             if not os.path.isdir(str(roots.get(key, ""))):

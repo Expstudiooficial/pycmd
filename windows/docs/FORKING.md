@@ -88,6 +88,12 @@ pyinstaller windows\build\pycmd.spec --noconfirm --distpath dist-windows\build
 You get `dist-windows\build\PyCmd.exe` — one file, around 40 MB, with the
 engine, the web assets, the bundled plugins and the guides inside it.
 
+**The PyCmd engine.** PyCmd 2's fast engine is the Kotlin code in `lang/`.
+`build.ps1` builds it when a JDK 17 or newer is on the PATH: `gradlew -p lang jar`
+makes `lang\build\libs\pcmd.jar`, and `jlink` makes the small Java runtime that
+runs it. Both go in `pcmd-engine\`, which the spec bundles. Without a JDK the exe
+still works and runs PyCmd on its built-in engine, which is slower.
+
 ### Or let CI do it
 
 `.github/workflows/windows.yml` builds on a Windows runner, runs the checks,

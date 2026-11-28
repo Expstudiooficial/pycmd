@@ -1,0 +1,82 @@
+# graph: graphs with breadth-first search, depth-first search and shortest paths
+# version: 1.0
+
+struct Graph {
+    edges: map = {}
+    directed: bool = false
+    fn add(self, a, b, weight = 1) {
+        self.edges.get_or_set(a, []).push((b, weight))
+        self.edges.get_or_set(b, [])
+        if not self.directed { self.edges[b].push((a, weight)) }
+    }
+    fn neighbours(self, n) => self.edges.get(n, []).map(|e| e[0])
+    fn nodes(self) => self.edges.keys()
+    fn bfs(self, start) {
+        let seen = set([start])
+        let order = []
+        let queue = [start]
+        while queue.len() > 0 {
+            let n = queue.remove_at(0)
+            order.push(n)
+            for m in self.neighbours(n) {
+                if not seen.has(m) {
+                    seen.add(m)
+                    queue.push(m)
+                }
+            }
+        }
+        return order
+    }
+    fn dfs(self, start) {
+        let seen = set()
+        let order = []
+        fn visit(n) {
+            if seen.has(n) { return }
+            seen.add(n)
+            order.push(n)
+            for m in self.neighbours(n) { visit(m) }
+        }
+        visit(start)
+        return order
+    }
+    fn shortest(self, start, goal) {
+        # Dijkstra: the cheapest way from start to goal, and what it costs
+        let dist = {}
+        dist[start] = 0
+        let prev = {}
+        let todo = set(self.nodes())
+        while todo.len() > 0 {
+            let reachable = todo.filter(|n| dist.has(n)).to_list()
+            if reachable.is_empty() { break }
+            let n = reachable.min(by: |x| dist[x])
+            todo.remove(n)
+            if n == goal { break }
+            for e in self.edges.get(n, []) {
+                let (m, w) = e
+                let d = dist[n] + w
+                if not dist.has(m) or d < dist[m] {
+                    dist[m] = d
+                    prev[m] = n
+                }
+            }
+        }
+        if not dist.has(goal) { return nil }
+        let path = [goal]
+        while path.first() != start { path.insert(0, prev[path.first()]) }
+        return (path, dist[goal])
+    }
+}
+
+test "searches" {
+    let g = Graph()
+    g.add("a", "b")
+    g.add("a", "c")
+    g.add("b", "d")
+    assert g.bfs("a") == ["a", "b", "c", "d"]
+    assert g.dfs("a") == ["a", "b", "d", "c"]
+    let w = Graph()
+    w.add("x", "y", 5)
+    w.add("x", "z", 1)
+    w.add("z", "y", 1)
+    assert w.shortest("x", "y") == (["x", "z", "y"], 2)
+}
