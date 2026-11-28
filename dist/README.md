@@ -24,6 +24,12 @@ The universal APK, as in 2.7.0: one file for a phone and for an emulator.
 - **Packages:** `pcmd packages` lists 34 (graphs, trees, fractions, ciphers, tables, dice, cards...), `pcmd add graph` installs one, `use graph` uses it.
 - **.pycmd** files run too. **Learn > PyCmd** has new units for all of it; **Creator** has the new blocks.
 
+**Also:**
+- **Files > Cloud:** a Cloud folder at the top of Files - open, download and delete what you saved, upload, or **Download all**.
+- **Cloud plugin:** every stored file has a Download button.
+- **Notes board:** to-do items can be deleted (the ✕, or Backspace on an empty item), "Remove ticked items" in the card menu, and handles that are bigger, sized to the zoom and only on the selected card.
+- **Docs > Fork:** the source download is always the newest code, saved as `pycmdcode.zip`.
+
 ## What is new in 3.9.0
 
 **PyCmd, the language.** Our own language, built into the app (`.pcmd`):

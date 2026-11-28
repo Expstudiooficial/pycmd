@@ -1,9 +1,11 @@
 package com.expstudio.pycmd.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -77,10 +79,38 @@ fun FilesScreen(
     pickingFor: ServerKind? = null,
     onUseAsTarget: (File) -> Unit = {},
     onCancelPicking: () -> Unit = {},
+    /** The account, for the Cloud folder: signed in or not, and its files. */
+    cloudAccount: TeachAccount = TeachAccount(),
+    onCloudOpen: () -> Unit = {},
+    onCloudUpload: () -> Unit = {},
+    onCloudDownload: (String) -> Unit = {},
+    onCloudEdit: (String) -> Unit = {},
+    onCloudDelete: (String) -> Unit = {},
+    onCloudDownloadAll: () -> Unit = {},
+    onSignIn: () -> Unit = {},
     /** Sections plugins have added to this screen; empty when none are on. */
     pluginSections: @Composable () -> Unit = {},
 ) {
     var dialog by remember { mutableStateOf<FileDialog?>(null) }
+    // The Cloud folder is a place inside Files, not a folder on the phone:
+    // it lists the account's cloud storage and moves files both ways.
+    var inCloud by remember { mutableStateOf(false) }
+    BackHandler(enabled = inCloud) { inCloud = false }
+    if (inCloud) {
+        CloudFolder(
+            account = cloudAccount,
+            onBack = { inCloud = false },
+            onRefresh = onCloudOpen,
+            onUpload = onCloudUpload,
+            onDownload = onCloudDownload,
+            onEdit = onCloudEdit,
+            onDelete = onCloudDelete,
+            onDownloadAll = onCloudDownloadAll,
+            onSignIn = onSignIn,
+            modifier = modifier,
+        )
+        return
+    }
 
     var importMenuOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -200,12 +230,15 @@ fun FilesScreen(
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
 
-            state.entries.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                EmptyState(
-                    icon = PyIcons.FolderOpen,
-                    title = "This folder is empty",
-                    hint = "Create a script or import one from your device.",
-                )
+            state.entries.isEmpty() -> Column(Modifier.fillMaxSize()) {
+                if (atRoot && pickingFor == null) CloudEntryRow(cloudAccount) { inCloud = true; onCloudOpen() }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    EmptyState(
+                        icon = PyIcons.FolderOpen,
+                        title = "This folder is empty",
+                        hint = "Create a script or import one from your device.",
+                    )
+                }
             }
 
             else -> LazyColumn(
@@ -227,6 +260,12 @@ fun FilesScreen(
                             hint = "${state.entries.size} items in this folder. " +
                                 "Workspace Search looks inside files, across every folder.",
                         )
+                    }
+                }
+
+                if (atRoot && needle.isEmpty() && pickingFor == null) {
+                    item(key = "pycmd-cloud") {
+                        CloudEntryRow(cloudAccount) { inCloud = true; onCloudOpen() }
                     }
                 }
 
@@ -672,4 +711,145 @@ private fun runLabel(language: LanguageInfo): String = when (language.mode) {
     "preview" -> "   previewable"
     "media" -> "   brought in from the phone"
     else -> ""
+}
+
+
+private fun sizeText(bytes: Long): String = when {
+    bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / 1024.0 / 1024.0)
+    bytes >= 1024 -> "${bytes / 1024} KB"
+    else -> "$bytes B"
+}
+
+/** The Cloud folder's row at the top of the workspace. */
+@Composable
+private fun CloudEntryRow(account: TeachAccount, onOpen: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(PyIcons.Cloud, contentDescription = null, tint = MaterialTheme.colorScheme.primary,
+             modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text("Cloud", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (account.signedIn) {
+                    "${account.cloudFiles.size} file${if (account.cloudFiles.size == 1) "" else "s"} · " +
+                        "${sizeText(account.cloudUsed)} of ${sizeText(account.cloudQuota)}"
+                } else "Your account's cloud storage - sign in to use it",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    Divider()
+}
+
+/** The account's cloud storage, inside Files: download, open, upload, delete. */
+@Composable
+private fun CloudFolder(
+    account: TeachAccount,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
+    onUpload: () -> Unit,
+    onDownload: (String) -> Unit,
+    onEdit: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onDownloadAll: () -> Unit,
+    onSignIn: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var confirm by remember { mutableStateOf<String?>(null) }
+    Column(modifier.fillMaxSize()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) { Icon(PyIcons.ArrowBack, contentDescription = "Back to the workspace") }
+            Column(Modifier.weight(1f)) {
+                Text("Cloud", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (account.signedIn) "${account.username} · ${sizeText(account.cloudUsed)} of ${sizeText(account.cloudQuota)}"
+                    else "not signed in",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (account.signedIn) {
+                IconButton(onClick = onRefresh) { Icon(PyIcons.Sync, contentDescription = "Refresh") }
+                IconButton(onClick = onUpload) { Icon(PyIcons.FileUpload, contentDescription = "Upload a file to the cloud") }
+            }
+        }
+        Divider()
+        if (!account.signedIn) {
+            Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                   verticalArrangement = Arrangement.Center) {
+                EmptyState(
+                    icon = PyIcons.Cloud,
+                    title = "Sign in to use the cloud",
+                    hint = "A free PyCmd account gives you 800 KB of cloud storage, the same on your phone and your PC.",
+                )
+                TextButton(onClick = onSignIn) { Text("Sign in or make an account") }
+            }
+            return@Column
+        }
+        if (account.cloudFiles.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+                TextButton(onClick = onDownloadAll) {
+                    Icon(PyIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("  Download all to workspace/cloud")
+                }
+            }
+        }
+        if (account.cloudFiles.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                EmptyState(
+                    icon = PyIcons.Cloud,
+                    title = "Nothing in the cloud yet",
+                    hint = "Upload a file with the arrow above, or use cloud upload in the console.",
+                )
+            }
+            return@Column
+        }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            items(account.cloudFiles, key = { it.path }) { file ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onEdit(file.path) }.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(PyIcons.Description, contentDescription = null, modifier = Modifier.size(20.dp),
+                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text(file.path, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                        Text(sizeText(file.size), style = MaterialTheme.typography.labelSmall,
+                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { onDownload(file.path) }) {
+                        Icon(PyIcons.Download, contentDescription = "Download ${file.path}",
+                             tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { confirm = file.path }) {
+                        Icon(PyIcons.Delete, contentDescription = "Delete ${file.path} from the cloud",
+                             tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+                Divider()
+            }
+        }
+    }
+    confirm?.let { path ->
+        ConfirmDialog(
+            title = "Delete $path from the cloud?",
+            message = "It is removed from your cloud storage on every device. A copy you downloaded stays.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onDismiss = { confirm = null },
+            onConfirm = { confirm = null; onDelete(path) },
+        )
+    }
 }

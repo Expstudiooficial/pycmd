@@ -526,7 +526,14 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                     pickingFor = pickingFor,
                     onUseAsTarget = viewModel::useAsLaunchTarget,
                     onCancelPicking = viewModel::cancelPicking,
-                
+                    cloudAccount = teachAccount,
+                    onCloudOpen = viewModel::refreshCloud,
+                    onCloudUpload = { cloudUploadLauncher.launch(arrayOf("*/*")) },
+                    onCloudDownload = viewModel::saveCloud,
+                    onCloudEdit = viewModel::openCloud,
+                    onCloudDelete = viewModel::deleteCloud,
+                    onCloudDownloadAll = viewModel::downloadAllCloud,
+                    onSignIn = { viewModel.selectTab(Tab.TEACH) },
                     pluginSections = {
                         PluginSections(
                             sectionsFor(Tab.FILES, installedPlugins, installedEnabled),
@@ -639,6 +646,7 @@ fun PyCmdRoot(viewModel: MainViewModel = viewModel()) {
                         cloudUpload = { cloudUploadLauncher.launch(arrayOf("*/*")) },
                         cloudSave = viewModel::saveCloud,
                         cloudDelete = viewModel::deleteCloud,
+                        cloudDownloadAll = viewModel::downloadAllCloud,
                     ),
                     pluginSections = {
                         PluginSections(

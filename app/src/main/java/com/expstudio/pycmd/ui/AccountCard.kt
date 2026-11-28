@@ -91,6 +91,7 @@ class AccountActions(
     val cloudUpload: () -> Unit = {},
     val cloudSave: (String) -> Unit = {},
     val cloudDelete: (String) -> Unit = {},
+    val cloudDownloadAll: () -> Unit = {},
 )
 
 fun syncedText(seconds: Long): String {
@@ -599,8 +600,8 @@ private fun CloudDialog(account: TeachAccount, actions: AccountActions, onDismis
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     "${kb(account.cloudUsed)} of ${kb(account.cloudQuota)} used. Small code, " +
-                        "notes and configs, on every device you sign in on. Saved files go to " +
-                        "workspace/cloud.",
+                        "notes and configs, on every device you sign in on. Downloads go to " +
+                        "workspace/cloud - also in Files > Cloud.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -611,6 +612,10 @@ private fun CloudDialog(account: TeachAccount, actions: AccountActions, onDismis
                 )
                 Spacer(Modifier.height(10.dp))
                 ActionButton("Upload a file", PyIcons.FileUpload, onClick = actions.cloudUpload)
+                if (account.cloudFiles.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    ActionButton("Download all", PyIcons.Download, onClick = actions.cloudDownloadAll)
+                }
                 Spacer(Modifier.height(8.dp))
                 if (account.cloudFiles.isEmpty()) {
                     Text("Nothing here yet.", style = MaterialTheme.typography.bodySmall)
@@ -624,7 +629,7 @@ private fun CloudDialog(account: TeachAccount, actions: AccountActions, onDismis
                             Text(kb(file.size), style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        TextButton(onClick = { actions.cloudSave(file.path) }) { Text("Save") }
+                        TextButton(onClick = { actions.cloudSave(file.path) }) { Text("Download") }
                         TextButton(onClick = { actions.cloudDelete(file.path) }) {
                             Text("Delete", color = MaterialTheme.colorScheme.error)
                         }

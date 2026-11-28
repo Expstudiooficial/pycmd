@@ -38,13 +38,20 @@ app/src/main/
     pycmd_preview.py           the preview pages and the loopback server
     pycmd_plugins.py           loading plugins, and the API they are handed
     pycmd_cloud.py             Supabase and Firebase over REST
-    pycmd_langs/               what each file type is, and the C/Go/Rust interpreters
+    pycmd_langs/               what each file type is, the C/Go/Rust interpreters,
+                               and PyCmd's first engine (pcmd*.py) and its bridge
+                               to the fast one (pcmd_engine.py)
+    pycmd_teach/               PyCmd Learn: the courses, and the lesson machinery
   assets/
     web/                       the console and editor pages (HTML, CSS, JS)
     plugins/                   the plugins that ship inside the APK
-      creator/creator_blocks.py  the 904 blocks, and what they compile to
+      creator/creator_blocks.py  about a thousand blocks, and what they compile to
     examples/                  what lands in a new workspace
-tools/                         the test suites, and make_latest.py
+lang/                          PyCmd, the language: its engine, in Kotlin. A build of
+                               its own (./gradlew -p lang jar -> pcmd.jar); the APK
+                               compiles the same sources in (app/build.gradle.kts)
+packages/                      PyCmd packages for `pcmd add`, and their index.json
+tools/                         the test suites, make_latest.py, make_packages_index.py
 dist/                          the built APK, its hash, and latest.json
 keystore/                      the signing key, so builds can replace each other
 ```
@@ -69,6 +76,13 @@ cd pycmd
 
 Leave `-Ppycmd.abi` off to build for x86_64 as well, which is what an emulator
 needs.
+
+PyCmd's engine on its own, for a laptop (needs only a JDK):
+
+```bash
+./gradlew -p lang jar
+java -jar lang/build/libs/pcmd.jar run hello.pcmd
+```
 
 Before you ship anything:
 
@@ -147,9 +161,12 @@ page straight from it.
 
 [Download the source](pycmd://source)
 
-That is the whole starting kit: the repository as a zip, straight onto this
-phone. It lands in **Downloads**, where **Save to device** puts it somewhere
-your file manager can see. Unzip it on a machine with the SDK and build.
+That is the whole starting kit: the repository as **pycmdcode.zip**, straight
+onto this phone, with everything inside a `pycmdcode` folder. It is fetched
+fresh every time and replaces the copy from last time, so it is always the
+current source. It lands in **Downloads**, where **Save to device** puts it
+somewhere your file manager can see. Unzip it on a machine with the SDK and
+build.
 
 The same button is on the Guides screen you opened this from, under **Take the
 source** - either one does the same thing.

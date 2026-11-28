@@ -1195,6 +1195,25 @@ object PythonEngine {
     // Downloads
     // ------------------------------------------------------------------
 
+    /** PyCmd's own source, saved as Downloads/pycmdcode.zip (replacing an older one). */
+    suspend fun downloadSource(url: String, onProgress: (String) -> Unit): DownloadResult =
+        withContext(controlDispatcher) {
+            if (!_status.value.ready) return@withContext DownloadResult(false, error = "Interpreter is not ready.")
+            runCatching {
+                val map = downloads.callAttr("download_source", url, ProgressSink(onProgress)).asMap()
+                DownloadResult(
+                    ok = map.str("ok") == "True",
+                    name = map.str("name"),
+                    path = map.str("path"),
+                    bytes = map.str("bytes").toLongOrNull() ?: 0L,
+                    error = map.str("error"),
+                )
+            }.getOrElse {
+                DebugLog.error(TAG, "source download failed", it)
+                DownloadResult(false, error = it.friendlyMessage())
+            }
+        }
+
     suspend fun downloadUrl(url: String, onProgress: (String) -> Unit): DownloadResult =
         withContext(controlDispatcher) {
             if (!_status.value.ready) return@withContext DownloadResult(false, error = "Interpreter is not ready.")

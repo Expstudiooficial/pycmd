@@ -201,9 +201,9 @@ fun DocsScreen(
             PyCard {
                 Text(
                     "Forks are welcome, and this is the whole starting kit: the " +
-                        "repository as a zip, straight onto this phone. It lands in " +
-                        "Downloads, where Save to device puts it somewhere your file " +
-                        "manager can see.",
+                        "repository as pycmdcode.zip, fetched fresh so it is always the " +
+                        "current source. It lands in Downloads, where Save to device " +
+                        "puts it somewhere your file manager can see.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -1701,7 +1701,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _sourceBusy.value = true
             _downloads.value = _downloads.value.copy(busy = true, progress = "Fetching the source...")
-            val result = engine.downloadUrl(Updater.SOURCE_ZIP_URL) { message ->
+            val result = engine.downloadSource(Updater.SOURCE_ZIP_URL) { message ->
                 _downloads.value = _downloads.value.copy(progress = message)
             }
             _downloads.value = _downloads.value.copy(busy = false, progress = "")
@@ -4014,7 +4014,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val target = File(workspace.root, "cloud/$name")
             val reply = engine.teachAccount("cloud_download", name, target.absolutePath)
-            showToast(if (reply.optBoolean("ok")) "Saved to workspace/cloud/$name" else reply.optString("error"))
+            showToast(if (reply.optBoolean("ok")) "Downloaded to workspace/cloud/$name" else reply.optString("error"))
+            _files.value.directory?.let { refreshFiles(it) }
+        }
+    }
+
+    /** A cloud file onto the phone, then straight into the editor. */
+    fun openCloud(name: String) {
+        viewModelScope.launch {
+            val target = File(workspace.root, "cloud/$name")
+            val reply = engine.teachAccount("cloud_download", name, target.absolutePath)
+            if (reply.optBoolean("ok")) openInEditor(target) else showToast(reply.optString("error"))
+        }
+    }
+
+    /** Every cloud file into workspace/cloud, one after another. */
+    fun downloadAllCloud() {
+        viewModelScope.launch {
+            val names = _account.value.cloudFiles.map { it.path }
+            if (names.isEmpty()) { showToast("There is nothing in the cloud yet."); return@launch }
+            var done = 0
+            var failed = ""
+            for (name in names) {
+                val reply = engine.teachAccount("cloud_download", name, File(workspace.root, "cloud/$name").absolutePath)
+                if (reply.optBoolean("ok")) done++ else failed = reply.optString("error")
+            }
+            showToast(if (failed.isEmpty()) "Downloaded $done file${if (done == 1) "" else "s"} to workspace/cloud"
+                      else "Downloaded $done; one failed: $failed")
+            _files.value.directory?.let { refreshFiles(it) }
         }
     }
 

@@ -1,89 +1,103 @@
-<h2>Cloud storage</h2>
+<h2 id="st-title">Cloud storage</h2>
 
 <div class="card">
   <p>
-    <button id="pick-supabase" class="pick on">Supabase</button>
-    <button id="pick-firebase" class="pick">Firebase</button>
+    <button id="st-supabase" class="st-pick on">Supabase</button>
+    <button id="st-firebase" class="st-pick">Firebase</button>
+    <button id="st-refresh">↻ List</button>
   </p>
-  <p id="bucket-row">
-    <input id="bucket" placeholder="bucket">
+  <p id="st-where" class="hint">Pick a bucket to see its files.</p>
+  <div id="st-buckets" class="st-row"></div>
+  <div id="st-files"></div>
+  <p class="st-row">
+    <input id="st-local" placeholder="workspace file to upload, e.g. notes/a.md">
+    <button id="st-up">↑ Upload</button>
   </p>
-  <p>
-    <input id="local" placeholder="workspace file, e.g. notes/a.md">
-    <input id="remote" placeholder="name in the bucket (optional)">
-  </p>
-  <p>
-    <button id="up">Upload</button>
-    <button id="down">Download into the workspace</button>
-    <button id="list">List</button>
-  </p>
-  <p id="result">—</p>
-  <pre id="listing"></pre>
+  <p id="st-result" class="hint">—</p>
 </div>
 
 <style>
-  .pick { opacity: .55; }
-  .pick.on { opacity: 1; font-weight: 600; }
-  input { width: 100%; }
+  .st-pick { opacity: .55; }
+  .st-pick.on { opacity: 1; font-weight: 600; }
+  .st-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .st-row input { flex: 1 1 200px; }
+  .st-file { display: flex; gap: 8px; align-items: center; padding: 6px 2px; border-bottom: 1px solid rgba(127,127,127,.25); }
+  .st-file .name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st-file .size { opacity: .65; font-size: 12px; }
 </style>
 
 <script>
+(function () {
   const $ = (id) => document.getElementById(id);
-  let provider = 'supabase';
-
+  let provider = 'supabase', bucket = '';
   async function call(name, payload) {
-    try {
-      return await pycmd.call(name, payload || {});
-    } catch (error) {
-      return { ok: false, error: error.message };
-    }
+    try { return await pycmd.call(name, payload || {}); } catch (error) { return { ok: false, error: error.message }; }
   }
-
+  const kb = (n) => n == null ? '' : (n < 1024 ? n + ' B' : n < 1048576 ? Math.round(n / 1024) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+  function rows(result) {
+    const f = result.files;
+    if (Array.isArray(f)) return f.filter((x) => x && x.id !== null).map((x) => ({ name: x.name, size: (x.metadata || {}).size }));
+    if (f && Array.isArray(f.items)) return f.items.map((x) => ({ name: x.name, size: Number(x.size || 0) }));
+    return [];
+  }
+  function say(text) { $('st-result').textContent = text; }
+  async function list() {
+    $('st-files').innerHTML = ''; $('st-buckets').innerHTML = '';
+    if (provider === 'supabase' && !bucket) {
+      say('listing buckets…');
+      const r = await call('list_files', { provider });
+      if (!r.ok) { say(r.error || 'Could not list.'); return; }
+      (r.buckets || []).forEach((b) => {
+        const btn = document.createElement('button'); btn.textContent = '🪣 ' + (b.name || b.id);
+        btn.onclick = () => { bucket = b.name || b.id; list(); };
+        $('st-buckets').appendChild(btn);
+      });
+      $('st-where').textContent = (r.buckets || []).length ? 'Pick a bucket to see its files.' : 'This project has no buckets yet.';
+      say('—'); return;
+    }
+    $('st-where').textContent = provider === 'supabase' ? 'Bucket: ' + bucket + '  ' : 'Your Firebase bucket';
+    if (provider === 'supabase') {
+      const back = document.createElement('button'); back.textContent = '← buckets';
+      back.onclick = () => { bucket = ''; list(); }; $('st-buckets').appendChild(back);
+    }
+    say('listing…');
+    const r = await call('list_files', { provider, bucket });
+    if (!r.ok) { say(r.error || 'Could not list.'); return; }
+    const files = rows(r);
+    if (!files.length) { say('No files here yet.'); return; }
+    files.forEach((f) => {
+      const row = document.createElement('div'); row.className = 'st-file';
+      const name = document.createElement('span'); name.className = 'name'; name.textContent = f.name;
+      const size = document.createElement('span'); size.className = 'size'; size.textContent = kb(f.size);
+      const down = document.createElement('button'); down.textContent = '↓ Download';
+      down.title = 'Into workspace/cloud/' + f.name;
+      down.onclick = async () => {
+        say('downloading ' + f.name + '…');
+        const d = await call('download', { provider, bucket, remote: f.name, local: 'cloud/' + f.name });
+        say(d.ok ? 'Downloaded to workspace/cloud/' + f.name : (d.error || 'That did not download.'));
+      };
+      row.appendChild(name); row.appendChild(size); row.appendChild(down);
+      $('st-files').appendChild(row);
+    });
+    say(files.length + ' file' + (files.length === 1 ? '' : 's') + '.');
+  }
   function setProvider(next) {
-    provider = next;
-    $('pick-supabase').classList.toggle('on', next === 'supabase');
-    $('pick-firebase').classList.toggle('on', next === 'firebase');
-    // Firebase Storage has one bucket per project, named in the settings.
-    $('bucket-row').hidden = next === 'firebase';
+    provider = next; bucket = '';
+    $('st-supabase').classList.toggle('on', next === 'supabase');
+    $('st-firebase').classList.toggle('on', next === 'firebase');
+    list();
   }
-
-  $('pick-supabase').onclick = () => setProvider('supabase');
-  $('pick-firebase').onclick = () => setProvider('firebase');
-
-  $('up').onclick = async () => {
-    $('result').textContent = 'uploading…';
-    const result = await call('upload', {
-      provider,
-      bucket: $('bucket').value.trim(),
-      local: $('local').value.trim(),
-      remote: $('remote').value.trim(),
-    });
-    $('result').textContent = result.ok ? 'Uploaded.' : result.error;
+  $('st-supabase').onclick = () => setProvider('supabase');
+  $('st-firebase').onclick = () => setProvider('firebase');
+  $('st-refresh').onclick = list;
+  $('st-up').onclick = async () => {
+    const local = $('st-local').value.trim();
+    if (!local) { say('Type a workspace file to upload.'); return; }
+    if (provider === 'supabase' && !bucket) { say('Pick a bucket first.'); return; }
+    say('uploading…');
+    const r = await call('upload', { provider, bucket, local });
+    say(r.ok ? 'Uploaded.' : (r.error || 'That did not upload.'));
+    if (r.ok) list();
   };
-
-  $('down').onclick = async () => {
-    $('result').textContent = 'downloading…';
-    const result = await call('download', {
-      provider,
-      bucket: $('bucket').value.trim(),
-      remote: $('remote').value.trim() || $('local').value.trim(),
-      local: $('local').value.trim(),
-    });
-    $('result').textContent = result.ok
-      ? `Saved ${result.result.bytes} bytes into the workspace.`
-      : result.error;
-  };
-
-  $('list').onclick = async () => {
-    $('result').textContent = 'listing…';
-    const result = await call('list_files', {
-      provider, bucket: $('bucket').value.trim(),
-    });
-    if (!result.ok) {
-      $('result').textContent = result.error;
-      return;
-    }
-    $('result').textContent = '';
-    $('listing').textContent = JSON.stringify(result.files || result.buckets, null, 2);
-  };
+})();
 </script>

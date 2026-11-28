@@ -57,10 +57,20 @@ object ReleaseNotes {
                 "Packages: pcmd packages lists 34 of them (graphs, trees, fractions, ciphers, " +
                     "tables, dice, cards...), pcmd add graph installs one, use graph uses it.",
                 ".pycmd files run as well as .pcmd.",
-                "Learn > PyCmd: 47 new lessons topics for all of the above, and Creator has blocks " +
+                "Learn > PyCmd: 47 new lesson topics for all of the above, and Creator has blocks " +
                     "for traits, enums with data and operators.",
+                "Files has a Cloud folder: open, download and delete what you saved to the cloud, " +
+                    "upload, or download it all at once.",
+                "The Cloud plugin has a Download button on every stored file.",
+                "Docs > Fork: the source download is always the newest code and is called " +
+                    "pycmdcode.zip.",
             ),
-            fixed = listOf(),
+            fixed = listOf(
+                "Notes board: to-do items can be deleted (the x, or Backspace on an empty item), " +
+                    "and the card menu can remove all ticked items.",
+                "Notes board: the resize and link handles were hard to hit and showed on every " +
+                    "card - now they are bigger, sized to the zoom, and only on the selected card.",
+            ),
         ),
         ReleaseNote(
             versionCode = 39,
