@@ -37,6 +37,25 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 6.1
+
+### Updates that always open
+
+Some people still saw **"Failed to load Python DLL"** after updating from an
+older PyCmd. 6.1 fixes it from both ends:
+- **A folder install:** the installer now puts PyCmd in as a folder
+  (`PyCmd.exe` plus `_internal`), not one packed exe. It starts faster and
+  never unpacks Python into `%TEMP%`, so there is no temp folder to vanish.
+- **A clean start:** the installer itself drops the leftover settings an
+  older PyCmd passes down before it starts the new one.
+- **Fallbacks:** if the update download fails, PyCmd tries the second address.
+  The checksum must still match.
+- **A log:** every in-app update writes `logs\update-install.log`.
+- **Tested:** every build updates PyCmd from that broken state on a real
+  Windows machine, and the new PyCmd must open.
+
+The portable `PyCmd.exe` is still there for people who want one file.
+
 ## What is new in 6.0
 
 ### Updates open again

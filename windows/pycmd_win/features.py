@@ -347,17 +347,19 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "6.0",
-    "title": "PyCmd for Windows 6.0",
+    "version": "6.1",
+    "title": "PyCmd for Windows 6.1",
     "items": [
-        ["Updates open again",
-         "After an update, PyCmd could stop with \"Failed to load Python DLL\": the new PyCmd went "
-         "looking for Python in the old one's deleted temp folder. Programs PyCmd starts now get a "
-         "clean environment, and every build proves it on a real Windows machine."],
-        ["Notes on every device",
-         "Sign in and Notes syncs through your account: a board you make here is on your phone, "
-         "and the other way round. It syncs by itself a few seconds after you stop, or press Sync. "
-         "Deleted boards stay deleted everywhere."],
+        ["Updates that always open",
+         "The installed PyCmd is now a folder, not one packed file: it starts faster and never "
+         "unpacks Python into a temp folder, so \"Failed to load Python DLL\" cannot happen to it. "
+         "The installer also cleans up whatever an older PyCmd left behind before it starts the new one."],
+        ["Fallbacks",
+         "If the update download fails, PyCmd tries a second address. Whatever arrives must match "
+         "the published checksum. Every install writes a log, under Settings, Debug log folder."],
+        ["Proven every build",
+         "A real Windows machine updates PyCmd from the exact broken state users hit, and the new "
+         "PyCmd must open."],
     ],
 }
 

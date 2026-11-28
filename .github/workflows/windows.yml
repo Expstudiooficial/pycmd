@@ -124,7 +124,13 @@ jobs:
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { $iscc = (Get-Command iscc -ErrorAction Stop).Source }
           $version = python -c "import sys; sys.path.insert(0, 'windows'); from pycmd_win import host; print(host.VERSION)"
-          & $iscc "/DAppVersion=$version" "/DSourceExe=$PWD\dist-windows\build\PyCmd.exe" windows\build\installer.iss
+          # The installed PyCmd is the folder build: no unpacking into %TEMP%.
+          $env:PYCMD_ONEDIR = "1"
+          python -m PyInstaller windows/build/pycmd.spec --noconfirm --distpath dist-windows/onedir --workpath build-onedir
+          if (-not (Test-Path dist-windows/onedir/PyCmd/PyCmd.exe)) { throw "the folder build produced no PyCmd.exe" }
+          $sf = Start-Process dist-windows/onedir/PyCmd/PyCmd.exe -ArgumentList "--selftest" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "selftest-onedir.txt"
+          if ($sf.ExitCode -ne 0) { Get-Content selftest-onedir.txt | Write-Host; throw "the folder build failed its self-test" }
+          & $iscc "/DAppVersion=$version" "/DSourceDir=$PWD\dist-windows\onedir\PyCmd" windows\build\installer.iss
           if ($LASTEXITCODE -ne 0) { throw "the installer did not build" }
           if (-not (Test-Path dist-windows/build/PyCmd-Setup.exe)) { throw "no installer was produced" }
 
@@ -157,6 +163,25 @@ jobs:
           foreach ($i in 1..40) { if ((Test-Path $out) -and ((Get-Content $out -Raw) -match "PyCmd")) { break }; Start-Sleep -Milliseconds 500 }
           if (-not ((Test-Path $out) -and ((Get-Content $out -Raw) -match "PyCmd for Windows"))) { throw "PyCmd started by PyCmd did not start after its parent closed" }
           Write-Host ("relaunched: " + (Get-Content $out -Raw))
+          # The case users hit: an OLD one-file PyCmd starts the installer with
+          # its bootloader variables pointing at a temp folder that is gone.
+          # The installer must scrub them, so the PyCmd it starts still opens.
+          $marker = Join-Path $env:LOCALAPPDATA "PyCmd\updated.txt"
+          Remove-Item $marker -ErrorAction SilentlyContinue
+          $env:_PYI_APPLICATION_HOME_DIR = "C:\gone\_MEI999999"
+          $env:_PYI_ARCHIVE_FILE = $exe
+          $env:_PYI_PARENT_PROCESS_LEVEL = "1"
+          $u0 = Start-Process $setup -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/LOG=$env:RUNNER_TEMP\setup.log") -Wait -PassThru
+          Remove-Item Env:_PYI_APPLICATION_HOME_DIR, Env:_PYI_ARCHIVE_FILE, Env:_PYI_PARENT_PROCESS_LEVEL
+          if ($u0.ExitCode -ne 0) { throw "an update started from a dirty environment exited $($u0.ExitCode)" }
+          foreach ($i in 1..60) { if (Test-Path $marker) { break }; Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path $marker)) {
+            if (Test-Path "$env:RUNNER_TEMP\setup.log") { Get-Content "$env:RUNNER_TEMP\setup.log" -Tail 30 | Write-Host }
+            throw "after an update from a dirty environment, the restarted PyCmd never got Python running"
+          }
+          Write-Host ("restarted after a dirty-environment update: " + (Get-Content $marker -Raw))
+          Get-Process PyCmd -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 2
           $u = Start-Process $setup -ArgumentList $quiet -Wait -PassThru
           if ($u.ExitCode -ne 0) { throw "installing over the top (an update) exited $($u.ExitCode)" }
           $uninstaller = Join-Path (Split-Path $exe) "unins000.exe"

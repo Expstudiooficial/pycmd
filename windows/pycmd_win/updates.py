@@ -73,6 +73,7 @@ def check(current_build: int) -> dict:
         "bytes": manifest.get("bytes", 0),
         "released": manifest.get("releasedAt", ""),
         "installerUrl": manifest.get("installerUrl", ""),
+        "latestInstallerUrl": manifest.get("latestInstallerUrl", ""),
         "installerSha256": manifest.get("installerSha256", ""),
         "installerBytes": manifest.get("installerBytes", 0),
         "manifest": manifest,
@@ -213,14 +214,22 @@ def install(result: dict, silent: bool = False, progress=None) -> dict:
         return {"ok": False, "error": "an update is already being installed"}
     _state["installing"] = True
     try:
-        got = download({"url": result["installerUrl"], "sha256": result.get("installerSha256", ""),
-                        "bytes": result.get("installerBytes", 0)}, progress)
+        # The release's own link first, then "latest" - one 404 or a dropped
+        # connection is not the end of an update. The checksum is the same
+        # either way: whatever arrives must be exactly the published installer.
+        got = {"ok": False, "error": "no installer address"}
+        for url in [u for u in (result.get("installerUrl"), result.get("latestInstallerUrl")) if u]:
+            got = download({"url": url, "sha256": result.get("installerSha256", ""),
+                            "bytes": result.get("installerBytes", 0)}, progress)
+            if got.get("ok"):
+                break
         if not got.get("ok"):
             return got
         import subprocess
 
+        log = os.path.join(store.folder("logs"), "update-install.log")
         flags = ["/VERYSILENT" if silent else "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
-                 "/CLOSEAPPLICATIONS", "/SP-"]
+                 "/CLOSEAPPLICATIONS", "/SP-", f"/LOG={log}"]
         from .runner import clean_env, forget_dll_directory
 
         detached = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)

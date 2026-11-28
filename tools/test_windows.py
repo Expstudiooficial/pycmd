@@ -1625,7 +1625,7 @@ check("the manifest names the installer and its checksum",
 check("--updated is understood", "--updated" in open(os.path.join(ROOT, "windows", "pycmd_win", "app.py"), encoding="utf-8").read())
 
 say("\n== 6.0 ==")
-check("the version is 6.0", host_module.VERSION == "6.0" and host_module.BUILD == 16)
+check("the version is 6.0 or later", host_module.BUILD >= 16)
 os.environ["_PYI_APPLICATION_HOME_DIR"] = r"C:\gone\_MEI123"
 _env60 = _runner55.clean_env()
 check("programs PyCmd starts do not inherit its temp folder",
@@ -1636,6 +1636,25 @@ check("the installer starts clean", "env=clean_env()" in _upsrc and "forget_dll_
 check("CI proves a PyCmd started by a PyCmd still opens", "ci_relaunch_probe.py" in _wf
       and os.path.isfile(os.path.join(ROOT, "tools", "ci_relaunch_probe.py")))
 check("Notes can sync", "board.sync" in host_module.HANDLERS)
+
+say("\n== 6.1 ==")
+check("the version is 6.1", host_module.VERSION == "6.1" and host_module.BUILD == 17)
+_spec61 = open(os.path.join(ROOT, "windows", "build", "pycmd.spec"), encoding="utf-8").read()
+check("the spec can make the folder build", 'PYCMD_ONEDIR' in _spec61 and "COLLECT(" in _spec61 and "exclude_binaries=True" in _spec61)
+_iss61 = open(os.path.join(ROOT, "windows", "build", "installer.iss"), encoding="utf-8").read()
+check("the installer ships the folder build", "{#SourceDir}\\*" in _iss61 and "recursesubdirs" in _iss61)
+check("the installer clears the old _internal first", "[InstallDelete]" in _iss61.split("[Files]")[0])
+check("the installer scrubs the bootloader's variables",
+      "function InitializeSetup" in _iss61 and all(v in _iss61 for v in
+      ("_PYI_APPLICATION_HOME_DIR", "_PYI_ARCHIVE_FILE", "_PYI_PARENT_PROCESS_LEVEL", "PYINSTALLER_RESET_ENVIRONMENT", "SetDllDirectoryW")))
+check("CI builds and self-tests the folder build", 'PYCMD_ONEDIR = "1"' in _wf and "selftest-onedir.txt" in _wf and "/DSourceDir=" in _wf)
+check("CI updates from a dirty environment and waits for Python", "C:\\gone\\_MEI999999" in _wf and "updated.txt" in _wf)
+_up61 = open(os.path.join(ROOT, "windows", "pycmd_win", "updates.py"), encoding="utf-8").read()
+check("updates fall back to the latest link", "latestInstallerUrl" in _up61 and "/LOG=" in _up61)
+check("the manifest has the fallback link", "/latest/download/PyCmd-Setup.exe" in _m59.get("latestInstallerUrl", ""), _m59)
+check("an updated PyCmd leaves proof it started", "updated.txt" in open(os.path.join(ROOT, "windows", "pycmd_win", "app.py"), encoding="utf-8").read())
+from pycmd_win import features as _feat61  # noqa: E402
+check("what is new matches the version", _feat61.WHATS_NEW["version"] == host_module.VERSION)
 
 say()
 if FAILURES:

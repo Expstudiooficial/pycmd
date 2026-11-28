@@ -114,25 +114,26 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name="PyCmd",
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    runtime_tmpdir=None,
-    # No console window behind the app. Anything worth saying goes to the
-    # debug log, which has a screen of its own.
-    console=False,
-    disable_windowed_traceback=False,
-    icon=os.path.join(WINDOWS, "build", "pycmd.ico")
-    if os.path.exists(os.path.join(WINDOWS, "build", "pycmd.ico")) else None,
-    version=os.path.join(WINDOWS, "build", "version.txt")
-    if os.path.exists(os.path.join(WINDOWS, "build", "version.txt")) else None,
-)
+# Two builds from one analysis. PYCMD_ONEDIR=1 makes the installed one: a
+# folder (PyCmd.exe + _internal), which starts faster and never unpacks into
+# %TEMP%\_MEI... - so "Failed to load Python DLL" from a vanished temp folder
+# cannot happen to it. Without it, the single portable PyCmd.exe.
+ONEDIR = os.environ.get("PYCMD_ONEDIR") == "1"
+_icon = os.path.join(WINDOWS, "build", "pycmd.ico")
+_icon = _icon if os.path.exists(_icon) else None
+_version = os.path.join(WINDOWS, "build", "version.txt")
+_version = _version if os.path.exists(_version) else None
+
+if ONEDIR:
+    exe = EXE(
+        pyz, a.scripts, [], exclude_binaries=True, name="PyCmd", debug=False,
+        bootloader_ignore_signals=False, strip=False, upx=False, console=False,
+        disable_windowed_traceback=False, icon=_icon, version=_version,
+    )
+    coll = COLLECT(exe, a.binaries, a.zipfiles, a.datas, strip=False, upx=False, name="PyCmd")
+else:
+    exe = EXE(
+        pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [], name="PyCmd", debug=False,
+        bootloader_ignore_signals=False, strip=False, upx=False, runtime_tmpdir=None,
+        console=False, disable_windowed_traceback=False, icon=_icon, version=_version,
+    )

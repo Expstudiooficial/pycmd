@@ -587,6 +587,16 @@ def main(argv=None) -> int:
     # Before anything writes a word. A windowed build has no usable stdout.
     make_output_work()
 
+    if args.updated:
+        # Proof that Python really started after an update (CI reads it): a
+        # bootloader that failed to load Python never gets this far.
+        try:
+            os.makedirs(store.root(), exist_ok=True)
+            with open(os.path.join(store.root(), "updated.txt"), "w", encoding="utf-8") as handle:
+                handle.write(f"PyCmd for Windows {host_module.VERSION} started after an update\n")
+        except OSError:
+            pass
+
     if args.version:
         print(f"PyCmd for Windows {host_module.VERSION}")
         return 0
