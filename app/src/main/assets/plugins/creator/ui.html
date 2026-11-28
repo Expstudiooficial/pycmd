@@ -430,9 +430,10 @@
     go: 'break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var true false nil',
     rust: 'as break const continue crate else enum false fn for if impl in let loop match mod move mut pub ref return self Self static struct trait true type use where while',
     shell: 'if then else elif fi for in do done while until case esac function return echo read export local exit',
-    json: 'true false null'
+    json: 'true false null',
+    pycmd: 'let var const fn return if elif else while for in loop break continue match struct enum extends and or not try catch finally throw use as is assert test self true false nil'
   };
-  var COMMENT = { python: '#', shell: '#', javascript: '//', c: '//', go: '//', rust: '//', css: '/*', html: '<!--' };
+  var COMMENT = { pycmd: '#', python: '#', shell: '#', javascript: '//', c: '//', go: '//', rust: '//', css: '/*', html: '<!--' };
   function highlight(line, lang) {
     var words = KW[lang] ? new RegExp('^(?:' + KW[lang].split(' ').join('|') + ')$') : null, mark = COMMENT[lang], tail = '';
     var ci = mark ? line.indexOf(mark) : -1;
@@ -463,7 +464,7 @@
   }
 
   // ---------------------------------------------------------------- running
-  var IN_APP = { python: 1, c: 1, go: 1, rust: 1 };
+  var IN_APP = { pycmd: 1, python: 1, c: 1, go: 1, rust: 1 };
   function side(which) {
     S.side = which;
     document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === which); });

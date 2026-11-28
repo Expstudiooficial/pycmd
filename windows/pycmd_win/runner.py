@@ -242,7 +242,7 @@ def _ensure_project(path: str, language_id: str, toolchain: str, write) -> None:
 # The interpreters PyCmd carries, used when nothing is installed
 # ---------------------------------------------------------------------------
 
-BUILT_IN = {"c": "C", "go": "Go", "rust": "Rust", "javascript": "JavaScript"}
+BUILT_IN = {"pycmd": "PyCmd", "c": "C", "go": "Go", "rust": "Rust", "javascript": "JavaScript"}
 
 
 # Pages: a .html file "runs" by being served and opened in the browser. Served
@@ -310,8 +310,9 @@ def own_python_plan(path: str) -> dict:
             "cwd": os.path.dirname(path), "output": ""}
 
 
-def _run_built_in(path: str, language_id: str, write) -> dict:
-    """Falls back to the interpreter in the box."""
+def _run_built_in(path: str, language_id: str, write, answers=None) -> dict:
+    """Falls back to the interpreter in the box - and is the only way to run
+    PyCmd, which is the box's own language."""
     try:
         from pycmd_langs import registry as shared
     except ImportError as error:
@@ -324,10 +325,32 @@ def _run_built_in(path: str, language_id: str, write) -> dict:
         def flush(self):
             pass
 
-    write(f"[PyCmd] no {langs.by_id(language_id).name} toolchain found - "
-          f"running on the interpreter built into PyCmd\n")
+    if language_id == "pycmd":
+        from pycmd_langs import pcmd
+
+        write(f"[PyCmd] PyCmd {pcmd.VERSION}, built in\n")
+    else:
+        write(f"[PyCmd] no {langs.by_id(language_id).name} toolchain found - "
+              f"running on the interpreter built into PyCmd\n")
+    import io
+
+    class _Typed:
+        """input() in a built-in program: asks the console's input box and
+        waits for a line - the same box a real program's stdin is fed from."""
+
+        def readline(self):
+            if answers is None or not hasattr(answers, "get"):
+                return ""
+            answers.wanted()
+            for _ in range(1500):  # ten minutes, then the program gets nil
+                line = answers.get(0.4)
+                if line is not None:
+                    return line + "\n"
+            return ""
+
+    typed = _Typed() if answers is not None else io.StringIO("")
     try:
-        result = shared.run_file(path, stdout=_Sink())
+        result = shared.run_file(path, stdout=_Sink(), stdin=typed)
     except Exception as error:  # noqa: BLE001 - somebody's program may do anything
         return {"ok": False, "error": f"{type(error).__name__}: {error}"}
     return {"ok": bool(result.get("ok")), "error": result.get("error", ""),
@@ -459,7 +482,7 @@ def run_file(path: str, write, prefer: str = "", run_id: str = "", args=None,
             plan = own_python_plan(path)
         if not plan.get("ok"):
             if language_id in BUILT_IN:
-                result = _run_built_in(path, language_id, write)
+                result = _run_built_in(path, language_id, write, answers)
                 run.toolchain = "built-in"
                 run.exit_code = result.get("exit", 0 if result.get("ok") else 1)
                 run.error = result.get("error", "")

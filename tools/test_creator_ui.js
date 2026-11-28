@@ -38,7 +38,7 @@ const check = (name, ok, detail) => {
   const q = (fn, arg) => page.evaluate(fn, arg);
 
   console.log('== Creator panel ==');
-  check('ten languages', await q(() => document.querySelectorAll('#langs .chip').length) === 10);
+  check('eleven languages, PyCmd first', await q(() => document.querySelectorAll('#langs .chip').length) === 11);
   check('the palette is full', await q(() => document.querySelectorAll('.pal').length) > 100);
   check('the example is on screen', await q(() => document.querySelectorAll('.blk').length) >= 3);
   await page.waitForFunction(() => /print/.test(document.getElementById('codeView').innerText));

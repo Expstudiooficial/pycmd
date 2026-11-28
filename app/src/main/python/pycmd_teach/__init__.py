@@ -138,7 +138,7 @@ EXTRA_MODULES = ("extra_core", "extra_systems", "extra_script", "extra_markup")
 #: Modules that define whole courses of their own. The phone ships the first
 #: four; a build that carries more (the Windows one does) lists them in
 #: COURSE_MODULES_MORE before anything is loaded.
-COURSE_MODULES = ("courses_core", "courses_systems", "courses_script", "courses_markup")
+COURSE_MODULES = ("courses_pycmd", "courses_core", "courses_systems", "courses_script", "courses_markup")
 COURSE_MODULES_MORE: tuple = ()
 
 
@@ -202,7 +202,7 @@ KINDS = ("read", "predict", "which", "fill", "bug", "order", "write")
 #: missing bracket still renders, and a YAML file with one is a different
 #: kind of wrong from the one the exercise teaches.
 CODE_COURSES = {
-    "python", "javascript", "c", "rust", "go", "cpp", "java", "kotlin",
+    "pycmd", "python", "javascript", "c", "rust", "go", "cpp", "java", "kotlin",
     "swift", "typescript", "ruby", "php", "lua", "csharp", "fsharp", "dart",
     "zig", "nim", "scala", "groovy", "haskell", "ocaml", "elixir", "erlang",
     "julia", "r", "perl", "d", "crystal", "vlang", "objectivec", "pascal",
@@ -789,7 +789,7 @@ def catalogue() -> list:
 
 #: The order of the course list after the ones you have started.
 POPULAR = (
-    "python", "javascript", "typescript", "java", "c", "cpp", "csharp", "go", "rust",
+    "pycmd", "python", "javascript", "typescript", "java", "c", "cpp", "csharp", "go", "rust",
     "kotlin", "swift", "php", "ruby", "sql", "html", "css", "shell", "powershell", "lua",
     "dart", "scala", "haskell", "r", "perl", "elixir", "json", "yaml", "regex", "markdown",
     "gitignore", "dockerfile", "makefile",
@@ -1143,7 +1143,7 @@ def _run_through_registry(source: str, extension: str) -> tuple:
 #: Which extensions can be marked by running them. JavaScript is absent on
 #: purpose: the device's own engine runs it, over on the Kotlin side, and this
 #: module has no way to reach it.
-RUNNABLE = {".py": "python", ".c": "registry", ".rs": "registry", ".go": "registry"}
+RUNNABLE = {".pcmd": "registry", ".py": "python", ".c": "registry", ".rs": "registry", ".go": "registry"}
 
 #: A build that can run more than the phone can sets this to a function
 #: `(source, extension) -> (output, error)`, with a `can(extension)` attribute

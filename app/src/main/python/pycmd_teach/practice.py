@@ -482,6 +482,28 @@ RUST = Lang(
                        f'println!("{{}}", if a > b {{ a }} else {{ b }});'),
 )
 
+PYCMD = Lang(
+    arith=lambda p: f'print({p["e"]})',
+    divmod=lambda p: f'print({p["a"]} // {p["b"]})\nprint({p["a"]} % {p["b"]})',
+    vars=lambda p: (f'let {p["n1"]} = {p["x"]}\nlet {p["n2"]} = {p["y"]}\n'
+                    f'print({p["shape"].format(x=p["n1"], y=p["n2"])})'),
+    compare=lambda p: f'print({p["a"]} {p["cop"]} {p["b"]})',
+    ifelse=lambda p: (f'if {p["a"]} > {p["b"]} {{\n    print("{p["w1"]}")\n'
+                      f'}} else {{\n    print("{p["w2"]}")\n}}'),
+    concat=lambda p: f'print("{p["s1"]}" + "{p["s2"]}")',
+    length=lambda p: f'print("{p["s"]}".len())',
+    upper=lambda p: f'print("{p["s"]}".upper())',
+    loop_sum=lambda p: (f'var total = 0\nfor i in 1..={p["n"]} {{\n'
+                        f'    total += i * {p["k"]}\n}}\nprint(total)'),
+    countdown=lambda p: f'for i in range({p["n"]}, 0, -1) {{\n    print(i)\n}}',
+    func=lambda p: f'fn f(x: int) -> int {{\n    x * x + {p["c"]}\n}}\nprint(f({p["a"]}))',
+    list_index=lambda p: f'let xs = [{_nums(p["xs"])}]\nprint(xs[{p["j"]}])',
+    list_sum=lambda p: f'let xs = [{_nums(p["xs"])}]\nprint(xs.sum())',
+    fact=lambda p: f'var f = 1\nfor i in 2..={p["n"]} {{\n    f *= i\n}}\nprint(f)',
+    count_even=lambda p: f'print((1..={p["n"]}).count(|i| i % 2 == 0))',
+    max2=lambda p: f'let a = {p["a"]}\nlet b = {p["b"]}\nprint(a > b ? a : b)',
+)
+
 PYTHON = Lang(
     tf=_tf("True", "False"),
     arith=lambda p: f'print({p["e"]})',
@@ -691,7 +713,7 @@ SQL = Lang(
 )
 
 LANGS = {
-    "python": PYTHON, "javascript": JS, "typescript": TS, "c": C, "cpp": CPP,
+    "pycmd": PYCMD, "python": PYTHON, "javascript": JS, "typescript": TS, "c": C, "cpp": CPP,
     "rust": RUST, "go": GO, "java": JAVA, "kotlin": KOTLIN, "swift": SWIFT,
     "php": PHP, "ruby": RUBY, "lua": LUA, "shell": SHELL, "sql": SQL,
 }

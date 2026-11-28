@@ -347,19 +347,22 @@ def _h_look_set(host, payload):
 
 
 WHATS_NEW = {
-    "version": "6.1",
-    "title": "PyCmd for Windows 6.1",
+    "version": "6.2",
+    "title": "PyCmd for Windows 6.2",
     "items": [
-        ["Updates that always open",
-         "The installed PyCmd is now a folder, not one packed file: it starts faster and never "
-         "unpacks Python into a temp folder, so \"Failed to load Python DLL\" cannot happen to it. "
-         "The installer also cleans up whatever an older PyCmd left behind before it starts the new one."],
-        ["Fallbacks",
-         "If the update download fails, PyCmd tries a second address. Whatever arrives must match "
-         "the published checksum. Every install writes a log, under Settings, Debug log folder."],
-        ["Proven every build",
-         "A real Windows machine updates PyCmd from the exact broken state users hit, and the new "
-         "PyCmd must open."],
+        ["PyCmd, the language",
+         "Our own language, built in (.pcmd): easy to read like Python, with let and var, "
+         "checked types, structs, enums, match, lambdas and pipelines. It is checked before it "
+         "runs, so a typo or a wrong type is caught with its line. Programs cannot reach the "
+         "rest of your PC, and files stay in the program's own folder."],
+        ["Fast for what it is",
+         "It is compiled to Python bytecode, so it runs as fast as Python. Honestly, not as "
+         "fast as C++ or Rust: those make machine code, and this does not."],
+        ["1,804 lessons",
+         "Learn > PyCmd, first in the list: from hello to structs, match and small projects."],
+        ["Creator and the console",
+         "Build PyCmd out of 66 blocks in Creator. In the console: pcmd new, pcmd test, "
+         "pcmd check, pcmd py and pcmd -e."],
     ],
 }
 

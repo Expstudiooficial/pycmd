@@ -116,7 +116,7 @@ for _row in blocks.LANGUAGES:
 check("every language's 'runs on the phone' flag matches the app",
       not _wrong, _wrong)
 check("and six of the ten do run",
-      sum(1 for row in blocks.LANGUAGES if row["runs"]) == 6,
+      sum(1 for row in blocks.LANGUAGES if row["runs"]) == 7,
       [row["id"] for row in blocks.LANGUAGES if row["runs"]])
 
 say()
@@ -302,6 +302,29 @@ for _language in ("c", "go", "rust"):
             _broken.append((row["id"], str(error)[:80]))
     check(f"all {len(blocks.BLOCKS[_language])} {_language} blocks",
           not _broken, _broken[:6])
+
+from pycmd_langs import pcmd_parser  # noqa: E402
+
+PC_HALVES = {
+    "pc.elif": ("if true {\n", ""), "pc.else": ("if true {\n", ""),
+    "pc.catch": ("try {\n", ""), "pc.finally": ("try {\n", ""),
+    "pc.arm": ("match 1 {\n", "}\n"), "pc.arm_other": ("match 1 {\n", "}\n"),
+    "pc.field": ("struct S {\n", "}\n"), "pc.field_default": ("struct S {\n", "}\n"),
+    "pc.method": ("struct S {\n", "}\n"), "pc.try": ("", "catch e {\n}\n"),
+}
+_pc_broken = []
+for row in blocks.BLOCKS["pycmd"]:
+    node = {"block": row["id"], "values": {}}
+    if row["wrap"]:
+        node["children"] = [{"block": "pc.arm_other" if row["id"] == "pc.match" else "pc.blank",
+                             "values": {}}]
+    code = blocks.compile_project({"language": "pycmd", "blocks": [node]})["code"]
+    before, after = PC_HALVES.get(row["id"], ("", ""))
+    try:
+        pcmd_parser.parse(before + code + after)
+    except Exception as error:  # noqa: BLE001
+        _pc_broken.append((row["id"], str(error)[:80]))
+check(f"all {len(blocks.BLOCKS['pycmd'])} pycmd blocks", not _pc_broken, _pc_broken[:6])
 
 say()
 say("== every shell block on its own is shell ==")
@@ -549,6 +572,32 @@ def runs(name, language, blocks_, expected):
           f"expected {expected!r}, got {out.getvalue()!r}\n{built['code']}")
 
 
+runs("PyCmd counts, adds up and chooses", "pycmd", [
+    {"block": "pc.var", "values": {"name": "total", "value": "0"}},
+    {"block": "pc.for_range", "values": {"var": "i", "from": "1", "to": "5"},
+     "children": [{"block": "pc.increase", "values": {"name": "total", "amount": "i"}}]},
+    {"block": "pc.print_labelled", "values": {"label": "total:", "value": "total"}},
+    {"block": "pc.if", "values": {"test": "total > 5"},
+     "children": [{"block": "pc.print", "values": {"text": "big {not a hole}"}}]},
+    {"block": "pc.else", "children": [{"block": "pc.print", "values": {"text": "small"}}]},
+], "total: 15\nbig {not a hole}\n")
+runs("PyCmd structs, lists and match", "pycmd", [
+    {"block": "pc.struct", "values": {"name": "Pet"}, "children": [
+        {"block": "pc.field", "values": {"name": "name", "type": "str"}},
+        {"block": "pc.method", "values": {"name": "hi"}, "children": [
+            {"block": "pc.print_f", "values": {"text": "I am {self.name}"}}]}]},
+    {"block": "pc.make", "values": {"name": "p", "type": "Pet", "values": '"Rex"'}},
+    {"block": "pc.call", "values": {"name": "p.hi", "args": ""}},
+    {"block": "pc.list_of", "values": {"name": "xs", "values": "3, 1, 2"}},
+    {"block": "pc.map_list", "values": {"name": "ys", "list": "xs", "var": "x", "value": "x * 10"}},
+    {"block": "pc.print_value", "values": {"value": "ys.sorted()"}},
+    {"block": "pc.match", "values": {"value": "xs.len()"}, "children": [
+        {"block": "pc.arm", "values": {"pattern": "3", "result": 'print("three")'}},
+        {"block": "pc.arm_other", "values": {"result": 'print("other")'}}]},
+    {"block": "pc.try", "children": [{"block": "pc.throw", "values": {"text": "oops"}}]},
+    {"block": "pc.catch", "values": {"name": "e"},
+     "children": [{"block": "pc.print_value", "values": {"value": "e.message"}}]},
+], "I am Rex\n[10, 20, 30]\nthree\noops\n")
 runs("C counts, adds up and chooses", "c", [
     {"block": "c.include", "values": {"name": "stdio.h"}},
     {"block": "c.main", "children": [

@@ -120,7 +120,7 @@ def run_python(code: str, stdin_lines=(), seconds: float = RUN_SECONDS) -> dict:
 
 
 def run_builtin(code: str, extension: str) -> dict:
-    """C, Go and Rust, on the interpreters the app carries - on both apps."""
+    """C, Go, Rust and PyCmd, on the engines the app carries - on both apps."""
     try:
         from pycmd_langs import registry
     except ImportError:
@@ -408,7 +408,7 @@ def setup(api):
         language = built["language"]
         if language == "python":
             result = run_python(built["code"], lines, seconds)
-        elif language in ("c", "go", "rust"):
+        elif language in ("c", "go", "rust", "pycmd"):
             result = run_builtin(built["code"], built["extension"])
         else:
             return {"ok": False, "error": f"{language} runs in the panel, not here"}
@@ -454,6 +454,20 @@ def setup(api):
 # ---------------------------------------------------------------------------
 
 STARTERS = {
+    "pycmd": {
+        "name": "hello",
+        "language": "pycmd",
+        "blocks": [
+            {"block": "pc.comment", "values": {"text": "built with blocks, in PyCmd"}},
+            {"block": "pc.print", "values": {"text": "Hello from PyCmd"}},
+            {"block": "pc.var", "values": {"name": "total", "value": "0"}},
+            {"block": "pc.for_range", "values": {"var": "i", "from": "1", "to": "3"},
+             "children": [
+                 {"block": "pc.increase", "values": {"name": "total", "amount": "i"}},
+             ]},
+            {"block": "pc.print_labelled", "values": {"label": "total:", "value": "total"}},
+        ],
+    },
     "python": {
         "name": "hello",
         "language": "python",

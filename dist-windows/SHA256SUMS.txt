@@ -1,1 +1,2 @@
-03314d94049ee619527b812d6fe0577c7978166f6d8f81fb231f2b5f74b591e7  PyCmd.exe
+# PyCmd for Windows 6.2 (build 18) has not been built yet.
+# The checksum appears here when a Windows release tag builds it.

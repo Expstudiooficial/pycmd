@@ -382,7 +382,7 @@ check("no language still says Android forbids running it",
 missing_toolchain = [
     language.id for language in langs.LANGUAGES
     if language.mode == "run" and not toolchains.for_language(language.id)
-    and language.id not in ("python",)
+    and language.id not in ("python", "pycmd")  # pycmd: PyCmd's own engine runs it
 ]
 check("everything marked runnable has something that runs it",
       not missing_toolchain, missing_toolchain)
@@ -1431,7 +1431,7 @@ _teach45 = _learn45._engine()
 _cat45 = _teach45.catalogue()
 _small = [(row["id"], row["lessons"]) for row in _cat45 if row["lessons"] < 1700]
 check("every course has about 1,800 lessons, Windows-only ones too", not _small, _small)
-check("there are 50 courses", len(_cat45) == 50, len(_cat45))
+check("there are 51 courses (50, and PyCmd's own since 6.2)", len(_cat45) == 51, len(_cat45))
 _total45 = sum(row["lessons"] for row in _cat45)
 check("and about 90,000 lessons in all", 85_000 < _total45 < 95_000, _total45)
 from pycmd_teach import practice as _practice45  # noqa: E402
@@ -1638,7 +1638,7 @@ check("CI proves a PyCmd started by a PyCmd still opens", "ci_relaunch_probe.py"
 check("Notes can sync", "board.sync" in host_module.HANDLERS)
 
 say("\n== 6.1 ==")
-check("the version is 6.1", host_module.VERSION == "6.1" and host_module.BUILD == 17)
+check("the version is 6.1 or later", host_module.BUILD >= 17)
 _spec61 = open(os.path.join(ROOT, "windows", "build", "pycmd.spec"), encoding="utf-8").read()
 check("the spec can make the folder build", 'PYCMD_ONEDIR' in _spec61 and "COLLECT(" in _spec61 and "exclude_binaries=True" in _spec61)
 _iss61 = open(os.path.join(ROOT, "windows", "build", "installer.iss"), encoding="utf-8").read()
@@ -1655,6 +1655,37 @@ check("the manifest has the fallback link", "/latest/download/PyCmd-Setup.exe" i
 check("an updated PyCmd leaves proof it started", "updated.txt" in open(os.path.join(ROOT, "windows", "pycmd_win", "app.py"), encoding="utf-8").read())
 from pycmd_win import features as _feat61  # noqa: E402
 check("what is new matches the version", _feat61.WHATS_NEW["version"] == host_module.VERSION)
+
+say("\n== 6.2 ==")
+check("the version is 6.2", host_module.VERSION == "6.2" and host_module.BUILD == 18)
+check("PyCmd files are a runnable language", langs.for_path("x.pcmd")["id"] == "pycmd"
+      and langs.for_path("x.pcmd")["mode"] == "run")
+check("PyCmd runs built in", "pycmd" in runner.BUILT_IN)
+check("pcmd goes to the engine", "pcmd" in host_module.ENGINE_COMMANDS)
+_pc_dir = tempfile.mkdtemp(prefix="win-pcmd-")
+_pc_file = os.path.join(_pc_dir, "hello.pcmd")
+with open(_pc_file, "w", encoding="utf-8") as _h:
+    _h.write('let who = input()\nprint("hi {who}", [1, 2].map(|x| x * 2))\n')
+
+
+class _PcAnswers:
+    def __init__(self):
+        self.lines = ["Win"]
+
+    def wanted(self):
+        pass
+
+    def get(self, timeout):
+        return self.lines.pop(0) if self.lines else None
+
+
+_pc_out = []
+_pc_res = runner.run_file(_pc_file, _pc_out.append, answers=_PcAnswers())
+check("a .pcmd file runs, and input() reads the console box",
+      _pc_res.get("ok") and "hi Win [2, 4]" in "".join(_pc_out), "".join(_pc_out))
+shutil.rmtree(_pc_dir, ignore_errors=True)
+from pycmd_teach import _courses as _pc_courses  # noqa: E402
+check("Learn has the PyCmd course", "pycmd" in _pc_courses())
 
 say()
 if FAILURES:

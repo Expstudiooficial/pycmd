@@ -956,7 +956,7 @@ _LOC_LANGS = {
     ".py": "Python", ".js": "JavaScript", ".mjs": "JavaScript", ".ts": "TypeScript", ".tsx": "TypeScript",
     ".jsx": "JavaScript", ".html": "HTML", ".htm": "HTML", ".css": "CSS", ".c": "C", ".h": "C/C++ header",
     ".cpp": "C++", ".cc": "C++", ".hpp": "C/C++ header", ".cs": "C#", ".java": "Java", ".kt": "Kotlin",
-    ".go": "Go", ".rs": "Rust", ".rb": "Ruby", ".php": "PHP", ".swift": "Swift", ".dart": "Dart",
+    ".pcmd": "PyCmd", ".go": "Go", ".rs": "Rust", ".rb": "Ruby", ".php": "PHP", ".swift": "Swift", ".dart": "Dart",
     ".lua": "Lua", ".sh": "Shell", ".ps1": "PowerShell", ".sql": "SQL", ".md": "Markdown",
     ".json": "JSON", ".yml": "YAML", ".yaml": "YAML", ".toml": "TOML", ".xml": "XML",
 }
@@ -1016,6 +1016,80 @@ def _cmd_note(args: list) -> int:
     return 0
 
 
+def _cmd_pcmd(args: list) -> int:
+    """PyCmd, the app's own language: run, test, check, translate, try a line."""
+    from pycmd_langs import pcmd, pcmd_runtime
+
+    sub = args[0] if args else ""
+    if sub in ("", "help", "-h", "--help"):
+        _out(f"PyCmd {pcmd.VERSION} - the app's own language (.pcmd). Learn it in Learn > PyCmd.")
+        _out("  pcmd new hello          write hello.pcmd to start from")
+        _out("  pcmd run hello.pcmd     run it (or just: run hello.pcmd)")
+        _out("  pcmd test hello.pcmd    run its test \"...\" { } blocks")
+        _out("  pcmd check hello.pcmd   find mistakes without running it")
+        _out("  pcmd py hello.pcmd      show the Python it turns into")
+        _out('  pcmd -e "print(2 ** 64)" run one line')
+        _out("  pcmd libs               the libraries (use math, use json, ...)")
+        return 0
+    if sub == "libs":
+        for name, what in pcmd_runtime.LIBRARIES.items():
+            _out(f"  use {name:<7} {what}")
+        return 0
+    if sub in ("-e", "eval"):
+        code = " ".join(args[1:])
+        if not code.strip():
+            _err('pcmd -e: what should it run?  pcmd -e "print(1 + 1)"')
+            return 1
+        try:
+            pcmd.run_source(code, stdout=sys.stdout, stdin=sys.stdin)
+            return 0
+        except pcmd.PcmdError as exc:
+            _err(f"PyCmd error, {exc.message}")
+            return 1
+    if sub == "new":
+        name = args[1] if len(args) > 1 else "hello"
+        if not name.endswith(".pcmd"):
+            name += ".pcmd"
+        path = _resolve(name)
+        if os.path.exists(path):
+            _err(f"pcmd new: {name} already exists")
+            return 1
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(pcmd.TEMPLATE)
+        _out(f"wrote {_shorten(path)} - run it with: run {name}")
+        return 0
+    if sub in ("run", "test", "check", "py"):
+        if len(args) < 2:
+            _err(f"pcmd {sub}: which file?")
+            return 1
+        path = _resolve(args[1])
+        if not os.path.isfile(path):
+            _err(f"pcmd {sub}: {args[1]}: no such file")
+            return 1
+        if sub == "run":
+            return _cmd_run([args[1]])
+        source = _read_text(path, 5_000_000) or ""
+        if sub == "test":
+            return 0 if pcmd.run_tests(source, stdout=sys.stdout, path=path)["ok"] else 1
+        if sub == "check":
+            result = pcmd.check(source)
+            if result["ok"]:
+                _out(f"{args[1]}: no problems found")
+                return 0
+            _err(f"{args[1]}, line {result['line']}: {result['error']}")
+            return 1
+        try:
+            _out(pcmd.to_python(source).rstrip())
+            return 0
+        except pcmd.PcmdSyntaxError as exc:
+            _err(f"line {exc.line}: {exc.message}")
+            return 1
+    if sub.endswith(".pcmd"):
+        return _cmd_run(args)
+    _err(f"pcmd: no {sub!r} - try: pcmd help")
+    return 1
+
+
 COMMANDS = {
     "pip": (_cmd_pip, "install, remove and list Python packages",
             "pip install flask  ·  pip install rich==13.9.4  ·  pip list\n"
@@ -1056,6 +1130,7 @@ COMMANDS = {
     "diff": (_cmd_diff, "what changed between two files", ""),
     "cal": (_cmd_cal, "a calendar  (cal · cal 3 2027 · cal 2027)", ""),
     "loc": (_cmd_loc, "lines of code in a folder, by language", ""),
+    "pcmd": (_cmd_pcmd, "PyCmd, the app's own language  (pcmd new hello · pcmd -e \"print(1)\")", ""),
     "note": (_cmd_note, "drop a note on your board in Notes  (note buy milk · note list)", ""),
     "help": (_cmd_help, "this list", ""),
 }

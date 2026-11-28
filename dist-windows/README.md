@@ -37,6 +37,18 @@ describes that build and no other; a moving address would fail its own
 checksum the day after the next release. `latestUrl` always redirects to the
 newest release, and is the one to hand somebody or put on a page.
 
+## What is new in 6.2
+
+### PyCmd, the language
+
+Our own language, built in (`.pcmd`), the same on the phone:
+- **Easy to read** like Python: `let` and `var`, `fn`, structs, enums, `match`, lambdas, pipelines (`|>`), `try`/`catch` and `test` blocks.
+- **Checked before it runs:** a typo, a `let` that changes or a wrong type is caught with its line and a "did you mean", before a line runs.
+- **Safe:** a program cannot reach Python or the rest of your PC, and files stay in its own folder.
+- **Speed:** compiled to Python bytecode, so as fast as Python. Honestly: not as fast as C++ or Rust.
+- **11 libraries:** math, random, time, json, fs, regex, stats, text, http, color, sys.
+- **Learn > PyCmd:** 1,804 lessons. **Creator:** 66 PyCmd blocks. **Console:** `pcmd new`, `pcmd test`, `pcmd check`, `pcmd py`, `pcmd -e "..."`.
+
 ## What is new in 6.1
 
 ### Updates that always open

@@ -58,6 +58,8 @@ __all__ = [
 # does know about both, and checks that these flags say what the registry says,
 # so the duplication cannot quietly become a lie.
 LANGUAGES = [
+    {"id": "pycmd", "name": "PyCmd", "extension": ".pcmd", "indent": "    ",
+     "about": "The app's own language. Easy like Python, checked before it runs.", "runs": True},
     {"id": "python", "name": "Python", "extension": ".py", "indent": "    ",
      "about": "Runs in the app. Everything the console can do.", "runs": True},
     {"id": "javascript", "name": "JavaScript", "extension": ".js", "indent": "  ",
@@ -3297,6 +3299,195 @@ MARKDOWN_MORE = [
 
 
 HTML = HTML + HTML_MORE
+
+# ---------------------------------------------------------------------------
+# PyCmd - the app's own language
+# ---------------------------------------------------------------------------
+
+_PC_IF = ("pc.if", "pc.elif")
+
+PYCMD = [
+    # -- Basics ------------------------------------------------------------
+    _block("pc.print", "Basics", "print text", "print(@text@)",
+           [_slot("text", "text", "string", "Hello")]),
+    _block("pc.print_value", "Basics", "print a value", "print(@value@)",
+           [_slot("value", "value", "text", "total")]),
+    _block("pc.print_two", "Basics", "print two things", "print(@a@, @b@)",
+           [_slot("a", "first", "text", "name"), _slot("b", "second", "text", "score")]),
+    _block("pc.print_labelled", "Basics", "print a label and a value",
+           "print(@label@, @value@)",
+           [_slot("label", "label", "string", "Total:"), _slot("value", "value", "text", "total")]),
+    _block("pc.print_f", "Basics", "print a sentence with values in it", 'print("@text@")',
+           [_slot("text", "text, with {name} in it", "inline", "Hello {name}, you have {score}")]),
+    _block("pc.comment", "Basics", "a note to yourself", "# @text@",
+           [_slot("text", "note", "text", "what this part does")]),
+    _block("pc.blank", "Basics", "an empty line", ""),
+    _block("pc.input", "Basics", "ask for text", 'let @name@ = input(@prompt@) ?? ""',
+           [_slot("name", "keep it in", "name", "answer"),
+            _slot("prompt", "question", "string", "What is your name? ")]),
+    _block("pc.input_number", "Basics", "ask for a number",
+           'let @name@ = int(input(@prompt@) ?? "0")',
+           [_slot("name", "keep it in", "name", "age"),
+            _slot("prompt", "question", "string", "How old are you? ")]),
+    _block("pc.use", "Basics", "use a library", "use @lib@",
+           [_slot("lib", "library", "choice", "math",
+                  ["math", "random", "time", "json", "fs", "regex", "stats", "text", "http",
+                   "color", "sys"])]),
+    _block("pc.use_file", "Basics", "use another .pcmd file", 'use "@file@" as @name@',
+           [_slot("file", "file", "inline", "helpers"), _slot("name", "as", "name", "helpers")]),
+    _block("pc.stop", "Basics", "stop the program", "exit()"),
+
+    # -- Variables ---------------------------------------------------------
+    _block("pc.let", "Variables", "a value that never changes", "let @name@ = @value@",
+           [_slot("name", "name", "name", "total"), _slot("value", "value", "text", "0")]),
+    _block("pc.var", "Variables", "a value that changes", "var @name@ = @value@",
+           [_slot("name", "name", "name", "count"), _slot("value", "value", "text", "0")]),
+    _block("pc.let_text", "Variables", "a piece of text", "let @name@ = @text@",
+           [_slot("name", "name", "name", "title"), _slot("text", "text", "string", "Hello")]),
+    _block("pc.let_typed", "Variables", "a value with a type", "var @name@: @type@ = @value@",
+           [_slot("name", "name", "name", "score"),
+            _slot("type", "type", "choice", "int", ["int", "float", "str", "bool", "list", "map",
+                                                    "int?", "str?"]),
+            _slot("value", "value", "text", "0")],
+           about="The type is checked every time it changes."),
+    _block("pc.assign", "Variables", "change a value", "@name@ = @value@",
+           [_slot("name", "name", "name", "count"), _slot("value", "value", "text", "1")]),
+    _block("pc.increase", "Variables", "add to a number", "@name@ += @amount@",
+           [_slot("name", "name", "name", "total"), _slot("amount", "by", "number", "1")]),
+    _block("pc.decrease", "Variables", "take away from a number", "@name@ -= @amount@",
+           [_slot("name", "name", "name", "lives"), _slot("amount", "by", "number", "1")]),
+    _block("pc.multiply", "Variables", "multiply a number", "@name@ *= @amount@",
+           [_slot("name", "name", "name", "score"), _slot("amount", "by", "number", "2")]),
+    _block("pc.swap", "Variables", "swap two values", "@a@, @b@ = @b@, @a@",
+           [_slot("a", "first", "name", "a"), _slot("b", "second", "name", "b")]),
+
+    # -- Lists and maps ----------------------------------------------------
+    _block("pc.list", "Lists", "an empty list", "let @name@ = []",
+           [_slot("name", "name", "name", "items")]),
+    _block("pc.list_of", "Lists", "a list of values", "let @name@ = [@values@]",
+           [_slot("name", "name", "name", "numbers"), _slot("values", "values", "text", "1, 2, 3")]),
+    _block("pc.push", "Lists", "add to the end of a list", "@list@.push(@value@)",
+           [_slot("list", "list", "name", "items"), _slot("value", "value", "text", "4")]),
+    _block("pc.pop", "Lists", "take the last item off", "let @name@ = @list@.pop()",
+           [_slot("name", "into", "name", "last"), _slot("list", "list", "name", "items")]),
+    _block("pc.sort", "Lists", "sort a list", "@list@.sort()",
+           [_slot("list", "list", "name", "items")]),
+    _block("pc.map_list", "Lists", "change every item",
+           "let @name@ = @list@.map(|@var@| @value@)",
+           [_slot("name", "into", "name", "doubled"), _slot("list", "list", "name", "numbers"),
+            _slot("var", "each item", "name", "x"), _slot("value", "becomes", "text", "x * 2")]),
+    _block("pc.filter_list", "Lists", "keep some items",
+           "let @name@ = @list@.filter(|@var@| @test@)",
+           [_slot("name", "into", "name", "big"), _slot("list", "list", "name", "numbers"),
+            _slot("var", "each item", "name", "x"), _slot("test", "keep when", "text", "x > 1")]),
+    _block("pc.sum", "Lists", "add up a list", "let @name@ = @list@.sum()",
+           [_slot("name", "into", "name", "total"), _slot("list", "list", "name", "numbers")]),
+    _block("pc.map", "Lists", "an empty map", "let @name@ = {}",
+           [_slot("name", "name", "name", "scores")]),
+    _block("pc.set_key", "Lists", "set a key in a map", "@map@[@key@] = @value@",
+           [_slot("map", "map", "name", "scores"), _slot("key", "key", "string", "ann"),
+            _slot("value", "value", "text", "10")]),
+
+    # -- Logic -------------------------------------------------------------
+    _block("pc.if", "Logic", "if something is true", "if @test@ {",
+           [_slot("test", "test", "text", "score > 10")], close="}", wrap=True),
+    _block("pc.elif", "Logic", "or else, if", "} elif @test@ {",
+           [_slot("test", "test", "text", "score > 5")], close="}", wrap=True,
+           chain_after=_PC_IF),
+    _block("pc.else", "Logic", "otherwise", "} else {", close="}", wrap=True,
+           chain_after=_PC_IF),
+    _block("pc.match", "Logic", "match a value", "match @value@ {",
+           [_slot("value", "value", "text", "choice")], close="}", wrap=True),
+    _block("pc.arm", "Logic", "when it is", "@pattern@ => @result@",
+           [_slot("pattern", "pattern", "text", "1"),
+            _slot("result", "do", "text", 'print("one")')]),
+    _block("pc.arm_other", "Logic", "when it is anything else", "_ => @result@",
+           [_slot("result", "do", "text", 'print("something else")')]),
+
+    # -- Loops -------------------------------------------------------------
+    _block("pc.repeat", "Loops", "repeat a number of times", "for @var@ in 0..@times@ {",
+           [_slot("var", "counter", "name", "i"), _slot("times", "times", "number", "3")],
+           close="}", wrap=True),
+    _block("pc.for_range", "Loops", "count from one number to another",
+           "for @var@ in @from@..=@to@ {",
+           [_slot("var", "counter", "name", "i"), _slot("from", "from", "number", "1"),
+            _slot("to", "to", "number", "5")], close="}", wrap=True),
+    _block("pc.for_each", "Loops", "for each item in a list", "for @var@ in @list@ {",
+           [_slot("var", "item", "name", "item"), _slot("list", "list", "text", "items")],
+           close="}", wrap=True),
+    _block("pc.for_map", "Loops", "for each key and value", "for @key@, @value@ in @map@ {",
+           [_slot("key", "key", "name", "name"), _slot("value", "value", "name", "score"),
+            _slot("map", "map", "text", "scores")], close="}", wrap=True),
+    _block("pc.while", "Loops", "while something is true", "while @test@ {",
+           [_slot("test", "test", "text", "count < 10")], close="}", wrap=True),
+    _block("pc.loop", "Loops", "repeat forever", "loop {", close="}", wrap=True,
+           about="Leave it with the stop-the-loop block."),
+    _block("pc.break", "Loops", "stop the loop", "break"),
+    _block("pc.continue", "Loops", "skip to the next turn", "continue"),
+
+    # -- Functions ---------------------------------------------------------
+    _block("pc.fn", "Functions", "define a function", "fn @name@(@params@) {",
+           [_slot("name", "name", "name", "greet"), _slot("params", "takes", "text", "name")],
+           close="}", wrap=True),
+    _block("pc.fn_typed", "Functions", "define a function with types",
+           "fn @name@(@params@) -> @returns@ {",
+           [_slot("name", "name", "name", "double"), _slot("params", "takes", "text", "n: int"),
+            _slot("returns", "gives", "choice", "int", ["int", "float", "str", "bool", "list",
+                                                        "map", "int?", "nil"])],
+           close="}", wrap=True),
+    _block("pc.fn_short", "Functions", "a one-line function", "fn @name@(@params@) => @value@",
+           [_slot("name", "name", "name", "square"), _slot("params", "takes", "text", "n"),
+            _slot("value", "gives", "text", "n * n")]),
+    _block("pc.return", "Functions", "give back a value", "return @value@",
+           [_slot("value", "value", "text", "result")]),
+    _block("pc.call", "Functions", "call a function", "@name@(@args@)",
+           [_slot("name", "function", "name", "greet"), _slot("args", "with", "text", '"Sam"')]),
+    _block("pc.call_keep", "Functions", "call a function and keep the result",
+           "let @into@ = @name@(@args@)",
+           [_slot("into", "into", "name", "answer"), _slot("name", "function", "name", "double"),
+            _slot("args", "with", "text", "21")]),
+    _block("pc.lambda", "Functions", "a little function in a name",
+           "let @name@ = |@params@| @value@",
+           [_slot("name", "name", "name", "twice"), _slot("params", "takes", "text", "x"),
+            _slot("value", "gives", "text", "x * 2")]),
+
+    # -- Types -------------------------------------------------------------
+    _block("pc.struct", "Types", "a struct (your own type)", "struct @name@ {",
+           [_slot("name", "name", "name", "Player")], close="}", wrap=True),
+    _block("pc.field", "Types", "a field", "@name@: @type@",
+           [_slot("name", "name", "name", "name"),
+            _slot("type", "type", "choice", "str", ["str", "int", "float", "bool", "list", "map",
+                                                    "any"])]),
+    _block("pc.field_default", "Types", "a field with a starting value",
+           "@name@: @type@ = @value@",
+           [_slot("name", "name", "name", "hp"),
+            _slot("type", "type", "choice", "int", ["int", "float", "str", "bool", "list", "map"]),
+            _slot("value", "starts at", "text", "100")]),
+    _block("pc.method", "Types", "a method", "fn @name@(self) {",
+           [_slot("name", "name", "name", "describe")], close="}", wrap=True),
+    _block("pc.make", "Types", "make one", "let @name@ = @type@(@values@)",
+           [_slot("name", "name", "name", "hero"), _slot("type", "type", "name", "Player"),
+            _slot("values", "with", "text", '"Kai"')]),
+    _block("pc.enum", "Types", "an enum (one of a few options)", "enum @name@ { @options@ }",
+           [_slot("name", "name", "name", "Color"),
+            _slot("options", "options", "text", "Red, Green, Blue")]),
+
+    # -- Errors and tests --------------------------------------------------
+    _block("pc.try", "Errors", "try something that might fail", "try {", close="}", wrap=True),
+    _block("pc.catch", "Errors", "if it failed", "} catch @name@ {",
+           [_slot("name", "the error", "name", "e")], close="}", wrap=True,
+           chain_after=("pc.try",)),
+    _block("pc.finally", "Errors", "either way, afterwards", "} finally {", close="}", wrap=True,
+           chain_after=("pc.try", "pc.catch")),
+    _block("pc.throw", "Errors", "fail with a message", "throw @text@",
+           [_slot("text", "message", "string", "something went wrong")]),
+    _block("pc.assert", "Errors", "make sure something is true", "assert @test@",
+           [_slot("test", "test", "text", "total > 0")]),
+    _block("pc.test", "Errors", "a test", "test @name@ {",
+           [_slot("name", "name", "string", "it adds")], close="}", wrap=True,
+           about="Runs with: pcmd test file.pcmd"),
+]
+
 CSS = CSS + CSS_MORE
 MARKDOWN = MARKDOWN + MARKDOWN_MORE
 
@@ -3306,8 +3497,8 @@ MARKDOWN = MARKDOWN + MARKDOWN_MORE
 # palette cannot write still keeps what is inside it as blocks.
 _PREFIX = {"python": "py", "javascript": "js", "html": "html", "css": "css",
            "markdown": "md", "c": "c", "go": "go", "rust": "rs", "shell": "sh",
-           "json": "json"}
-_BRACED = {"javascript", "c", "go", "rust", "css"}
+           "json": "json", "pycmd": "pc"}
+_BRACED = {"javascript", "c", "go", "rust", "css", "pycmd"}
 
 
 def _raw_blocks(language: str) -> list:
@@ -3328,10 +3519,12 @@ def _raw_blocks(language: str) -> list:
 
 for _language, _rows in (("python", PYTHON), ("javascript", JAVASCRIPT), ("html", HTML),
                          ("css", CSS), ("markdown", MARKDOWN), ("c", C), ("go", GO),
-                         ("rust", RUST), ("shell", SHELL), ("json", JSON)):
+                         ("rust", RUST), ("shell", SHELL), ("json", JSON),
+                         ("pycmd", PYCMD)):
     _rows.extend(_raw_blocks(_language))
 
 BLOCKS = {
+    "pycmd": PYCMD,
     "python": PYTHON,
     "javascript": JAVASCRIPT,
     "html": HTML,
@@ -3422,7 +3615,7 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 # Languages where a `string` slot is written with quotes round it. In HTML and
 # CSS the template already carries whatever quoting the syntax needs.
-QUOTED = {"python", "javascript", "c", "go", "rust", "json"}
+QUOTED = {"python", "javascript", "c", "go", "rust", "json", "pycmd"}
 
 
 def _clean(value) -> str:
@@ -3454,6 +3647,10 @@ def _escaped(raw: str, language: str) -> str:
         # A brace cannot appear in a declaration, and one typed into a value
         # would close the rule and leave the rest of the file inside nothing.
         return raw.replace("{", "").replace("}", "")
+    if language == "pycmd":
+        # Inside "..." a { starts a hole for a value; the string kind doubles
+        # them (in _value_for) so typed braces stay braces.
+        return raw.replace("\\", "\\\\").replace('"', '\\"')
     if language in ("c", "go", "json"):
         # All three write text between double quotes and all three take the
         # same two escapes for it.
@@ -3544,6 +3741,8 @@ def _value_for(slot: dict, given, language: str) -> str:
 
     if kind in ("string", "inline"):
         body = _escaped(raw, language)
+        if kind == "string" and language == "pycmd":
+            body = body.replace("{", "{{").replace("}", "}}")
         if kind == "string" and language in QUOTED:
             return f'"{body}"'
         return body
