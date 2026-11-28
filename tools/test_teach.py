@@ -120,6 +120,15 @@ def run_real(course_id, code):
     if not shutil.which(steps[0][0]) and not os.path.isabs(steps[0][0]):
         return None
     folder = tempfile.mkdtemp(prefix=f"real-{course_id}-")
+    try:
+        return _run_real_in(folder, filename, steps, code)
+    finally:
+        # Compilers leave binaries behind: thousands of snippets once filled
+        # the disk. Every folder goes the moment its snippet has run.
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _run_real_in(folder, filename, steps, code):
     path = os.path.join(folder, filename)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(code + "\n")

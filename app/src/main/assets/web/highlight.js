@@ -160,6 +160,15 @@
         'memcpy fopen fclose fgets puts putchar getchar exit abs sqrt pow').split(' '),
       preprocessor: true
     },
+    pycmd: {
+      line: '#', block: null, quotes: '"\'',
+      keywords: ('let var const fn return if elif else while for in loop break continue match ' +
+        'struct enum extends and or not try catch finally throw use as is assert test self pub').split(' '),
+      constants: ['true', 'false', 'nil'],
+      builtins: ('print input len str int float bool type range abs min max sum round sorted ' +
+        'reversed enumerate zip keys values items set list map filter reduce Error exit any all ' +
+        'math random time json fs regex stats text http color sys').split(' ')
+    },
     go: {
       line: '//', block: ['/*', '*/'], quotes: '"\'`',
       keywords: ('break case chan const continue default defer else fallthrough for func go ' +

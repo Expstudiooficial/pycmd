@@ -1,9 +1,9 @@
 {
   "id": "pycmd.creator",
   "name": "Creator",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "author": "PyCmd",
-  "description": "Build real code out of blocks - over nine hundred of them across ten languages: Python, JavaScript, C, Go, Rust, Shell, HTML, CSS, Markdown and JSON. Every block shows the exact line it writes. Run it right in the tab (Python on PyCmd's own interpreter, JavaScript in the panel, HTML, CSS and Markdown as a live preview), paste code in and get it back as blocks, drag blocks around, undo anything, and save it as a real file in your workspace.",
+  "description": "Build real code out of blocks - about a thousand of them across eleven languages: PyCmd (the app's own language), Python, JavaScript, C, Go, Rust, Shell, HTML, CSS, Markdown and JSON. Every block shows the exact line it writes. Run it right in the tab (PyCmd and Python in the app, JavaScript in the panel, HTML, CSS and Markdown as a live preview), paste code in and get it back as blocks, drag blocks around, undo anything, and save it as a real file in your workspace.",
   "entry": "main.py",
   "panel": "ui.html",
   "tab": {
@@ -26,6 +26,7 @@
       "type": "choice",
       "label": "New projects start in",
       "options": [
+        "pycmd",
         "python",
         "javascript",
         "c",

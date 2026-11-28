@@ -46,7 +46,7 @@ object Exports {
         "css" -> "text/css"
         "js" -> "text/javascript"
         "csv" -> "text/csv"
-        "md", "txt", "log", "py", "c", "go", "rs" -> "text/plain"
+        "md", "txt", "log", "py", "c", "go", "rs", "pcmd" -> "text/plain"
         "png" -> "image/png"
         "jpg", "jpeg" -> "image/jpeg"
         "svg" -> "image/svg+xml"

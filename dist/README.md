@@ -1,17 +1,29 @@
 # Prebuilt APK
 
-`PyCmd-3.8.0.apk` — ready to install, nothing else needed.
+`PyCmd-3.9.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 3.8.0 |
+| Version | 3.9.0 |
 | Size | 27 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
 The universal APK, as in 2.7.0: one file for a phone and for an emulator.
+
+## What is new in 3.9.0
+
+**PyCmd, the language.** Our own language, built into the app (`.pcmd`):
+- **Easy to read** like Python: `let` and `var`, `fn`, structs, enums, `match`, lambdas, pipelines (`|>`), `try`/`catch` and `test` blocks.
+- **Checked before it runs:** a typo, a `let` that changes or a wrong type is caught with the line number and a "did you mean", before a line runs.
+- **Safe:** a program cannot reach Python or the rest of the phone, files stay in its own folder, and whole numbers never overflow.
+- **Speed:** it is compiled to Python bytecode, so it runs as fast as Python. Honestly: not as fast as C++ or Rust. Nothing on a phone's Python can be.
+- **11 libraries:** math, random, time, json, fs, regex, stats, text, http, color, sys. Your own `.pcmd` files work as libraries too.
+- **Learn > PyCmd:** 1,804 lessons, first in the list.
+- **Creator:** 66 PyCmd blocks, and Run in the tab.
+- **Console:** `pcmd new`, `pcmd test`, `pcmd check`, `pcmd py`, `pcmd -e "..."`.
 
 ## What is new in 3.8.0
 

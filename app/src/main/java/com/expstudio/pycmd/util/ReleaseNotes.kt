@@ -41,6 +41,31 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 39,
+            versionName = "3.9.0",
+            headline = "PyCmd, the language: our own, built into the app, with 1,804 lessons.",
+            added = listOf(
+                "A new language, made for this app: PyCmd (.pcmd). Easy to read like Python, " +
+                    "with let and var, checked types, structs, enums, match, lambdas, " +
+                    "pipelines (|>), try/catch and test blocks.",
+                "Checked before it runs: a typo, a let that changes or a wrong type is " +
+                    "caught with the line and a \"did you mean\", before any of it runs.",
+                "Safe: programs cannot reach Python or the rest of the phone, files stay " +
+                    "in the program's own folder, and whole numbers never overflow.",
+                "Fast for what it is: it is compiled to Python bytecode, so it runs as fast " +
+                    "as Python, not as a slow step-by-step interpreter. It is not as fast " +
+                    "as C++ or Rust, and nothing that runs on a phone's Python can be.",
+                "11 libraries: math, random, time, json, fs, regex, stats, text, http, " +
+                    "color and sys. Your own .pcmd files work as libraries too.",
+                "Learn > PyCmd: 1,804 lessons, from hello to structs, match and projects. " +
+                    "It is first in the list.",
+                "Creator: build PyCmd out of 66 blocks and run it in the tab.",
+                "Console: pcmd new, pcmd test, pcmd check, pcmd py (see the Python it " +
+                    "becomes) and pcmd -e for one line. Run a .pcmd file like any other.",
+            ),
+            fixed = listOf(),
+        ),
+        ReleaseNote(
             versionCode = 38,
             versionName = "3.8.0",
             headline = "Notes on every device: your boards sync between your phone and your PC.",

@@ -74,6 +74,16 @@ NO_TOOLCHAIN = (
 
 LANGUAGES = [
     Language(
+        "pycmd", "PyCmd", [".pcmd"], RUN, "pycmd", "#",
+        template='# A PyCmd program. Press Run.\nlet name = "world"\nprint("Hello, {name}!")\n\n'
+                 'fn square(n: int) -> int {\n    n * n\n}\n\nfor i in 1..=5 {\n'
+                 '    print("{i} squared is {square(i)}")\n}\n',
+        note="PyCmd is this app's own language: as easy to read as Python, with let/var, "
+             "checked types, structs, enums, match, lambdas and 11 libraries (use math, json, "
+             "fs, http...). It is checked before it runs and compiled to Python bytecode, so "
+             "it runs at Python speed. Learn it in Learn > PyCmd.",
+    ),
+    Language(
         "python", "Python", [".py", ".pyw"], RUN, "python", "#",
         template='"""New script."""\n\n\ndef main() -> None:\n    print("hello")\n\n\n'
                  'if __name__ == "__main__":\n    main()\n',
@@ -318,6 +328,11 @@ def run_file(path: str, stdout=None, stdin=None) -> dict:
             return {"ok": False, "error": f"C syntax error, {exc}", "language": "C"}
         except c_interp.CRuntimeError as exc:
             return {"ok": False, "error": f"C error, {exc}", "language": "C"}
+
+    if language["id"] == "pycmd":
+        from . import pcmd
+
+        return pcmd.run_file(path, stdout=stdout, stdin=stdin)
 
     if language["id"] == "go":
         from . import go_interp

@@ -20,6 +20,7 @@ echo "== Language interpreters =="
 "$PYTHON" tools/test_c.py
 "$PYTHON" tools/test_go.py
 "$PYTHON" tools/test_rust.py
+"$PYTHON" tools/test_pcmd.py
 
 echo
 echo "== The app still says what it is called =="
