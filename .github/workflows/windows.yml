@@ -139,6 +139,7 @@ jobs:
       # it off again - on a real Windows machine, every build.
       - name: Prove the installer installs, updates and uninstalls
         shell: pwsh
+        timeout-minutes: 10
         run: |
           $setup = (Resolve-Path dist-windows/build/PyCmd-Setup.exe).Path
           $quiet = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/nolaunch=1")
@@ -171,7 +172,10 @@ jobs:
           $env:_PYI_APPLICATION_HOME_DIR = "C:\gone\_MEI999999"
           $env:_PYI_ARCHIVE_FILE = $exe
           $env:_PYI_PARENT_PROCESS_LEVEL = "1"
-          $u0 = Start-Process $setup -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/LOG=$env:RUNNER_TEMP\setup.log") -Wait -PassThru
+          # Not -Wait: that waits for every process the installer starts, and
+          # the PyCmd it restarts keeps running. Wait for the installer alone.
+          $u0 = Start-Process $setup -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/LOG=$env:RUNNER_TEMP\setup.log") -PassThru
+          if (-not $u0.WaitForExit(180000)) { throw "the update installer did not finish in 3 minutes" }
           Remove-Item Env:_PYI_APPLICATION_HOME_DIR, Env:_PYI_ARCHIVE_FILE, Env:_PYI_PARENT_PROCESS_LEVEL
           if ($u0.ExitCode -ne 0) { throw "an update started from a dirty environment exited $($u0.ExitCode)" }
           foreach ($i in 1..60) { if (Test-Path $marker) { break }; Start-Sleep -Milliseconds 500 }
