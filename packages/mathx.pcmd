@@ -1,0 +1,35 @@
+# mathx: handy maths - map ranges, round to steps, digits, averages
+# version: 1.0
+
+fn map_range(x, a1, a2, b1, b2) => b1 + (x - a1) * (b2 - b1) / (a2 - a1)
+fn round_to(x, step) => round(x / step) * step
+fn approx(a, b, tolerance = 1e-9) => abs(a - b) <= tolerance
+fn digits(n: int) => str(abs(n)).chars().map(|c| int(c))
+fn digit_sum(n: int) => digits(n).sum()
+fn is_perfect(n: int) => n > 1 and [d for d in 1..n if n % d == 0].sum() == n
+fn collatz(n: int) {
+    let out = [n]
+    var x = n
+    while x != 1 {
+        x = x % 2 == 0 ? x // 2 : 3 * x + 1
+        out.push(x)
+    }
+    return out
+}
+fn mean(xs) => xs.sum() / xs.len()
+fn cumulative(xs) {
+    var total = 0
+    return xs.map(fn(x) {
+        total += x
+        return total
+    })
+}
+
+test "mathx" {
+    assert map_range(5, 0, 10, 0, 100) == 50.0
+    assert round_to(17, 5) == 15
+    assert digit_sum(1234) == 10
+    assert is_perfect(28) and not is_perfect(12)
+    assert collatz(6) == [6, 3, 10, 5, 16, 8, 4, 2, 1]
+    assert cumulative([1, 2, 3]) == [1, 3, 6]
+}

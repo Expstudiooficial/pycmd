@@ -1,0 +1,49 @@
+# cards: a deck of playing cards - shuffle, deal, score
+# version: 1.0
+use random
+
+let SUITS = ["hearts", "diamonds", "clubs", "spades"]
+let RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
+
+struct Card {
+    rank: str
+    suit: str
+    fn show(self) => "{self.rank} of {self.suit}"
+    fn value(self) => match self.rank {
+        "J" | "Q" | "K" => 10
+        "A" => 11
+        _ => int(self.rank)
+    }
+}
+
+struct Deck {
+    cards: list = [Card(r, s) for s in SUITS for r in RANKS]
+    fn shuffle(self) { random.shuffle(self.cards) }
+    fn deal(self, n: int = 1) {
+        if n > self.cards.len() { throw Error("only {self.cards.len()} cards left", "Empty") }
+        let hand = self.cards.take(n)
+        self.cards = self.cards.skip(n)
+        return hand
+    }
+    fn len(self) => self.cards.len()
+}
+
+fn blackjack_score(hand) {
+    var total = hand.map(|c| c.value()).sum()
+    var aces = hand.count(|c| c.rank == "A")
+    while total > 21 and aces > 0 {
+        total -= 10
+        aces -= 1
+    }
+    return total
+}
+
+test "deck" {
+    let d = Deck()
+    assert len(d) == 52
+    d.shuffle()
+    let hand = d.deal(5)
+    assert hand.len() == 5 and len(d) == 47
+    assert blackjack_score([Card("A", "spades"), Card("K", "hearts")]) == 21
+    assert blackjack_score([Card("A", "spades"), Card("A", "hearts"), Card("9", "clubs")]) == 21
+}

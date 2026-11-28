@@ -1,0 +1,42 @@
+# geometry: shapes with area and perimeter, built on a trait
+# version: 1.0
+use math
+
+trait Shape {
+    fn area(self) -> float
+    fn perimeter(self) -> float
+    fn describe(self) => "{type(self)}: area {self.area():.2f}, perimeter {self.perimeter():.2f}"
+}
+
+struct Circle impl Shape {
+    r: num
+    fn area(self) => math.pi * self.r ** 2
+    fn perimeter(self) => 2 * math.pi * self.r
+}
+
+struct Rect impl Shape {
+    w: num
+    h: num
+    fn area(self) => float(self.w * self.h)
+    fn perimeter(self) => float(2 * (self.w + self.h))
+}
+
+struct Triangle impl Shape {
+    a: num
+    b: num
+    c: num
+    fn perimeter(self) => float(self.a + self.b + self.c)
+    fn area(self) {
+        let s = self.perimeter() / 2
+        return math.sqrt(s * (s - self.a) * (s - self.b) * (s - self.c))
+    }
+}
+
+fn total_area(shapes) => shapes.map(|s| s.area()).sum()
+
+test "areas" {
+    assert Rect(3, 4).area() == 12.0
+    assert Triangle(3, 4, 5).area() == 6.0
+    assert round(Circle(1).area(), 4) == 3.1416
+    assert Rect(1, 1) is Shape
+}

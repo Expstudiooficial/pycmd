@@ -13,7 +13,10 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "app", "src", "main", "python")))
 
-from pycmd_langs import pcmd, registry  # noqa: E402
+from pycmd_langs import pcmd, pcmd_engine, registry  # noqa: E402
+
+ENGINE = "fast (Kotlin)" if pcmd._engine() else "first (Python)"
+print(f"engine: {ENGINE}")
 from pycmd_langs.pcmd_runtime import LIBRARIES  # noqa: E402
 
 FAILED = []
@@ -32,7 +35,7 @@ def check(name, ok, detail=""):
 def run(src, stdin=""):
     out = io.StringIO()
     try:
-        code = pcmd.run_source(src, stdout=out, stdin=io.StringIO(stdin))
+        code = pcmd.run(src, stdout=out, stdin=io.StringIO(stdin))
         return out.getvalue(), None, code
     except pcmd.PcmdError as exc:
         return out.getvalue(), exc.message, None
@@ -192,6 +195,34 @@ repl.feed("x + 1")
 repl.feed('print("hi")')
 check("the REPL keeps names and shows values", repl_out.getvalue() == "21\nhi\n",
       repl_out.getvalue())
+
+if pcmd._engine() is not None:
+    print("== PyCmd 2 (fast engine) ==")
+    prints("traits with defaults", 'trait T {\n fn n(self) -> int\n fn two(self) => self.n() * 2\n}\n'
+           'struct A impl T {\n v: int\n fn n(self) => self.v\n}\nprint(A(4).two(), A(1) is T)', "8 true\n")
+    refuses("a broken promise is caught", 'trait T {\n fn n(self)\n}\nstruct A impl T {\n v: int = 0\n}\nA()',
+            ["says it is a T", "fn n"])
+    prints("enums with data", 'enum R {\n Ok(v)\n Err(why: str)\n}\nmatch R.Err("x") {\n R.Ok(v) => print(v)\n'
+           ' R.Err(w) => print("no", w)\n}', "no x\n")
+    prints("operators", 'struct V {\n x: int\n fn plus(self, o) => V(self.x + o.x)\n fn show(self) => "V{self.x}"\n'
+           ' fn compare(self, o) => self.x - o.x\n}\nprint(V(1) + V(2), [V(3), V(1)].sorted())', "V3 [V1, V3]\n")
+    prints("new libraries", 'use collections\nuse hash\nuse date\nprint(collections.most_common(collections.Counter("aab".chars()), 1),'
+           ' hash.md5("a").len(), date.add_days("2026-02-28", 1))', '[("a", 2)] 32 2026-03-01\n')
+    prints("unboxed int fast path keeps big ints exact", "var x = 9223372036854775807\nx += 1\nprint(x)",
+           "9223372036854775808\n")
+    _pk = tempfile.mkdtemp(prefix="pcmd-pkg-")
+    try:
+        os.makedirs(os.path.join(_pk, "pcmd_packages"))
+        with open(os.path.join(_pk, "pcmd_packages", "twice.pcmd"), "w", encoding="utf-8") as handle:
+            handle.write("fn twice(n) => n * 2\n")
+        mainp = os.path.join(_pk, "app.pycmd")
+        with open(mainp, "w", encoding="utf-8") as handle:
+            handle.write("use twice\nprint(twice.twice(21))\n")
+        buf = io.StringIO()
+        res = registry.run_file(mainp, stdout=buf)
+        check("packages in pcmd_packages, and .pycmd files", res["ok"] and buf.getvalue() == "42\n", (res, buf.getvalue()))
+    finally:
+        shutil.rmtree(_pk, ignore_errors=True)
 
 print("== speed ==")
 src = ("var t = 0\nfor i in 0..1000000 { t += i % 7 }\n"

@@ -1,0 +1,29 @@
+# validate: check emails, numbers, passwords and more
+# version: 1.0
+use regex
+
+fn email(s: str) => regex.test('^[^@\\s]+@[^@\\s]+\\.[a-zA-Z]{2,}$', s)
+fn integer(s: str) => regex.test("^[+-]?\\d+$", s.trim())
+fn number(s: str) => regex.test("^[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?$", s.trim())
+fn url(s: str) => regex.test("^https?://[^\\s/$.?#].[^\\s]*$", s)
+fn hex_color(s: str) => regex.test('^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$', s)
+
+fn password_problems(p: str) {
+    let out = []
+    if p.len() < 8 { out.push("at least 8 characters") }
+    if not regex.test("[A-Z]", p) { out.push("a capital letter") }
+    if not regex.test("[a-z]", p) { out.push("a small letter") }
+    if not regex.test("\\d", p) { out.push("a digit") }
+    return out
+}
+
+fn strong_password(p: str) => password_problems(p).is_empty()
+
+test "validate" {
+    assert email("me@example.com") and not email("me@nowhere")
+    assert integer(" -42 ") and not integer("4.2")
+    assert number("3.5e2") and not number("abc")
+    assert hex_color("#fa0") and not hex_color("#12")
+    assert password_problems("abc") == ["at least 8 characters", "a capital letter", "a digit"]
+    assert strong_password("Secret123")
+}

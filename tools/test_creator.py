@@ -303,7 +303,9 @@ for _language in ("c", "go", "rust"):
     check(f"all {len(blocks.BLOCKS[_language])} {_language} blocks",
           not _broken, _broken[:6])
 
-from pycmd_langs import pcmd_parser  # noqa: E402
+from pycmd_langs import pcmd_engine, pcmd_parser  # noqa: E402
+
+_pc_engine = pcmd_engine.engine()
 
 PC_HALVES = {
     "pc.elif": ("if true {\n", ""), "pc.else": ("if true {\n", ""),
@@ -311,19 +313,26 @@ PC_HALVES = {
     "pc.arm": ("match 1 {\n", "}\n"), "pc.arm_other": ("match 1 {\n", "}\n"),
     "pc.field": ("struct S {\n", "}\n"), "pc.field_default": ("struct S {\n", "}\n"),
     "pc.method": ("struct S {\n", "}\n"), "pc.try": ("", "catch e {\n}\n"),
+    "pc.variant": ("enum E {\n", "}\n"), "pc.trait_fn": ("trait T {\n", "}\n"),
+    "pc.operator": ("struct S {\n", "}\n"),
 }
 _pc_broken = []
 for row in blocks.BLOCKS["pycmd"]:
     node = {"block": row["id"], "values": {}}
     if row["wrap"]:
-        node["children"] = [{"block": "pc.arm_other" if row["id"] == "pc.match" else "pc.blank",
-                             "values": {}}]
+        node["children"] = [{"block": {"pc.match": "pc.arm_other", "pc.enum_data": "pc.variant",
+                                       "pc.trait": "pc.trait_fn"}.get(row["id"], "pc.blank"), "values": {}}]
     code = blocks.compile_project({"language": "pycmd", "blocks": [node]})["code"]
     before, after = PC_HALVES.get(row["id"], ("", ""))
-    try:
-        pcmd_parser.parse(before + code + after)
-    except Exception as error:  # noqa: BLE001
-        _pc_broken.append((row["id"], str(error)[:80]))
+    reply = _pc_engine.parse(before + code + after) if _pc_engine else None
+    if reply is not None:
+        if not reply.get("ok"):
+            _pc_broken.append((row["id"], reply.get("error", "")[:80]))
+    else:
+        try:
+            pcmd_parser.parse(before + code + after)
+        except Exception as error:  # noqa: BLE001
+            _pc_broken.append((row["id"], str(error)[:80]))
 check(f"all {len(blocks.BLOCKS['pycmd'])} pycmd blocks", not _pc_broken, _pc_broken[:6])
 
 say()

@@ -1,0 +1,40 @@
+# quiz: ask questions in the console and keep score
+# version: 1.0
+
+struct Question {
+    ask: str
+    answer: any
+    choices: list = []
+}
+
+struct Quiz {
+    questions: list = []
+    score: int = 0
+    fn add(self, ask, answer, choices = []) { self.questions.push(Question(ask, answer, choices)) }
+    fn check(self, q, given) => str(given).trim().lower() == str(q.answer).lower()
+    fn run(self) {
+        for i, q in enumerate(self.questions) {
+            print("{i + 1}. {q.ask}")
+            for k, c in enumerate(q.choices) { print("   {chr(97 + k)}) {c}") }
+            var given = input("> ") ?? ""
+            if q.choices.len() > 0 and given.len() == 1 and given.is_alpha() {
+                given = q.choices.get(ord(given.lower()) - 97, given)
+            }
+            if self.check(q, given) {
+                self.score += 1
+                print("right!")
+            } else {
+                print("the answer is {q.answer}")
+            }
+        }
+        print("score: {self.score} of {self.questions.len()}")
+        return self.score
+    }
+}
+
+test "answers are compared loosely" {
+    let q = Quiz()
+    q.add("2 + 2?", 4)
+    assert q.check(q.questions[0], " 4 ")
+    assert not q.check(q.questions[0], "5")
+}

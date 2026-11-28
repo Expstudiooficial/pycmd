@@ -1,0 +1,65 @@
+# linked_list: a singly linked list, to learn how lists work inside
+# version: 1.0
+
+struct Node {
+    value: any
+    next: any = nil
+}
+
+struct LinkedList {
+    head: any = nil
+    size: int = 0
+    fn push_front(self, v) {
+        self.head = Node(v, self.head)
+        self.size += 1
+    }
+    fn push_back(self, v) {
+        let node = Node(v)
+        if self.head == nil {
+            self.head = node
+        } else {
+            var cur = self.head
+            while cur.next != nil { cur = cur.next }
+            cur.next = node
+        }
+        self.size += 1
+    }
+    fn to_list(self) {
+        let out = []
+        var cur = self.head
+        while cur != nil {
+            out.push(cur.value)
+            cur = cur.next
+        }
+        return out
+    }
+    fn reverse(self) {
+        var prev = nil
+        var cur = self.head
+        while cur != nil {
+            let nxt = cur.next
+            cur.next = prev
+            prev = cur
+            cur = nxt
+        }
+        self.head = prev
+    }
+    fn len(self) => self.size
+    fn iter(self) => self.to_list()
+    fn show(self) => " -> ".join(self.to_list())
+}
+
+fn from_list(xs) {
+    let l = LinkedList()
+    for x in xs { l.push_back(x) }
+    return l
+}
+
+test "linked list" {
+    let l = from_list([1, 2, 3])
+    l.push_front(0)
+    assert l.to_list() == [0, 1, 2, 3]
+    l.reverse()
+    assert str(l) == "3 -> 2 -> 1 -> 0"
+    assert len(l) == 4
+}

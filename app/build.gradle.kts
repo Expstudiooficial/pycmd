@@ -29,8 +29,8 @@ android {
         applicationId = "com.expstudio.pycmd"
         minSdk = 24
         targetSdk = 35
-        versionCode = 39
-        versionName = "3.9.0"
+        versionCode = 40
+        versionName = "4.0.0"
 
         ndk {
             abiFilters += targetAbis
@@ -101,6 +101,15 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+    }
+
+    // PyCmd, the language: its engine lives in lang/ (a build of its own, so
+    // the Windows app can make it into a program too) and is compiled
+    // straight into the APK. Python reaches it through Chaquopy.
+    sourceSets {
+        getByName("main") {
+            java.srcDir("../lang/src/main/kotlin")
+        }
     }
 
     buildFeatures {

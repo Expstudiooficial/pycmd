@@ -1,0 +1,30 @@
+# vec: 2D vectors with + - * and length, for games and geometry
+# version: 1.0
+use math
+
+struct Vec2 {
+    x: num
+    y: num
+    fn plus(self, o) => Vec2(self.x + o.x, self.y + o.y)
+    fn minus(self, o) => Vec2(self.x - o.x, self.y - o.y)
+    fn times(self, k) => Vec2(self.x * k, self.y * k)
+    fn neg(self) => Vec2(-self.x, -self.y)
+    fn dot(self, o) => self.x * o.x + self.y * o.y
+    fn len(self) => math.sqrt(self.x * self.x + self.y * self.y)
+    fn normalized(self) {
+        let n = self.len()
+        return n == 0 ? Vec2(0, 0) : Vec2(self.x / n, self.y / n)
+    }
+    fn distance(self, o) => (self - o).len()
+    fn show(self) => "({self.x}, {self.y})"
+}
+
+fn vec(x, y) => Vec2(x, y)
+let zero = Vec2(0, 0)
+
+test "adds and scales" {
+    assert vec(1, 2) + vec(3, 4) == vec(4, 6)
+    assert vec(1, 2) * 3 == vec(3, 6)
+    assert vec(3, 4).len() == 5.0
+    assert vec(0, 0).distance(vec(3, 4)) == 5.0
+}

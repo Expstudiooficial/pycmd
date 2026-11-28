@@ -41,6 +41,28 @@ object ReleaseNotes {
 
     val ALL: List<ReleaseNote> = listOf(
         ReleaseNote(
+            versionCode = 40,
+            versionName = "4.0.0",
+            headline = "PyCmd 2: the language gets its own fast engine, packages and more.",
+            added = listOf(
+                "A new engine for PyCmd, written in Kotlin and built into the app: no Python in " +
+                    "between. Loops and function calls run about twice as fast as before.",
+                "Traits: a struct can promise methods (struct Dog impl Speaker), with default " +
+                    "methods and checks that the promise is kept.",
+                "Enums that hold data - Shape.Circle(r: float) - and match takes the data out.",
+                "Operators for your own types: plus, minus, times, compare, show, len and [] " +
+                    "make + - * < print len() and x[i] work on your structs.",
+                "8 more libraries: collections, date, csv, hash, base64, uuid, path and matrix - " +
+                    "19 in all - and many new list, map and number methods.",
+                "Packages: pcmd packages lists 34 of them (graphs, trees, fractions, ciphers, " +
+                    "tables, dice, cards...), pcmd add graph installs one, use graph uses it.",
+                ".pycmd files run as well as .pcmd.",
+                "Learn > PyCmd: 47 new lessons topics for all of the above, and Creator has blocks " +
+                    "for traits, enums with data and operators.",
+            ),
+            fixed = listOf(),
+        ),
+        ReleaseNote(
             versionCode = 39,
             versionName = "3.9.0",
             headline = "PyCmd, the language: our own, built into the app, with 1,804 lessons.",

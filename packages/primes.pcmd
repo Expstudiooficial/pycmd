@@ -1,0 +1,64 @@
+# primes: primes, factors and divisors
+# version: 1.0
+
+fn is_prime(n: int) -> bool {
+    if n < 2 { return false }
+    if n < 4 { return true }
+    if n % 2 == 0 { return false }
+    var d = 3
+    while d * d <= n {
+        if n % d == 0 { return false }
+        d += 2
+    }
+    return true
+}
+
+fn below(n: int) -> list {
+    let sieve = [true] * n
+    let out = []
+    for i in 2..n {
+        if sieve[i] {
+            out.push(i)
+            var j = i * i
+            while j < n {
+                sieve[j] = false
+                j += i
+            }
+        }
+    }
+    return out
+}
+
+fn factors(n: int) -> list {
+    let out = []
+    var m = n
+    var d = 2
+    while d * d <= m {
+        while m % d == 0 {
+            out.push(d)
+            m = m // d
+        }
+        d += 1
+    }
+    if m > 1 { out.push(m) }
+    return out
+}
+
+fn divisors(n: int) => [d for d in 1..=n if n % d == 0]
+fn nth(k: int) {
+    var count = 0
+    var n = 1
+    while count < k {
+        n += 1
+        if is_prime(n) { count += 1 }
+    }
+    return n
+}
+
+test "primes" {
+    assert below(20) == [2, 3, 5, 7, 11, 13, 17, 19]
+    assert factors(360) == [2, 2, 2, 3, 3, 5]
+    assert is_prime(97) and not is_prime(91)
+    assert divisors(12) == [1, 2, 3, 4, 6, 12]
+    assert nth(10) == 29
+}

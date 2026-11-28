@@ -1,17 +1,28 @@
 # Prebuilt APK
 
-`PyCmd-3.9.0.apk` — ready to install, nothing else needed.
+`PyCmd-4.0.0.apk` — ready to install, nothing else needed.
 
 | | |
 |---|---|
 | Package | `com.expstudio.pycmd.debug` |
-| Version | 3.9.0 |
+| Version | 4.0.0 |
 | Size | 27 MB |
 | Signed with | the key in [`keystore/`](../keystore/), committed so updates can install over it |
 | Works on | Android 7.0 (API 24) and newer, **arm64-v8a and x86_64** — every phone since about 2016, and emulators |
 | SHA-256 | see [SHA256SUMS.txt](SHA256SUMS.txt) |
 
 The universal APK, as in 2.7.0: one file for a phone and for an emulator.
+
+## What is new in 4.0.0
+
+**PyCmd 2.** The language gets its own engine and grows up:
+- **Its own engine,** written in Kotlin and built into the app - no Python in between. Loops and function calls run about **twice as fast** as 3.9. (Honestly: not C++ or Rust speed. Those make machine code; this is a fast interpreter.)
+- **Traits:** `struct Dog impl Speaker { ... }` - promised methods, default methods, and a check that the promise is kept.
+- **Enums that hold data:** `Shape.Circle(r: float)`, and `match` takes the data out.
+- **Operators for your types:** `plus`, `minus`, `times`, `compare`, `show`, `len`, `get`/`set` make `+ - * < print len() x[i]` work on structs.
+- **19 libraries:** new are collections, date, csv, hash, base64, uuid, path and matrix.
+- **Packages:** `pcmd packages` lists 34 (graphs, trees, fractions, ciphers, tables, dice, cards...), `pcmd add graph` installs one, `use graph` uses it.
+- **.pycmd** files run too. **Learn > PyCmd** has new units for all of it; **Creator** has the new blocks.
 
 ## What is new in 3.9.0
 

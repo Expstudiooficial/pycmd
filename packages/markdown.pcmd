@@ -1,0 +1,21 @@
+# markdown: write Markdown - headings, lists, tables, code blocks, links
+# version: 1.0
+
+fn heading(text: str, level: int = 1) => "#" * level + " " + text
+fn bullets(items) => "\n".join(items.map(|i| "- {i}"))
+fn numbered(items) => "\n".join([(n + 1, x) for n, x in enumerate(items)].map(|p| "{p[0]}. {p[1]}"))
+fn link(text: str, url: str) => "[{text}]({url})"
+fn bold(text) => "**{text}**"
+fn code(text: str, lang: str = "") => "```{lang}\n{text}\n```"
+fn table(rows, header) {
+    let lines = ["| " + " | ".join(header) + " |", "|" + "|".join(header.map(|_| " --- ")) + "|"]
+    for r in rows { lines.push("| " + " | ".join(r) + " |") }
+    return "\n".join(lines)
+}
+fn doc(...parts) => "\n\n".join(parts)
+
+test "markdown" {
+    assert heading("Hi", 2) == "## Hi"
+    assert numbered(["a", "b"]) == "1. a\n2. b"
+    assert table([[1, 2]], ["x", "y"]) == "| x | y |\n| --- | --- |\n| 1 | 2 |"
+}

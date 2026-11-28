@@ -29,3 +29,8 @@
 # reading and "it crashed". The file name is renamed away; the numbers stay.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# PyCmd's language engine. Python calls it by class and method name through
+# Chaquopy (pcmd_engine.py), and implements PcmdIO from the Python side - so
+# none of it may be renamed or dropped.
+-keep class com.expstudio.pycmd.lang.** { *; }

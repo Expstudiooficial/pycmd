@@ -1,0 +1,18 @@
+# log: tidy, coloured messages - info, ok, warn, error
+# version: 1.0
+use color
+use time
+
+var quiet = false
+var timestamps = false
+
+fn stamp() => timestamps ? "[{time.time()}] " : ""
+fn info(msg) { if not quiet { print("{stamp()}{color.cyan("info")}  {msg}") } }
+fn ok(msg) { if not quiet { print("{stamp()}{color.green("ok")}    {msg}") } }
+fn warn(msg) { print("{stamp()}{color.yellow("warn")}  {msg}") }
+fn error(msg) { print("{stamp()}{color.red("error")} {msg}") }
+fn plain(text) => color.plain(text)
+
+test "log" {
+    assert plain(color.red("x")) == "x"
+}

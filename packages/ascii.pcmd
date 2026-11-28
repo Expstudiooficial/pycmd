@@ -1,0 +1,37 @@
+# ascii: boxes, banners, bars and progress in plain text
+# version: 1.0
+
+fn box(text: str, pad: int = 1) -> str {
+    let lines = text.lines()
+    let w = lines.map(|l| l.len()).max() + pad * 2
+    let top = "+" + "-" * w + "+"
+    let middle = lines.map(|l| "|" + " " * pad + l.pad_right(w - pad * 2) + " " * pad + "|")
+    return "\n".join([top] + middle + [top])
+}
+
+fn banner(text: str, ch: str = "=") -> str {
+    let line = ch * (text.len() + 4)
+    return "{line}\n{ch} {text} {ch}\n{line}"
+}
+
+fn bar(value: num, max_value: num, width: int = 20) -> str {
+    let filled = max_value == 0 ? 0 : round(value / max_value * width)
+    return "#" * filled + "." * (width - filled)
+}
+
+fn progress(done: num, total: num, width: int = 20) -> str {
+    let pct = total == 0 ? 100 : round(done * 100 / total)
+    return "[{bar(done, total, width)}] {pct}%"
+}
+
+fn chart(data: map, width: int = 20) -> str {
+    let top = data.values().max()
+    let w = data.keys().map(|k| str(k).len()).max()
+    return "\n".join(data.keys().map(|k| "{str(k).pad_right(w)} {bar(data[k], top, width)} {data[k]}"))
+}
+
+test "ascii" {
+    assert box("hi") == "+----+\n| hi |\n+----+"
+    assert progress(1, 4, 8) == "[##......] 25%"
+    assert banner("Go", "*") == "******\n* Go *\n******"
+}

@@ -1,0 +1,23 @@
+# complex: complex numbers a + bi
+# version: 1.0
+use math
+
+struct Complex {
+    re: num
+    im: num = 0
+    fn plus(self, o) => Complex(self.re + o.re, self.im + o.im)
+    fn minus(self, o) => Complex(self.re - o.re, self.im - o.im)
+    fn times(self, o) => Complex(self.re * o.re - self.im * o.im, self.re * o.im + self.im * o.re)
+    fn abs(self) => math.hypot(self.re, self.im)
+    fn conj(self) => Complex(self.re, -self.im)
+    fn show(self) => self.im >= 0 ? "{self.re}+{self.im}i" : "{self.re}{self.im}i"
+}
+
+fn c(re, im = 0) => Complex(re, im)
+let i = Complex(0, 1)
+
+test "i squared is -1" {
+    assert i * i == c(-1, 0)
+    assert c(3, 4).abs() == 5.0
+    assert str(c(1, -2)) == "1-2i"
+}

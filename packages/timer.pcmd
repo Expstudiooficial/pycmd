@@ -1,0 +1,39 @@
+# timer: a stopwatch, and timing how long code takes
+# version: 1.0
+use time
+
+struct Stopwatch {
+    started: float = time.clock()
+    laps: list = []
+    fn lap(self) {
+        let now = time.clock()
+        self.laps.push(now - self.started)
+        return now - self.started
+    }
+    fn elapsed(self) => time.clock() - self.started
+    fn reset(self) {
+        self.started = time.clock()
+        self.laps = []
+    }
+}
+
+fn measure(f, times: int = 1) {
+    let start = time.clock()
+    for _ in 0..times { f() }
+    return (time.clock() - start) / times
+}
+
+fn format_seconds(s: num) -> str {
+    if s < 0.001 { return "{s * 1000000:.0f} us" }
+    if s < 1 { return "{s * 1000:.1f} ms" }
+    if s < 60 { return "{s:.2f} s" }
+    return "{s // 60:.0f} min {s % 60:.0f} s"
+}
+
+test "timer" {
+    let w = Stopwatch()
+    assert w.elapsed() >= 0
+    assert format_seconds(0.5) == "500.0 ms"
+    assert format_seconds(125) == "2 min 5 s"
+    assert measure(|| 1 + 1, 10) >= 0
+}

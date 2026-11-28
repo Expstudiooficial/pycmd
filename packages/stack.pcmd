@@ -1,0 +1,52 @@
+# stack: Stack and Queue
+# version: 1.0
+
+struct Stack {
+    items: list = []
+    fn push(self, x) { self.items.push(x) }
+    fn pop(self) {
+        if self.items.is_empty() { throw Error("pop from an empty stack", "Empty") }
+        return self.items.pop()
+    }
+    fn peek(self) => self.items.last()
+    fn len(self) => self.items.len()
+    fn is_empty(self) => self.items.is_empty()
+    fn show(self) => "Stack{self.items}"
+}
+
+struct Queue {
+    items: list = []
+    fn push(self, x) { self.items.push(x) }
+    fn pop(self) {
+        if self.items.is_empty() { throw Error("pop from an empty queue", "Empty") }
+        return self.items.remove_at(0)
+    }
+    fn peek(self) => self.items.first()
+    fn len(self) => self.items.len()
+    fn is_empty(self) => self.items.is_empty()
+    fn show(self) => "Queue{self.items}"
+}
+
+fn balanced(text: str) -> bool {
+    let pairs = {")": "(", "]": "[", '}': '{'}
+    let s = Stack()
+    for ch in text {
+        if ch in "([{{" { s.push(ch) }
+        elif pairs.has(ch) {
+            if s.is_empty() or s.pop() != pairs[ch] { return false }
+        }
+    }
+    return s.is_empty()
+}
+
+test "stack and queue" {
+    let s = Stack()
+    s.push(1)
+    s.push(2)
+    assert s.pop() == 2 and len(s) == 1
+    let q = Queue()
+    q.push("a")
+    q.push("b")
+    assert q.pop() == "a"
+    assert balanced('(a[b]{c})') and not balanced('(]')
+}
