@@ -62,9 +62,15 @@ def check(current_build: int) -> dict:
     except (TypeError, ValueError):
         return {"ok": False, "error": "the update manifest has no build number"}
 
+    # A release is announced before GitHub has finished building it: the
+    # manifest says built: false and has no installer yet. That is not an
+    # update anybody can install, so it is not one - try again later.
+    ready = manifest.get("built", True) is not False and \
+        bool(manifest.get("installerUrl") or manifest.get("url"))
     return {
         "ok": True,
-        "newer": build > int(current_build),
+        "newer": ready and build > int(current_build),
+        "pending": not ready and build > int(current_build),
         "build": build,
         "version": manifest.get("version", ""),
         "notes": manifest.get("notes", ""),
@@ -209,7 +215,8 @@ def install(result: dict, silent: bool = False, progress=None) -> dict:
     if os.name != "nt":
         return {"ok": False, "error": "installing updates only happens on Windows"}
     if not result.get("installerUrl"):
-        return {"ok": False, "error": "this release has no installer; download it from the releases page"}
+        return {"ok": False, "error": "this update is still being built - try again in a few "
+                                      "minutes"}
     if _state["installing"]:
         return {"ok": False, "error": "an update is already being installed"}
     _state["installing"] = True

@@ -49,6 +49,8 @@ Our own language, built in (`.pcmd`), the same on the phone:
 - **11 libraries:** math, random, time, json, fs, regex, stats, text, http, color, sys.
 - **Learn > PyCmd:** 1,804 lessons. **Creator:** 66 PyCmd blocks. **Console:** `pcmd new`, `pcmd test`, `pcmd check`, `pcmd py`, `pcmd -e "..."`.
 
+**Fixed:** while a new version was still being built, 6.1 already offered it and then said "this release has no installer". From 6.2 on, an update is only offered once its installer is ready.
+
 ## What is new in 6.1
 
 ### Updates that always open

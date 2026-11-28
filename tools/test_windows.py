@@ -1686,6 +1686,18 @@ check("a .pcmd file runs, and input() reads the console box",
 shutil.rmtree(_pc_dir, ignore_errors=True)
 from pycmd_teach import _courses as _pc_courses  # noqa: E402
 check("Learn has the PyCmd course", "pycmd" in _pc_courses())
+_saved_fetch = updates._fetch
+try:
+    updates._fetch = lambda url, timeout=0: json.dumps({"build": 999, "version": "9.9", "built": False,
+                                                        "installer": False}).encode()
+    _pend = updates.check(18)
+    check("a release still being built is not offered as an update",
+          _pend["ok"] and not _pend["newer"] and _pend["pending"], _pend)
+    updates._fetch = lambda url, timeout=0: json.dumps({"build": 999, "version": "9.9", "built": True,
+                                                        "installerUrl": "https://x/PyCmd-Setup.exe"}).encode()
+    check("... and is once it is built", updates.check(18)["newer"])
+finally:
+    updates._fetch = _saved_fetch
 
 say()
 if FAILURES:
